@@ -54,3 +54,22 @@ func (h *Requests) Summary(w http.ResponseWriter, r *http.Request) {
 	}
 	writeData(w, sum)
 }
+
+func (h *Requests) Series(w http.ResponseWriter, r *http.Request) {
+	pts, err := h.store.Series24h(r.Context())
+	if err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeData(w, pts)
+}
+
+func (h *Requests) TopModels(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	rows, err := h.store.TopModels(r.Context(), limit)
+	if err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeData(w, rows)
+}

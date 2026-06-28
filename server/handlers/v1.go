@@ -40,19 +40,20 @@ func (h *V1) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	providerName := h.route(req.Model)
 	stream, err := h.proxy.Forward(r.Context(), providerName, req)
 	if err != nil {
-		h.log(providerName, req.Model, "error", start)
+		h.log(providerName, req.Model, "error", start, model.Usage{})
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
+	us := wrapUsage(stream)
 	if req.Stream {
-		sse.WriteOpenAI(w, stream)
+		sse.WriteOpenAI(w, us)
 	} else {
-		writeJSON(w, stream)
+		writeJSON(w, us)
 	}
-	h.log(providerName, req.Model, "success", start)
+	h.log(providerName, req.Model, "success", start, us.usage)
 }
 
-func (h *V1) log(provider, modelID, status string, start time.Time) {
+func (h *V1) log(provider, modelID, status string, start time.Time, usage model.Usage) {
 	if h.logs == nil {
 		return
 	}
@@ -60,6 +61,8 @@ func (h *V1) log(provider, modelID, status string, start time.Time) {
 		Provider:  provider,
 		Model:     modelID,
 		Status:    status,
+		InTokens:  usage.PromptTokens,
+		OutTokens: usage.CompletionTokens,
 		LatencyMS: time.Since(start).Milliseconds(),
 	})
 }

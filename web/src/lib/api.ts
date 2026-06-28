@@ -74,9 +74,39 @@ export interface RequestRow {
   created_at: string;
 }
 
+export interface SeriesPoint {
+  hour: string;
+  requests: number;
+  in_tokens: number;
+  out_tokens: number;
+}
+
+export interface ModelStat {
+  model: string;
+  requests: number;
+  in_tokens: number;
+  out_tokens: number;
+}
+
 export const requestsApi = {
   summary: () => api.get<RequestSummary>("/api/requests/summary"),
   list: (limit = 100) => api.get<RequestRow[]>(`/api/requests?limit=${limit}`),
+  series: () => api.get<SeriesPoint[]>("/api/requests/series"),
+  topModels: (limit = 5) => api.get<ModelStat[]>(`/api/requests/top-models?limit=${limit}`),
+};
+
+export interface ApiKey {
+  id: number;
+  label: string;
+  secret: string;
+  created_at: string;
+  last_used: string | null;
+}
+
+export const keysApi = {
+  list: () => api.get<ApiKey[]>("/api/keys"),
+  add: (label?: string) => api.post<{ id: number; secret: string }>("/api/keys", { label }),
+  remove: (id: number) => api.del<{ ok: boolean }>(`/api/keys/${id}`),
 };
 
 export interface Settings {

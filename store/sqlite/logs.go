@@ -33,6 +33,56 @@ func (s *logStore) SummaryToday(ctx context.Context) (store.LogSummary, error) {
 	return sum, err
 }
 
+func (s *logStore) Series24h(ctx context.Context) ([]store.SeriesPoint, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT strftime('%Y-%m-%d %H:00', created_at) AS hour,
+		        COUNT(*),
+		        COALESCE(SUM(in_tokens), 0),
+		        COALESCE(SUM(out_tokens), 0)
+		 FROM request_logs
+		 WHERE created_at >= datetime('now', '-24 hours')
+		 GROUP BY hour ORDER BY hour`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []store.SeriesPoint
+	for rows.Next() {
+		var p store.SeriesPoint
+		if err := rows.Scan(&p.Hour, &p.Requests, &p.InTokens, &p.OutTokens); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (s *logStore) TopModels(ctx context.Context, limit int) ([]store.ModelStat, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 5
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT model, COUNT(*) AS reqs,
+		        COALESCE(SUM(in_tokens), 0),
+		        COALESCE(SUM(out_tokens), 0)
+		 FROM request_logs
+		 WHERE created_at >= date('now')
+		 GROUP BY model ORDER BY reqs DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []store.ModelStat
+	for rows.Next() {
+		var m store.ModelStat
+		if err := rows.Scan(&m.Model, &m.Requests, &m.InTokens, &m.OutTokens); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 func (s *logStore) Recent(ctx context.Context, limit int) ([]store.RequestLog, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100

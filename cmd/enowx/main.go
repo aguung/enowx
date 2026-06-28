@@ -62,6 +62,7 @@ func main() {
 		Registry: reg,
 		Accounts: db.Accounts(),
 		Logs:     db.Logs(),
+		Keys:     db.Keys(),
 		Settings: handlers.SettingsInfo{
 			Version:    version,
 			Host:       cfg.Host,

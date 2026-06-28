@@ -20,6 +20,7 @@ type DB struct {
 	db   *sql.DB
 	acct *accountStore
 	logs *logStore
+	keys *keyStore
 }
 
 func Open(path string) (*DB, error) {
@@ -34,11 +35,13 @@ func Open(path string) (*DB, error) {
 	d := &DB{db: db}
 	d.acct = &accountStore{db: db}
 	d.logs = &logStore{db: db}
+	d.keys = &keyStore{db: db}
 	return d, nil
 }
 
 func (d *DB) Accounts() store.AccountStore { return d.acct }
 func (d *DB) Logs() store.LogStore         { return d.logs }
+func (d *DB) Keys() store.KeyStore         { return d.keys }
 func (d *DB) Close() error                 { return d.db.Close() }
 
 func migrate(db *sql.DB) error {
