@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { usePersisted } from "../os/usePersisted";
 import { AppShell } from "./shell";
 import { TermGauge, TermBarRow } from "../components/term/TermChart";
 import { AreaChart, type ChartPoint } from "../components/term/AreaChart";
@@ -27,7 +28,7 @@ function axisLabel(bucket: string, range: SeriesRange): string {
 }
 
 export function StatisticsApp() {
-  const [range, setRange] = useState<SeriesRange>("daily");
+  const [range, setRange] = usePersisted<SeriesRange>("stats-range", "daily");
   const [series, setSeries] = useState<SeriesPoint[]>([]);
   const [summary, setSummary] = useState<RequestSummary | null>(null);
   const [models, setModels] = useState<ModelStat[]>([]);

@@ -9,6 +9,7 @@ import { Widgets } from "./Widgets";
 import { CenterTerminal } from "./CenterTerminal";
 import { TerminalLayer } from "./TerminalLayer";
 import { usePanels } from "./usePanels";
+import { usePersisted } from "./usePersisted";
 import { useSides } from "./useSides";
 import { useTerminals, type TermLocation } from "./useTerminals";
 import type { AppId, Side } from "./types";
@@ -18,7 +19,7 @@ type CenterView = "widget" | "terminal";
 export function Desktop() {
   const apps = buildApps();
   const { active, toggle, close } = usePanels();
-  const [view, setView] = useState<CenterView>("widget");
+  const [view, setView] = usePersisted<CenterView>("center-view", "widget");
 
   const defaults = Object.fromEntries(apps.map((a) => [a.id, a.side])) as Record<AppId, Side>;
   const { sides, move } = useSides(defaults);
@@ -36,7 +37,7 @@ export function Desktop() {
   const findApp = (id: AppId | null) => apps.find((a) => a.id === id);
 
   // A dock side may have an app panel open OR a terminal panel open.
-  const [openTerm, setOpenTerm] = useState<Record<Side, number | null>>({ left: null, right: null });
+  const [openTerm, setOpenTerm] = usePersisted<Record<Side, number | null>>("open-term", { left: null, right: null });
   const openTermOn = (side: Side) => term.terms.find((t) => t.location === side && t.id === openTerm[side]) ?? null;
 
   const renderPanel = (side: Side) => {
