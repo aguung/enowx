@@ -87,7 +87,7 @@ export function Widgets({ onOpen }: { onOpen: (id: AppId) => void }) {
         <ThroughputWidget series={series} />
         <RequestsWidget summary={summary} onOpen={onOpen} />
         <TopModelsWidget models={models} onOpen={onOpen} />
-        <EndpointsWidget hasKey={keys.length > 0} sampleKey={keys[0]?.secret} />
+        <EndpointsWidget />
         <GatewayWidget settings={settings} healthy={healthy} onOpen={onOpen} />
         <div className="sm:col-span-2">
           <CommunityWidget />
@@ -271,7 +271,7 @@ function ApiKeyWidget({
   return (
     <Widget icon={<KeyRound />} title="API key" onOpen={() => onOpen("settings")}>
       <div className="space-y-2">
-        {keys.slice(0, 2).map((k) => (
+        {keys.slice(0, 1).map((k) => (
           <KeyRow key={k.id} apiKey={k} onChanged={onChanged} />
         ))}
       </div>
@@ -401,7 +401,7 @@ function TopModelsWidget({ models, onOpen }: { models: ModelStat[]; onOpen: (id:
   );
 }
 
-function EndpointsWidget({ hasKey, sampleKey }: { hasKey: boolean; sampleKey?: string }) {
+function EndpointsWidget() {
   const base = `${window.location.origin}/v1`;
   const anthropic = `${window.location.origin}/anthropic`;
   return (
@@ -409,7 +409,6 @@ function EndpointsWidget({ hasKey, sampleKey }: { hasKey: boolean; sampleKey?: s
       <div className="space-y-2">
         <CopyRow label="OpenAI base URL" value={base} />
         <CopyRow label="Anthropic base URL" value={anthropic} />
-        {hasKey && sampleKey && <CopyRow label="Auth header" value={`Authorization: Bearer ${sampleKey}`} />}
       </div>
     </Widget>
   );

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { LayoutGrid, SquareTerminal, BookOpen } from "lucide-react";
+import { LayoutGrid, SquareTerminal, BookOpen, Grid3x3 } from "lucide-react";
 import { buildApps } from "../apps";
 import { SideDock } from "./SideDock";
 import { SidePanel } from "./SidePanel";
@@ -8,22 +8,23 @@ import { TopBar } from "./TopBar";
 import { Widgets } from "./Widgets";
 import { CenterTerminal } from "./CenterTerminal";
 import { TerminalLayer } from "./TerminalLayer";
+import { AppsDrawer } from "./AppsDrawer";
 import { DocsApp } from "../apps/DocsApp";
 import { usePanels } from "./usePanels";
 import { usePersisted } from "./usePersisted";
-import { useSides } from "./useSides";
+import { useAppLocations } from "./useSides";
 import { useTerminals, type TermLocation } from "./useTerminals";
-import type { AppId, Side } from "./types";
+import type { AppId, Location, Side } from "./types";
 
-type CenterView = "widget" | "terminal" | "docs";
+type CenterView = "widget" | "terminal" | "apps" | "docs";
 
 export function Desktop() {
   const apps = buildApps();
   const { active, toggle, close } = usePanels();
   const [view, setView] = usePersisted<CenterView>("center-view", "widget");
 
-  const defaults = Object.fromEntries(apps.map((a) => [a.id, a.side])) as Record<AppId, Side>;
-  const { sides, move } = useSides(defaults);
+  const defaults = Object.fromEntries(apps.map((a) => [a.id, a.home])) as Record<AppId, Location>;
+  const { locations, move } = useAppLocations(defaults);
   const term = useTerminals();
 
   // Per-location DOM hosts the terminal instances are portaled into.
@@ -32,14 +33,27 @@ export function Desktop() {
   const [rightHost, setRightHost] = useState<HTMLElement | null>(null);
   const hosts: Record<TermLocation, HTMLElement | null> = { center: centerHost, left: leftHost, right: rightHost };
 
-  const sideOf = (id: AppId): Side => sides[id] ?? "left";
-  const appsOn = (side: Side) => apps.filter((a) => sideOf(a.id) === side);
+  const locationOf = (id: AppId): Location => locations[id] ?? "drawer";
+  const appsOn = (side: Side) => apps.filter((a) => locationOf(a.id) === side);
+  const drawerApps = apps.filter((a) => locationOf(a.id) === "drawer");
   const termsOn = (side: Side) => term.terms.filter((t) => t.location === side);
   const findApp = (id: AppId | null) => apps.find((a) => a.id === id);
 
   // A dock side may have an app panel open OR a terminal panel open.
   const [openTerm, setOpenTerm] = usePersisted<Record<Side, number | null>>("open-term", { left: null, right: null });
   const openTermOn = (side: Side) => term.terms.find((t) => t.location === side && t.id === openTerm[side]) ?? null;
+
+  // Open an app from anywhere: if docked, toggle its panel; if in the drawer,
+  // pin it to the left dock and open it.
+  const openApp = (id: AppId) => {
+    const loc = locationOf(id);
+    if (loc === "drawer") {
+      move(id, "left");
+      toggle("left", id);
+    } else {
+      toggle(loc, id);
+    }
+  };
 
   const renderPanel = (side: Side) => {
     const openT = openTermOn(side);
@@ -58,7 +72,7 @@ export function Desktop() {
     }
     const id = active[side];
     const app = findApp(id);
-    return app && id && sideOf(id) === side ? (
+    return app && id && locationOf(id) === side ? (
       <SidePanel side={side} title={app.label} onClose={() => close(side)}>
         {app.render()}
       </SidePanel>
@@ -71,10 +85,13 @@ export function Desktop() {
         <div className="pointer-events-auto mx-auto flex h-full max-w-3xl flex-col px-5 pb-3 pt-5">
           <div className="relative min-h-0 flex-1 overflow-hidden">
             <div className={`absolute inset-0 overflow-auto ${view === "widget" ? "" : "hidden"}`}>
-              <Widgets onOpen={(id) => toggle(sideOf(id), id)} />
+              <Widgets onOpen={openApp} />
             </div>
             <div className={`absolute inset-0 ${view === "terminal" ? "" : "hidden"}`}>
               <CenterTerminal term={term} setHost={setCenterHost} />
+            </div>
+            <div className={`absolute inset-0 ${view === "apps" ? "" : "hidden"}`}>
+              <AppsDrawer apps={drawerApps} onOpen={openApp} onDropToDrawer={(id) => move(id, "drawer")} />
             </div>
             <div className={`absolute inset-0 overflow-hidden rounded-2xl border border-white/10 bg-[var(--window-bg)]/80 ${view === "docs" ? "" : "hidden"}`}>
               <DocsApp />
@@ -123,6 +140,7 @@ function CenterNav({ view, onView }: { view: CenterView; onView: (v: CenterView)
   const tabs: { id: CenterView; label: string; icon: typeof LayoutGrid }[] = [
     { id: "widget", label: "Widget", icon: LayoutGrid },
     { id: "terminal", label: "Terminal", icon: SquareTerminal },
+    { id: "apps", label: "Apps", icon: Grid3x3 },
     { id: "docs", label: "Docs", icon: BookOpen },
   ];
   return (
