@@ -12,6 +12,10 @@ import {
   Trophy,
   Plus,
   Trash2,
+  Globe,
+  MessageCircle,
+  BookOpen,
+  ExternalLink,
 } from "lucide-react";
 import {
   accountsApi,
@@ -85,6 +89,49 @@ export function Widgets({ onOpen }: { onOpen: (id: AppId) => void }) {
         <TopModelsWidget models={models} onOpen={onOpen} />
         <EndpointsWidget hasKey={keys.length > 0} sampleKey={keys[0]?.secret} />
         <GatewayWidget settings={settings} healthy={healthy} onOpen={onOpen} />
+        <div className="sm:col-span-2">
+          <CommunityWidget />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CommunityWidget() {
+  const links = [
+    { icon: <Globe />, label: "Website", sub: "enowxlabs.com", href: "https://enowxlabs.com" },
+    { icon: <MessageCircle />, label: "Discord", sub: "Join the community", href: "https://discord.gg/enowxlabs" },
+    { icon: <BookOpen />, label: "GitHub", sub: "enowdev/enowx", href: "https://github.com/enowdev/enowx" },
+  ];
+  return (
+    <div className="glass flex flex-col rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-xl">
+      <div className="mb-3 flex items-center gap-2 text-white/70">
+        <span className="[&>svg]:h-4 [&>svg]:w-4">
+          <Globe />
+        </span>
+        <span className="text-xs font-semibold uppercase tracking-wide">Community &amp; links</span>
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {links.map((l) => (
+          <a
+            key={l.label}
+            href={l.href}
+            target="_blank"
+            rel="noreferrer"
+            className="group flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 transition-colors hover:bg-white/[0.07]"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/5 text-white/80 [&>svg]:h-4 [&>svg]:w-4">
+              {l.icon}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1 text-sm font-medium text-white">
+                {l.label}
+                <ExternalLink className="h-3 w-3 text-white/30 transition-colors group-hover:text-white/60" />
+              </span>
+              <span className="block truncate text-[11px] text-white/40">{l.sub}</span>
+            </span>
+          </a>
+        ))}
       </div>
     </div>
   );

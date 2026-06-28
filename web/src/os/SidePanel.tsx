@@ -27,7 +27,7 @@ export function SidePanel({
       exit={{ opacity: 0, x: side === "left" ? -24 : 24 }}
       transition={{ type: "spring", stiffness: 320, damping: 32 }}
       style={{ ...edge, width: PANEL_WIDTH }}
-      className="glass pointer-events-auto absolute top-3 bottom-3 z-[8000] flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[var(--window-bg)]/95 shadow-2xl"
+      className="glass pointer-events-auto absolute top-9 bottom-3 z-[8000] flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[var(--window-bg)]/95 shadow-2xl"
     >
       <div className="flex items-center justify-between border-b border-white/5 px-3 py-2">
         <span className="text-xs font-semibold text-white/80">{app.label}</span>
