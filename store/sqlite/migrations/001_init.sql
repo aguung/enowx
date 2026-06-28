@@ -2,7 +2,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     provider   TEXT NOT NULL,
     label      TEXT NOT NULL DEFAULT '',
-    secret     TEXT NOT NULL,
+    secret     TEXT NOT NULL DEFAULT '',
+    creds      TEXT NOT NULL DEFAULT '',
     status     TEXT NOT NULL DEFAULT 'active',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

@@ -1,4 +1,4 @@
-package openaicompat
+package oaistream
 
 type chatChunk struct {
 	Model   string `json:"model"`

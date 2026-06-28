@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"io/fs"
+	"sort"
 
 	_ "modernc.org/sqlite"
 
@@ -40,12 +42,46 @@ func (d *DB) Logs() store.LogStore         { return d.logs }
 func (d *DB) Close() error                 { return d.db.Close() }
 
 func migrate(db *sql.DB) error {
-	b, err := migrations.ReadFile("migrations/001_init.sql")
+	files, err := fs.Glob(migrations, "migrations/*.sql")
 	if err != nil {
 		return err
 	}
-	if _, err := db.Exec(string(b)); err != nil {
-		return fmt.Errorf("migrate: %w", err)
+	sort.Strings(files)
+	for _, f := range files {
+		b, err := migrations.ReadFile(f)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Exec(string(b)); err != nil {
+			return fmt.Errorf("migrate %s: %w", f, err)
+		}
 	}
-	return nil
+	return ensureColumn(db, "accounts", "creds", "TEXT NOT NULL DEFAULT ''")
+}
+
+// ensureColumn adds a column to an existing table if it is missing (SQLite has
+// no ADD COLUMN IF NOT EXISTS), so older DBs pick up new fields.
+func ensureColumn(db *sql.DB, table, col, decl string) error {
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		if name == col {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, col, decl))
+	return err
 }

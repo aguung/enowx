@@ -23,7 +23,7 @@ func (p *Pool) Pick(ctx context.Context, providerName string) (provider.Account,
 	}
 	for _, a := range rows {
 		if a.Status == "active" {
-			return provider.Account{ID: a.ID, Secret: a.Secret}, nil
+			return provider.Account{ID: a.ID, Secret: a.Secret, Creds: a.Creds}, nil
 		}
 	}
 	return provider.Account{}, ErrNoAccount

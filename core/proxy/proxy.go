@@ -16,9 +16,9 @@ import (
 )
 
 type Proxy struct {
-	reg   *provider.Registry
-	pool  *pool.Pool
-	doer  transport.Doer
+	reg  *provider.Registry
+	pool *pool.Pool
+	doer transport.Doer
 }
 
 func New(reg *provider.Registry, p *pool.Pool, d transport.Doer) *Proxy {

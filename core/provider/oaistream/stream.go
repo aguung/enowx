@@ -1,4 +1,7 @@
-package openaicompat
+// Package oaistream parses OpenAI-format chat responses (SSE + plain JSON) into
+// normalized model events. Shared by every upstream that speaks OpenAI on the
+// wire, so each such provider only differs in how it builds the request.
+package oaistream
 
 import (
 	"bufio"
@@ -10,16 +13,23 @@ import (
 	"github.com/enowdev/enowx/core/model"
 )
 
-// sseStream reads OpenAI's `data: {...}` SSE chunks and yields normalized events.
+// Parse returns a stream over the response in the shape the request asked for.
+func Parse(resp *http.Response, streaming bool) (model.Stream, error) {
+	if streaming {
+		return newSSE(resp), nil
+	}
+	return newJSON(resp)
+}
+
 type sseStream struct {
 	resp *http.Response
 	sc   *bufio.Scanner
 	done bool
 }
 
-func newSSEStream(resp *http.Response) *sseStream {
+func newSSE(resp *http.Response) *sseStream {
 	sc := bufio.NewScanner(resp.Body)
-	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<21)
 	return &sseStream{resp: resp, sc: sc}
 }
 
@@ -54,14 +64,13 @@ func (s *sseStream) Recv() (model.Event, error) {
 
 func (s *sseStream) Close() error { return s.resp.Body.Close() }
 
-// jsonStream wraps a non-streaming reply as a single delta + done.
 type jsonStream struct {
-	ev   model.Event
-	sent bool
+	ev       model.Event
+	sent     bool
 	doneSent bool
 }
 
-func newJSONStream(resp *http.Response) (*jsonStream, error) {
+func newJSON(resp *http.Response) (*jsonStream, error) {
 	defer resp.Body.Close()
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {

@@ -2,13 +2,24 @@
 
 package server
 
-import "net/http"
+import (
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"os"
+)
 
-// In dev the SPA is served by Vite (npm run dev); the Go server only handles
-// /api and /v1. No embed → no webdist needed for hot-reload builds.
+// In dev everything is one port: the Go server handles /api and /v1, and
+// proxies all other paths to the Vite dev server (HMR websocket included).
+// Vite's address comes from ENOWX_VITE_URL (default http://127.0.0.1:5174).
 func spaHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("dev mode: frontend served by Vite (http://localhost:5173)"))
-	})
+	target := os.Getenv("ENOWX_VITE_URL")
+	if target == "" {
+		target = "http://127.0.0.1:5174"
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		panic("invalid ENOWX_VITE_URL: " + err.Error())
+	}
+	return httputil.NewSingleHostReverseProxy(u)
 }

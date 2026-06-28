@@ -2,11 +2,11 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 
+	"github.com/enowdev/enowx/core/convert"
 	"github.com/enowdev/enowx/core/model"
 	"github.com/enowdev/enowx/core/proxy"
 	"github.com/enowdev/enowx/server/sse"
@@ -27,27 +27,17 @@ func (h *V1) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "read body")
 		return
 	}
-	var head struct {
-		Model  string `json:"model"`
-		Stream bool   `json:"stream"`
-	}
-	if err := json.Unmarshal(body, &head); err != nil || head.Model == "" {
+	req, err := convert.Inbound(model.APIOpenAIChat, body)
+	if err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request")
 		return
 	}
-
-	req := &model.Request{
-		Source: model.APIOpenAIChat,
-		Model:  head.Model,
-		Stream: head.Stream,
-		Raw:    body,
-	}
-	stream, err := h.proxy.Forward(r.Context(), h.route(head.Model), req)
+	stream, err := h.proxy.Forward(r.Context(), h.route(req.Model), req)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	if head.Stream {
+	if req.Stream {
 		sse.WriteOpenAI(w, stream)
 		return
 	}
@@ -71,8 +61,8 @@ func writeJSON(w http.ResponseWriter, s interface{ Recv() (model.Event, error) }
 		"object": "chat.completion",
 		"model":  modelID,
 		"choices": []map[string]any{{
-			"index":   0,
-			"message": map[string]any{"role": "assistant", "content": text},
+			"index":         0,
+			"message":       map[string]any{"role": "assistant", "content": text},
 			"finish_reason": "stop",
 		}},
 	})
@@ -83,5 +73,3 @@ func writeErr(w http.ResponseWriter, code int, msg string) {
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": map[string]string{"message": msg}})
 }
-
-var _ = context.Background

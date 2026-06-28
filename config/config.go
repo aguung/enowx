@@ -20,7 +20,7 @@ func Default() Config {
 	home, _ := os.UserHomeDir()
 	return Config{
 		Host:       "127.0.0.1",
-		Port:       8787,
+		Port:       1430,
 		RuntimeDir: filepath.Join(home, ".enowx"),
 		LogLevel:   "info",
 	}

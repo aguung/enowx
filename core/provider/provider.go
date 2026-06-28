@@ -8,10 +8,26 @@ import (
 	"github.com/enowdev/enowx/core/model"
 )
 
-// Account is the minimal credential a provider needs to build a request.
+// Account is the credential a provider needs to build a request. Secret is the
+// common single-token case; Creds carries the multi-field sets some upstreams
+// need (e.g. token + refresh + region + profile).
 type Account struct {
 	ID     int64
 	Secret string
+	Creds  map[string]string
+}
+
+// Cred returns a named credential, falling back to Secret for "api_key"/"token".
+func (a Account) Cred(key string) string {
+	if a.Creds != nil {
+		if v, ok := a.Creds[key]; ok {
+			return v
+		}
+	}
+	if a.Secret != "" && (key == "api_key" || key == "token") {
+		return a.Secret
+	}
+	return ""
 }
 
 type Caps struct {
