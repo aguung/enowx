@@ -224,6 +224,33 @@ export const settingsApi = {
   get: () => api.get<Settings>("/api/settings"),
 };
 
+export interface DocParam {
+  name: string;
+  in: string;
+  desc: string;
+}
+export interface DocEndpoint {
+  method: string;
+  path: string;
+  desc: string;
+  params?: DocParam[];
+}
+export interface DocGroup {
+  name: string;
+  desc: string;
+  endpoints: DocEndpoint[];
+}
+export interface Docs {
+  version: string;
+  overview: Record<string, string>;
+  plugins: Record<string, string>;
+  groups: DocGroup[];
+}
+
+export const docsApi = {
+  get: () => api.get<Docs>("/api/docs"),
+};
+
 export interface DebugInfo {
   process: { cpu_percent: number; rss: number; pid: number };
   memory: {

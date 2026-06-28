@@ -42,6 +42,7 @@ func New(addr string, d Deps) *Server {
 	keys := handlers.NewKeys(d.Keys)
 	settings := handlers.NewSettings(d.Settings)
 	dbg := handlers.NewDebug(d.Settings.Version, d.Settings.Started)
+	docs := handlers.NewDocs(d.Settings.Version)
 	kiro := handlers.NewKiro(d.Doer, d.Accounts)
 	local := handlers.NewLocal(d.Accounts)
 	usage := handlers.NewUsage(d.Registry, d.Accounts)
@@ -81,6 +82,7 @@ func New(addr string, d Deps) *Server {
 		r.Delete("/keys/{id}", keys.Delete)
 		r.Get("/settings", settings.Get)
 		r.Get("/debug", dbg.Get)
+		r.Get("/docs", docs.Get)
 
 		r.Post("/accounts/kiro/manual", kiro.Manual)
 		r.Post("/accounts/kiro/refresh", kiro.Refresh)

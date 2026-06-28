@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type AppId = "accounts" | "requests" | "providers" | "settings" | "statistics" | "files" | "warmup-logs";
+export type AppId = "accounts" | "requests" | "providers" | "settings" | "statistics" | "files" | "warmup-logs" | "docs";
 
 export type Side = "left" | "right";
 
