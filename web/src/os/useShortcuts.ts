@@ -1,83 +1,49 @@
 import { useEffect, useRef, useState } from "react";
 
-// Leader-key shortcuts that never collide with the browser. Tap a modifier
-// (Ctrl or Alt, left OR right) by itself to enter "leader mode"; then press a
-// plain key (no modifier) to run an action — so the browser never sees a
-// shortcut. Esc or any timeout cancels. Holding the modifier with another key
-// (e.g. Ctrl+T) is left to the browser.
+// Hold-to-act shortcuts. Hold Ctrl or Alt (left OR right) and the shortcut hint
+// appears immediately; while held, press a mapped key to act instantly; release
+// the modifier and the hint disappears. We preventDefault on handled keys so the
+// browser doesn't also act (tab-level chords like Ctrl+T can't be cancelled, so
+// the keymap avoids those).
 //
-// keymap: plain lowercase key -> action id. Returns whether leader mode is on
-// (for an on-screen hint).
-export function useShortcuts(run: (action: string) => void): boolean {
-  const [leader, setLeader] = useState(false);
-  const armed = useRef(false); // a modifier went down with nothing else yet
-  const timer = useRef<number | null>(null);
+// run(key) is called with the lowercase plain key. Returns whether a leader
+// modifier is currently held (for the on-screen hint).
+export function useShortcuts(run: (key: string) => void): boolean {
+  const [holding, setHolding] = useState(false);
   const runRef = useRef(run);
   runRef.current = run;
 
   useEffect(() => {
-    const isLeaderMod = (e: KeyboardEvent) => e.key === "Control" || e.key === "Alt";
-
-    const clearTimer = () => {
-      if (timer.current) {
-        window.clearTimeout(timer.current);
-        timer.current = null;
-      }
-    };
-    const enter = () => {
-      setLeader(true);
-      clearTimer();
-      timer.current = window.setTimeout(() => setLeader(false), 2000);
-    };
-    const exit = () => {
-      setLeader(false);
-      clearTimer();
-    };
+    const isMod = (e: KeyboardEvent) => e.key === "Control" || e.key === "Alt";
 
     const onKeyDown = (e: KeyboardEvent) => {
-      // Modifier pressed: arm it as a potential leader (only if pressed alone).
-      if (isLeaderMod(e)) {
-        armed.current = !leader; // pressing mod while already in leader = ignore
+      if (isMod(e)) {
+        setHolding(true);
         return;
       }
-
-      // Pressing another key while a modifier is held cancels the leader arm —
-      // that's a real browser chord, leave it alone.
-      if (e.ctrlKey || e.altKey || e.metaKey) {
-        armed.current = false;
-        if (!leader) return;
-      }
-
-      if (!leader) return;
-
-      // In leader mode: a plain key triggers an action (or Esc cancels).
-      if (e.key === "Escape") {
-        exit();
-        return;
-      }
-      const k = e.key.toLowerCase();
+      // Only act while a leader modifier is held. Ignore if Cmd/Meta is involved
+      // and ignore plain typing (multi-char keys like Shift/Arrow).
+      if (!(e.ctrlKey || e.altKey) || e.metaKey) return;
+      if (e.key.length !== 1) return; // letters/digits only
       e.preventDefault();
-      exit();
-      runRef.current(k);
+      e.stopPropagation();
+      runRef.current(e.key.toLowerCase());
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      // Releasing the modifier with nothing pressed in between = enter leader.
-      if (isLeaderMod(e) && armed.current) {
-        armed.current = false;
-        if (leader) exit();
-        else enter();
-      }
+      if (isMod(e) && !e.ctrlKey && !e.altKey) setHolding(false);
     };
+    const reset = () => setHolding(false);
 
     window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("keyup", onKeyUp, true);
+    window.addEventListener("blur", reset);
     return () => {
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("keyup", onKeyUp, true);
-      clearTimer();
+      window.removeEventListener("blur", reset);
     };
-  }, [leader]);
+  }, []);
 
-  return leader;
+  return holding;
 }

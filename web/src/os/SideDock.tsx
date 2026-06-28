@@ -33,7 +33,7 @@ export function SideDock({
   const tip = side === "left" ? "left-14" : "right-14";
 
   return (
-    <div className={`absolute ${edge} top-1/2 z-[9000] -translate-y-1/2`}>
+    <div className={`pointer-events-none absolute ${edge} top-7 bottom-3 z-[9000] flex items-center`}>
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -51,7 +51,7 @@ export function SideDock({
           const termId = e.dataTransfer.getData("text/term-id");
           if (termId) onDropTerm(Number(termId));
         }}
-        className={`glass flex flex-col gap-2 rounded-2xl border bg-[var(--dock-bg)] p-2 shadow-2xl transition-colors ${
+        className={`glass pointer-events-auto flex flex-col gap-2 rounded-2xl border bg-[var(--dock-bg)] p-2 shadow-2xl transition-colors ${
           over ? "border-emerald-400/50 bg-emerald-400/5" : "border-white/10"
         }`}
       >

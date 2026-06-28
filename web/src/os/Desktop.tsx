@@ -126,7 +126,7 @@ export function Desktop() {
 
       {leaderActive && (
         <div className="pointer-events-none fixed left-1/2 top-9 z-[10000] -translate-x-1/2 rounded-lg border border-emerald-500/30 bg-black/80 px-3 py-1.5 font-mono text-[11px] text-emerald-300 shadow-lg">
-          shortcut: 1 widget · 2 terminal · 3 apps · 4 docs · p/a/s/g/f/r/w/k apps · esc
+          hold + press: 1 widget · 2 terminal · 3 apps · 4 docs · p a s g f r w k apps
         </div>
       )}
 
@@ -177,7 +177,7 @@ function CenterNav({ view, onView }: { view: CenterView; onView: (v: CenterView)
       {tabs.map((t) => {
         const Icon = t.icon;
         return (
-          <Tooltip key={t.id} label={`${t.label} · leader ${t.key}`} place="bottom">
+          <Tooltip key={t.id} label={`${t.label} · hold Ctrl/Alt + ${t.key}`} place="bottom">
             <button
               onClick={() => onView(t.id)}
               className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors ${
