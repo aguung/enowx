@@ -9,6 +9,7 @@ import (
 
 	"github.com/enowdev/enowx/core/provider"
 	"github.com/enowdev/enowx/core/proxy"
+	"github.com/enowdev/enowx/core/transport"
 	"github.com/enowdev/enowx/server/handlers"
 	"github.com/enowdev/enowx/server/middleware"
 	"github.com/enowdev/enowx/store"
@@ -26,6 +27,7 @@ type Deps struct {
 	Accounts store.AccountStore
 	Logs     store.LogStore
 	Keys     store.KeyStore
+	Doer     transport.Doer
 	Settings handlers.SettingsInfo
 }
 
@@ -39,6 +41,7 @@ func New(addr string, d Deps) *Server {
 	keys := handlers.NewKeys(d.Keys)
 	settings := handlers.NewSettings(d.Settings)
 	dbg := handlers.NewDebug(d.Settings.Version, d.Settings.Started)
+	kiro := handlers.NewKiro(d.Doer, d.Accounts)
 	auth := middleware.APIKeyAuth(d.Keys)
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -67,6 +70,13 @@ func New(addr string, d Deps) *Server {
 		r.Delete("/keys/{id}", keys.Delete)
 		r.Get("/settings", settings.Get)
 		r.Get("/debug", dbg.Get)
+
+		r.Post("/accounts/kiro/manual", kiro.Manual)
+		r.Post("/accounts/kiro/refresh", kiro.Refresh)
+		r.Post("/accounts/kiro/aws/start", kiro.AWSStart)
+		r.Get("/accounts/kiro/aws/poll", kiro.AWSPoll)
+		r.Post("/accounts/kiro/oauth/start", kiro.OAuthStart)
+		r.Post("/accounts/kiro/oauth/exchange", kiro.OAuthExchange)
 	})
 
 	// WebOS SPA on the same port (everything not matched above).

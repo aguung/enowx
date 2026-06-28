@@ -54,6 +54,30 @@ export const accountsApi = {
   remove: (id: number) => api.del<{ ok: boolean }>(`/api/accounts/${id}`),
 };
 
+export interface AwsStart {
+  session: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete: string;
+  interval: number;
+  expires_in: number;
+}
+
+export const kiroApi = {
+  manual: (json: string, label?: string) =>
+    api.post<{ id: number }>("/api/accounts/kiro/manual", { json, label }),
+  refresh: (refresh_token: string, region?: string, label?: string) =>
+    api.post<{ id: number }>("/api/accounts/kiro/refresh", { refresh_token, region, label }),
+  awsStart: (region?: string) => api.post<AwsStart>("/api/accounts/kiro/aws/start", { region }),
+  awsPoll: (session: string) =>
+    api.get<{ status: "pending" | "done"; id?: number }>(
+      `/api/accounts/kiro/aws/poll?session=${encodeURIComponent(session)}`,
+    ),
+  oauthStart: () => api.post<{ session: string; authorize_url: string }>("/api/accounts/kiro/oauth/start"),
+  oauthExchange: (session: string, code: string) =>
+    api.post<{ id: number }>("/api/accounts/kiro/oauth/exchange", { session, code }),
+};
+
 export interface RequestSummary {
   total: number;
   ok: number;

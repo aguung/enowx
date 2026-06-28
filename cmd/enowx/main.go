@@ -12,7 +12,6 @@ import (
 	"github.com/enowdev/enowx/core/provider"
 	"github.com/enowdev/enowx/core/provider/codebuddy"
 	"github.com/enowdev/enowx/core/provider/kiro"
-	"github.com/enowdev/enowx/core/provider/openaicompat"
 	"github.com/enowdev/enowx/core/proxy"
 	"github.com/enowdev/enowx/core/transport"
 	"github.com/enowdev/enowx/server"
@@ -50,7 +49,6 @@ func main() {
 	}
 
 	reg := provider.NewRegistry()
-	reg.Register(openaicompat.New("openai", "https://api.openai.com/v1"))
 	reg.Register(codebuddy.New())
 	reg.Register(kiro.New(doer, saveCreds))
 
@@ -63,6 +61,7 @@ func main() {
 		Accounts: db.Accounts(),
 		Logs:     db.Logs(),
 		Keys:     db.Keys(),
+		Doer:     doer,
 		Settings: handlers.SettingsInfo{
 			Version:    version,
 			Host:       cfg.Host,

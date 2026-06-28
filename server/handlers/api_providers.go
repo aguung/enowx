@@ -14,7 +14,6 @@ type providerMeta struct {
 }
 
 var providerCatalog = map[string]providerMeta{
-	"openai":    {Label: "OpenAI", Icon: "openai"},
 	"codebuddy": {Label: "CodeBuddy", Icon: "codebuddy"},
 	"kiro":      {Label: "Kiro", Icon: "kiro"},
 }

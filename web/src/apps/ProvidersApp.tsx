@@ -3,6 +3,7 @@ import { Search, Plus, MessageSquare, Image } from "lucide-react";
 import { AppShell } from "./shell";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { AddAccountModal } from "../components/AddAccountModal";
+import { KiroAddModal } from "../components/KiroAddModal";
 import { providersApi, accountsApi, type Provider, type Account } from "../lib/api";
 
 export function ProvidersApp() {
@@ -85,7 +86,17 @@ export function ProvidersApp() {
         </div>
       )}
 
-      {adding && (
+      {adding && adding.name === "kiro" && (
+        <KiroAddModal
+          provider={adding}
+          onClose={() => setAdding(null)}
+          onSaved={() => {
+            setAdding(null);
+            load();
+          }}
+        />
+      )}
+      {adding && adding.name !== "kiro" && (
         <AddAccountModal
           provider={adding}
           onClose={() => setAdding(null)}
