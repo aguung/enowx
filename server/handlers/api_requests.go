@@ -17,6 +17,7 @@ type requestDTO struct {
 	Provider  string `json:"provider"`
 	Model     string `json:"model"`
 	Status    string `json:"status"`
+	Source    string `json:"source"`
 	InTokens  int64  `json:"in_tokens"`
 	OutTokens int64  `json:"out_tokens"`
 	LatencyMS int64  `json:"latency_ms"`
@@ -37,6 +38,7 @@ func (h *Requests) List(w http.ResponseWriter, r *http.Request) {
 			Provider:  l.Provider,
 			Model:     l.Model,
 			Status:    l.Status,
+			Source:    l.Source,
 			InTokens:  l.InTokens,
 			OutTokens: l.OutTokens,
 			LatencyMS: l.LatencyMS,

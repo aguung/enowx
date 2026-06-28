@@ -21,6 +21,33 @@ func Parse(resp *http.Response, streaming bool) (model.Stream, error) {
 	return newJSON(resp)
 }
 
+// UsageFromBody scans an SSE or JSON body for the usage block (tokens + credit).
+func UsageFromBody(body []byte) *model.Usage {
+	// Try SSE data lines first.
+	for _, line := range bytes.Split(body, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, dataPrefix) {
+			continue
+		}
+		payload := bytes.TrimSpace(line[len(dataPrefix):])
+		if bytes.Equal(payload, doneMarker) {
+			continue
+		}
+		var chunk chatChunk
+		if json.Unmarshal(payload, &chunk) == nil {
+			if u := chunk.usage(); u != nil {
+				return u
+			}
+		}
+	}
+	// Fall back to a plain JSON object with a usage field.
+	var chunk chatChunk
+	if json.Unmarshal(bytes.TrimSpace(body), &chunk) == nil {
+		return chunk.usage()
+	}
+	return nil
+}
+
 type sseStream struct {
 	resp *http.Response
 	sc   *bufio.Scanner
@@ -51,8 +78,11 @@ func (s *sseStream) Recv() (model.Event, error) {
 		if err := json.Unmarshal(payload, &chunk); err != nil {
 			continue
 		}
-		if txt := chunk.delta(); txt != "" {
-			return model.Event{Type: model.EventDelta, Text: txt, Model: chunk.Model}, nil
+		txt := chunk.delta()
+		usage := chunk.usage()
+		// The final chunk often carries usage with empty choices; surface it.
+		if txt != "" || usage != nil {
+			return model.Event{Type: model.EventDelta, Text: txt, Model: chunk.Model, Usage: usage}, nil
 		}
 	}
 	if err := s.sc.Err(); err != nil {

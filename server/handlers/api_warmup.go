@@ -18,14 +18,15 @@ import (
 // alive, updates its status from the outcome, and fetches credit usage when the
 // provider supports it.
 type Warmup struct {
-	proxy *proxy.Proxy
-	reg   *provider.Registry
-	store store.AccountStore
-	logs  store.WarmupStore
+	proxy   *proxy.Proxy
+	reg     *provider.Registry
+	store   store.AccountStore
+	logs    store.WarmupStore
+	reqLogs store.LogStore
 }
 
-func NewWarmup(p *proxy.Proxy, reg *provider.Registry, s store.AccountStore, logs store.WarmupStore) *Warmup {
-	return &Warmup{proxy: p, reg: reg, store: s, logs: logs}
+func NewWarmup(p *proxy.Proxy, reg *provider.Registry, s store.AccountStore, logs store.WarmupStore, reqLogs store.LogStore) *Warmup {
+	return &Warmup{proxy: p, reg: reg, store: s, logs: logs, reqLogs: reqLogs}
 }
 
 // warmupModel is a valid, cheap model accepted by each provider's upstream.
@@ -80,20 +81,51 @@ func (h *Warmup) Run(w http.ResponseWriter, r *http.Request) {
 		resp["error"] = res.Err.Error()
 	}
 
-	// Credit usage when the provider supports it.
+	// Credit/usage: prefer a dedicated usage endpoint (kiro); otherwise fall back
+	// to the usage block returned inside the probe's chat reply (codebuddy).
 	var usageJSON string
+	var usageMap map[string]any
 	if prov, err := h.reg.Get(acc.Provider); err == nil {
 		if reporter, ok := prov.(provider.UsageReporter); ok {
 			resp["usage_supported"] = true
 			if u, err := reporter.Usage(pacc); err == nil {
-				resp["usage"] = u
-				if b, e := json.Marshal(u); e == nil {
-					usageJSON = string(b)
-				}
+				usageMap = map[string]any{"limit": u.Limit, "used": u.Used, "remaining": u.Remaining, "plan": u.Plan}
 			}
 		} else {
 			resp["usage_supported"] = false
 		}
+	}
+	if usageMap == nil && res.Usage != nil && res.Usage.Credit > 0 {
+		// codebuddy: credit comes back in the chat reply's usage block.
+		resp["usage_supported"] = true
+		usageMap = map[string]any{"credit": res.Usage.Credit, "in_tokens": res.Usage.PromptTokens, "out_tokens": res.Usage.CompletionTokens}
+	}
+	if usageMap != nil {
+		resp["usage"] = usageMap
+		if b, e := json.Marshal(usageMap); e == nil {
+			usageJSON = string(b)
+		}
+	}
+
+	// Record the warmup as a request so it shows in Requests + Statistics.
+	if h.reqLogs != nil {
+		var inTok, outTok int64
+		if res.Usage != nil {
+			inTok, outTok = res.Usage.PromptTokens, res.Usage.CompletionTokens
+		}
+		logStatus := "success"
+		if res.Outcome != provider.OutcomeOK {
+			logStatus = "error"
+		}
+		_ = h.reqLogs.Insert(r.Context(), store.RequestLog{
+			Provider:  acc.Provider,
+			Model:     req.Model,
+			Status:    logStatus,
+			Source:    "warmup",
+			InTokens:  inTok,
+			OutTokens: outTok,
+			LatencyMS: durMS,
+		})
 	}
 
 	_ = h.logs.Insert(r.Context(), store.WarmupLog{

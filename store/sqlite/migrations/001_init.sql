@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS request_logs (
     provider   TEXT NOT NULL,
     model      TEXT NOT NULL,
     status     TEXT NOT NULL,
+    source     TEXT NOT NULL DEFAULT 'api',
     in_tokens  INTEGER NOT NULL DEFAULT 0,
     out_tokens INTEGER NOT NULL DEFAULT 0,
     latency_ms INTEGER NOT NULL DEFAULT 0,

@@ -14,6 +14,7 @@ import (
 	"github.com/enowdev/enowx/core/model"
 	"github.com/enowdev/enowx/core/pool"
 	"github.com/enowdev/enowx/core/provider"
+	"github.com/enowdev/enowx/core/provider/oaistream"
 	"github.com/enowdev/enowx/core/transport"
 )
 
@@ -57,8 +58,9 @@ func (p *Proxy) Forward(ctx context.Context, providerName string, req *model.Req
 // ProbeResult captures what a warmup probe sent and got back.
 type ProbeResult struct {
 	Outcome  provider.Outcome
-	Status   int    // HTTP status (0 if the request never completed)
-	Response string // a short reply sample, or the error body
+	Status   int          // HTTP status (0 if the request never completed)
+	Response string       // a short reply sample, or the error body
+	Usage    *model.Usage // tokens/credit parsed from the reply, if present
 	Err      error
 }
 
@@ -107,7 +109,12 @@ func (p *Proxy) Probe(ctx context.Context, providerName string, acc provider.Acc
 		return ProbeResult{Outcome: provider.OutcomeTransient, Status: resp.StatusCode, Response: "empty response", Err: fmt.Errorf("empty response")}
 	}
 	// Anything else with HTTP 200 and a non-error body is a live account.
-	return ProbeResult{Outcome: provider.OutcomeOK, Status: resp.StatusCode, Response: truncate(trimmed, 1000)}
+	return ProbeResult{
+		Outcome:  provider.OutcomeOK,
+		Status:   resp.StatusCode,
+		Response: truncate(trimmed, 1000),
+		Usage:    oaistream.UsageFromBody(trimmed),
+	}
 }
 
 // isAppError reports whether a 200 body is actually an error envelope (a bare

@@ -25,6 +25,7 @@ type RequestLog struct {
 	Provider  string
 	Model     string
 	Status    string // success | error
+	Source    string // api | warmup
 	InTokens  int64
 	OutTokens int64
 	LatencyMS int64

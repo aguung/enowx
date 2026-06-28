@@ -56,8 +56,9 @@ type Request struct {
 }
 
 type Usage struct {
-	PromptTokens     int64 `json:"prompt_tokens"`
-	CompletionTokens int64 `json:"completion_tokens"`
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
+	Credit           float64 `json:"credit,omitempty"`
 }
 
 type EventType string

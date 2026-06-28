@@ -45,7 +45,7 @@ func New(addr string, d Deps) *Server {
 	kiro := handlers.NewKiro(d.Doer, d.Accounts)
 	local := handlers.NewLocal(d.Accounts)
 	usage := handlers.NewUsage(d.Registry, d.Accounts)
-	warmup := handlers.NewWarmup(d.Proxy, d.Registry, d.Accounts, d.Warmups)
+	warmup := handlers.NewWarmup(d.Proxy, d.Registry, d.Accounts, d.Warmups, d.Logs)
 	term := handlers.NewTerminal()
 	files := handlers.NewFiles()
 	auth := middleware.APIKeyAuth(d.Keys)

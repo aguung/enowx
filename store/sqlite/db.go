@@ -65,7 +65,10 @@ func migrate(db *sql.DB) error {
 	if err := ensureColumn(db, "accounts", "creds", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
-	return ensureColumn(db, "accounts", "disabled", "INTEGER NOT NULL DEFAULT 0")
+	if err := ensureColumn(db, "accounts", "disabled", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	return ensureColumn(db, "request_logs", "source", "TEXT NOT NULL DEFAULT 'api'")
 }
 
 // ensureColumn adds a column to an existing table if it is missing (SQLite has
