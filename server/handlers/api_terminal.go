@@ -44,6 +44,9 @@ func (h *Terminal) WS(w http.ResponseWriter, r *http.Request) {
 	}
 	cmd := exec.Command(shell, "-l")
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	if home, err := os.UserHomeDir(); err == nil {
+		cmd.Dir = home
+	}
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		c.Close(websocket.StatusInternalError, "pty start failed")

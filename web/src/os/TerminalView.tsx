@@ -69,7 +69,7 @@ export function TerminalView() {
   }, []);
 
   return (
-    <div className="h-full w-full overflow-hidden rounded-2xl border border-emerald-500/20 bg-[#0b0c10] p-2 shadow-xl">
+    <div className="h-full w-full overflow-hidden bg-[#0b0c10] p-2">
       <div ref={host} className="h-full w-full" />
     </div>
   );

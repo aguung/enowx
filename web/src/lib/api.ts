@@ -90,6 +90,34 @@ export const localApi = {
     api.post<{ id: number }>("/api/local-sources/import", { provider, target }),
 };
 
+export interface FileEntry {
+  name: string;
+  is_dir: boolean;
+  size: number;
+  mod: string;
+}
+
+export interface DirListing {
+  path: string;
+  parent: string;
+  home: string;
+  entries: FileEntry[];
+}
+
+export interface FileContent {
+  path: string;
+  size: number;
+  truncated: boolean;
+  binary: boolean;
+  content: string;
+}
+
+export const filesApi = {
+  list: (path?: string) =>
+    api.get<DirListing>(`/api/files${path ? `?path=${encodeURIComponent(path)}` : ""}`),
+  read: (path: string) => api.get<FileContent>(`/api/files/read?path=${encodeURIComponent(path)}`),
+};
+
 export interface RequestSummary {
   total: number;
   ok: number;

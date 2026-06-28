@@ -28,3 +28,22 @@ body,
 .glass {
   backdrop-filter: blur(18px) saturate(140%);
 }
+
+/* Thin, theme-matching scrollbar for the terminal tab strip. */
+.term-tabs {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(74, 222, 128, 0.25) transparent;
+}
+.term-tabs::-webkit-scrollbar {
+  height: 6px;
+}
+.term-tabs::-webkit-scrollbar-track {
+  background: transparent;
+}
+.term-tabs::-webkit-scrollbar-thumb {
+  background: rgba(74, 222, 128, 0.22);
+  border-radius: 9999px;
+}
+.term-tabs::-webkit-scrollbar-thumb:hover {
+  background: rgba(74, 222, 128, 0.4);
+}

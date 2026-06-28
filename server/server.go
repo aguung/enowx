@@ -44,6 +44,7 @@ func New(addr string, d Deps) *Server {
 	kiro := handlers.NewKiro(d.Doer, d.Accounts)
 	local := handlers.NewLocal(d.Accounts)
 	term := handlers.NewTerminal()
+	files := handlers.NewFiles()
 	auth := middleware.APIKeyAuth(d.Keys)
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -82,6 +83,9 @@ func New(addr string, d Deps) *Server {
 
 		r.Get("/local-sources", local.Scan)
 		r.Post("/local-sources/import", local.Import)
+
+		r.Get("/files", files.List)
+		r.Get("/files/read", files.Read)
 	})
 
 	// Real PTY shell over WebSocket — loopback-only (guarded in the handler).
