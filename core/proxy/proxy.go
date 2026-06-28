@@ -52,6 +52,42 @@ func (p *Proxy) Forward(ctx context.Context, providerName string, req *model.Req
 	return prov.ParseResponse(resp, req)
 }
 
+// Probe runs one request against a SPECIFIC account (not the pool) and returns
+// the classified outcome — used by warmup to verify an account is alive. It
+// drains a small amount of the success stream so the upstream call completes.
+func (p *Proxy) Probe(ctx context.Context, providerName string, acc provider.Account, req *model.Request) (provider.Outcome, error) {
+	prov, err := p.reg.Get(providerName)
+	if err != nil {
+		return provider.OutcomeDead, err
+	}
+	hreq, err := prov.BuildRequest(req, acc)
+	if err != nil {
+		return provider.OutcomeDead, err
+	}
+	resp, err := p.doer.Do(hreq.WithContext(ctx))
+	if err != nil {
+		return provider.OutcomeTransient, fmt.Errorf("upstream: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return prov.Classify(resp.StatusCode, body), fmt.Errorf("upstream %d: %s", resp.StatusCode, truncate(body, 300))
+	}
+	// Success: drain the stream briefly so the request actually flows.
+	stream, err := prov.ParseResponse(resp, req)
+	if err != nil {
+		return provider.OutcomeTransient, err
+	}
+	defer stream.Close()
+	for range 64 {
+		ev, err := stream.Recv()
+		if err != nil || ev.Type == model.EventDone || ev.Type == model.EventError {
+			break
+		}
+	}
+	return provider.OutcomeOK, nil
+}
+
 func (p *Proxy) handleErr(ctx context.Context, prov provider.Provider, acc provider.Account, resp *http.Response) error {
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()

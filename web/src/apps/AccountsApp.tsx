@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Trash2, Power, PowerOff, RefreshCw } from "lucide-react";
+import { Search, Trash2, Power, PowerOff, RefreshCw, Zap } from "lucide-react";
 import { AppShell } from "./shell";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { Tooltip } from "../components/Tooltip";
@@ -22,6 +22,7 @@ export function AccountsApp() {
   const [filter, setFilter] = useState<string>("all");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
+  const [warming, setWarming] = useState<number | null>(null);
   const [usage, setUsage] = useState<Record<number, Usage>>({});
 
   async function load() {
@@ -85,6 +86,21 @@ export function AccountsApp() {
     act(() => accountsApi.remove(a.id), a.id);
   };
   const setDisabled = (a: Account, disabled: boolean) => act(() => accountsApi.setDisabled(a.id, disabled), a.id);
+
+  async function warmup(a: Account) {
+    setWarming(a.id);
+    setError("");
+    try {
+      const r = await accountsApi.warmup(a.id);
+      if (r.usage && r.usage.limit > 0) setUsage((m) => ({ ...m, [a.id]: r.usage! }));
+      if (!r.ok && r.error) setError(`${a.label || a.provider}: ${r.error}`);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "warmup failed");
+    } finally {
+      setWarming(null);
+    }
+  }
 
   return (
     <AppShell title="Accounts" subtitle="The credential pool across providers">
@@ -173,6 +189,9 @@ export function AccountsApp() {
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
+                    <ActionBtn title="Warm up (test request + credit)" disabled={busy === a.id || warming === a.id} onClick={() => warmup(a)}>
+                      <Zap className={`h-3.5 w-3.5 ${warming === a.id ? "animate-pulse text-amber-300" : ""}`} />
+                    </ActionBtn>
                     {a.disabled ? (
                       <ActionBtn title="Enable account" disabled={busy === a.id} onClick={() => setDisabled(a, false)}>
                         <Power className="h-3.5 w-3.5" />

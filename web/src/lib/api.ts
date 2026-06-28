@@ -64,6 +64,10 @@ export const accountsApi = {
     api.patch<{ ok: boolean }>(`/api/accounts/${id}/disabled`, { disabled }),
   remove: (id: number) => api.del<{ ok: boolean }>(`/api/accounts/${id}`),
   usage: (id: number) => api.get<{ supported: boolean; usage?: Usage }>(`/api/accounts/${id}/usage`),
+  warmup: (id: number) =>
+    api.post<{ ok: boolean; status: string; error?: string; usage_supported?: boolean; usage?: Usage }>(
+      `/api/accounts/${id}/warmup`,
+    ),
 };
 
 export interface AwsStart {
