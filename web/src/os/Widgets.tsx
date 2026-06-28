@@ -79,8 +79,8 @@ export function Widgets({ onOpen }: { onOpen: (id: AppId) => void }) {
   }, []);
 
   return (
-    <div className="pointer-events-auto h-full w-full overflow-auto px-5 py-5">
-      <div className="mx-auto grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
+    <div className="pointer-events-auto h-full w-full">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <PoolWidget accounts={accounts} onOpen={onOpen} />
         <ApiKeyWidget keys={keys} onChanged={reloadKeys} onOpen={onOpen} />
         <UsageWidget summary={summary} />

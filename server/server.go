@@ -43,6 +43,7 @@ func New(addr string, d Deps) *Server {
 	dbg := handlers.NewDebug(d.Settings.Version, d.Settings.Started)
 	kiro := handlers.NewKiro(d.Doer, d.Accounts)
 	local := handlers.NewLocal(d.Accounts)
+	term := handlers.NewTerminal()
 	auth := middleware.APIKeyAuth(d.Keys)
 
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
@@ -82,6 +83,9 @@ func New(addr string, d Deps) *Server {
 		r.Get("/local-sources", local.Scan)
 		r.Post("/local-sources/import", local.Import)
 	})
+
+	// Real PTY shell over WebSocket — loopback-only (guarded in the handler).
+	r.Get("/api/terminal", term.WS)
 
 	// WebOS SPA on the same port (everything not matched above).
 	r.Handle("/*", spaHandler())
