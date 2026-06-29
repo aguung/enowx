@@ -105,20 +105,47 @@ func (m *Manager) EnableQuick() (State, error) {
 		return State{}, err
 	}
 
+	var u string
 	select {
-	case u := <-urlCh:
-		m.mu.Lock()
-		m.cmd = cmd
-		m.running = true
-		m.state = State{Enabled: true, Mode: ModeQuick, URL: u, LoggedIn: m.state.LoggedIn}
-		m.saveStateLocked()
-		s := m.state
-		m.mu.Unlock()
-		return s, nil
+	case u = <-urlCh:
 	case <-withTimeout(90 * time.Second):
 		killCmd(cmd)
 		return State{}, fmt.Errorf("quick tunnel timed out waiting for a public URL")
 	}
+
+	// The URL is printed before its DNS has propagated at the Cloudflare edge,
+	// so returning immediately gives the user a link that briefly fails with
+	// DNS_PROBE_POSSIBLE. Give the edge a moment to come up (best-effort): if it
+	// confirms reachable we return right away; if not, we still return the URL
+	// (the tunnel is live — DNS just needs a few more seconds for the client).
+	m.waitReachable(u, 25*time.Second)
+
+	m.mu.Lock()
+	m.cmd = cmd
+	m.running = true
+	m.state = State{Enabled: true, Mode: ModeQuick, URL: u, LoggedIn: m.state.LoggedIn}
+	m.saveStateLocked()
+	s := m.state
+	m.mu.Unlock()
+	return s, nil
+}
+
+// waitReachable polls the public URL until it answers (DNS propagated + tunnel
+// live) or the deadline passes. Returns true if it confirmed reachability.
+func (m *Manager) waitReachable(url string, timeout time.Duration) bool {
+	client := &http.Client{Timeout: 5 * time.Second}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(url + "/health")
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode < 500 {
+				return true
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+	return false
 }
 
 // Login runs `cloudflared tunnel login`, streaming progress via onLine. It
