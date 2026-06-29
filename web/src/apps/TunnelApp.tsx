@@ -6,6 +6,7 @@ import { useDialog } from "../os/dialog";
 import { usePersisted } from "../os/usePersisted";
 import { useTunnel } from "../os/useTunnel";
 import { useKeys } from "../os/useKeys";
+import { tunnelApi } from "../lib/api";
 
 type Mode = "quick" | "named";
 
@@ -40,12 +41,24 @@ export function TunnelApp() {
 
   async function onEnableQuick() {
     setError("");
-    setBusy("Downloading cloudflared & connecting…");
+    setBusy("Connecting…");
+    // Poll real status while the (blocking) enable runs, so we only show
+    // "Downloading" when cloudflared is actually being fetched.
+    const poll = setInterval(async () => {
+      try {
+        const s = await tunnelApi.status();
+        if (s.downloading) setBusy(`Downloading cloudflared… ${s.download_pct}%`);
+        else setBusy("Connecting…");
+      } catch {
+        /* ignore */
+      }
+    }, 700);
     try {
       await enableQuick();
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed to enable");
     } finally {
+      clearInterval(poll);
       setBusy("");
     }
   }
