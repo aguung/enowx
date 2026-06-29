@@ -1,9 +1,12 @@
 package tunnel
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -130,17 +133,57 @@ func (m *Manager) EnableQuick() (State, error) {
 	return s, nil
 }
 
+// publicResolver dials Cloudflare/Google DNS directly so we bypass the OS
+// resolver's negative cache. cloudflared prints the URL before its edge DNS has
+// propagated; if anything queries it too early the OS caches an NXDOMAIN that
+// lingers — so we must resolve via a public server, not the OS.
+var publicResolver = &net.Resolver{
+	PreferGo: true,
+	Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		d := net.Dialer{Timeout: 3 * time.Second}
+		return d.DialContext(ctx, "udp", "1.1.1.1:53")
+	},
+}
+
 // waitReachable polls the public URL until it answers (DNS propagated + tunnel
-// live) or the deadline passes. Returns true if it confirmed reachability.
-func (m *Manager) waitReachable(url string, timeout time.Duration) bool {
-	client := &http.Client{Timeout: 5 * time.Second}
+// live) or the deadline passes. Returns true if it confirmed reachability. DNS
+// is checked via a public resolver to avoid the OS negative cache.
+func (m *Manager) waitReachable(rawurl string, timeout time.Duration) bool {
+	host := rawurl
+	if u, err := url.Parse(rawurl); err == nil {
+		host = u.Hostname()
+	}
+
+	// HTTP client whose dialer resolves via the public resolver too, so the
+	// probe doesn't get poisoned by the OS cache either.
+	client := &http.Client{
+		Timeout: 6 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				h, port, _ := net.SplitHostPort(addr)
+				ips, err := publicResolver.LookupHost(ctx, h)
+				if err != nil || len(ips) == 0 {
+					return nil, fmt.Errorf("resolve %s: %w", h, err)
+				}
+				d := net.Dialer{Timeout: 5 * time.Second}
+				return d.DialContext(ctx, network, net.JoinHostPort(ips[0], port))
+			},
+		},
+	}
+
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		resp, err := client.Get(url + "/health")
-		if err == nil {
-			resp.Body.Close()
-			if resp.StatusCode < 500 {
-				return true
+		// First confirm DNS resolves at all (cheap, bypasses OS cache).
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ips, derr := publicResolver.LookupHost(ctx, host)
+		cancel()
+		if derr == nil && len(ips) > 0 {
+			resp, err := client.Get(rawurl + "/health")
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode < 500 {
+					return true
+				}
 			}
 		}
 		time.Sleep(2 * time.Second)
