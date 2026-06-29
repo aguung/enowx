@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"net"
 	"net/http"
 	"sync"
@@ -30,11 +31,48 @@ const (
 type Dashboard struct {
 	settings store.SettingsStore
 	mu       sync.Mutex
-	sessions map[string]time.Time // token -> expiry
+	sessions map[string]time.Time // token -> expiry (cache of the persisted set)
+	loaded   bool
 }
 
 func NewDashboard(settings store.SettingsStore) *Dashboard {
 	return &Dashboard{settings: settings, sessions: map[string]time.Time{}}
+}
+
+const sessionsKey = "dashboard_sessions"
+
+// loadLocked hydrates the session cache from the store once (sessions survive
+// restarts — they're persisted as JSON in the settings KV).
+func (d *Dashboard) loadLocked() {
+	if d.loaded {
+		return
+	}
+	d.loaded = true
+	raw, _ := d.settings.Get(context.Background(), sessionsKey)
+	if raw == "" {
+		return
+	}
+	var stored map[string]int64 // token -> unix expiry
+	if json.Unmarshal([]byte(raw), &stored) != nil {
+		return
+	}
+	now := time.Now()
+	for tok, exp := range stored {
+		t := time.Unix(exp, 0)
+		if t.After(now) {
+			d.sessions[tok] = t
+		}
+	}
+}
+
+// persistLocked writes the current (non-expired) sessions back to the store.
+func (d *Dashboard) persistLocked() {
+	out := make(map[string]int64, len(d.sessions))
+	for tok, exp := range d.sessions {
+		out[tok] = exp.Unix()
+	}
+	b, _ := json.Marshal(out)
+	_ = d.settings.Set(context.Background(), sessionsKey, string(b))
 }
 
 // HasPassword reports whether a dashboard password has been set.
@@ -61,13 +99,16 @@ func (d *Dashboard) CheckPassword(ctx context.Context, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(h), []byte(password)) == nil
 }
 
-// CreateSession mints a session token (call after a successful login).
+// CreateSession mints a session token (call after a successful login). The
+// session is persisted so it survives a restart.
 func (d *Dashboard) CreateSession() string {
 	b := make([]byte, 32)
 	_, _ = rand.Read(b)
 	token := hex.EncodeToString(b)
 	d.mu.Lock()
+	d.loadLocked()
 	d.sessions[token] = time.Now().Add(sessionTTL)
+	d.persistLocked()
 	d.mu.Unlock()
 	return token
 }
@@ -78,12 +119,14 @@ func (d *Dashboard) validSession(token string) bool {
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.loadLocked()
 	exp, ok := d.sessions[token]
 	if !ok {
 		return false
 	}
 	if time.Now().After(exp) {
 		delete(d.sessions, token)
+		d.persistLocked()
 		return false
 	}
 	return true
@@ -91,7 +134,9 @@ func (d *Dashboard) validSession(token string) bool {
 
 func (d *Dashboard) revoke(token string) {
 	d.mu.Lock()
+	d.loadLocked()
 	delete(d.sessions, token)
+	d.persistLocked()
 	d.mu.Unlock()
 }
 
