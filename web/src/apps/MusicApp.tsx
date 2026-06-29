@@ -431,30 +431,33 @@ function AddToActions({ track }: { track: Track }) {
   const m = useMusic();
   const { playlists, create, addTrack } = usedPlaylists();
   const dialog = useDialog();
+  const [picking, setPicking] = useState(false);
+  const [busy, setBusy] = useState(false);
   const inQueue = m.queue.some((x) => x.id === track.id);
+  const list = playlists ?? [];
 
-  async function onAddToPlaylist() {
-    const list = playlists ?? [];
-    const result = await dialog.form({
-      title: "Add to playlist",
-      message:
-        list.length > 0
-          ? `Type an existing name (${list.map((p) => p.name).join(", ")}) or a new one to create it.`
-          : "Type a name to create a new playlist.",
-      fields: [{ name: "name", label: "Playlist", placeholder: "Playlist name" }],
-      confirmLabel: "Add",
-    });
-    const name = result?.name?.trim();
-    if (!name) return;
-    const existing = list.find((p) => p.name.toLowerCase() === name.toLowerCase());
-    const targetId = existing ? existing.id : (await create(name)).id;
-    await addTrack(targetId, track);
+  async function addToExisting(p: Playlist) {
+    setBusy(true);
+    try {
+      await addTrack(p.id, track);
+    } finally {
+      setBusy(false);
+      setPicking(false);
+    }
+  }
+
+  async function addToNew() {
+    setPicking(false);
+    const name = await dialog.prompt({ title: "New playlist", placeholder: "Playlist name", confirmLabel: "Create & add" });
+    if (!name || !name.trim()) return;
+    const { id } = await create(name.trim());
+    await addTrack(id, track);
   }
 
   return (
-    <div className="flex items-center">
+    <div className="relative flex items-center">
       <Tooltip label="Add to playlist" place="left">
-        <button onClick={onAddToPlaylist} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white/80">
+        <button onClick={() => setPicking((v) => !v)} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white/80">
           <ListMusic className="h-3.5 w-3.5" />
         </button>
       </Tooltip>
@@ -463,6 +466,42 @@ function AddToActions({ track }: { track: Track }) {
           <Plus className="h-3.5 w-3.5" />
         </button>
       </Tooltip>
+
+      {picking && (
+        <>
+          {/* click-away backdrop */}
+          <div className="fixed inset-0 z-[10000]" onClick={() => setPicking(false)} />
+          <div className="absolute right-0 top-7 z-[10001] w-52 overflow-hidden rounded-xl border border-white/10 bg-[#11131a]/98 shadow-2xl glass">
+            <div className="border-b border-white/5 px-3 py-2 text-[11px] font-semibold text-white/60">Add to playlist</div>
+            <div className="max-h-56 overflow-auto py-1">
+              {list.length === 0 ? (
+                <div className="px-3 py-2 text-[11px] text-white/40">No playlists yet.</div>
+              ) : (
+                list.map((p) => {
+                  const has = p.tracks?.some((x) => x.id === track.id);
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => !has && addToExisting(p)}
+                      disabled={busy || has}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs text-white/80 hover:bg-white/10 disabled:opacity-40"
+                    >
+                      <span className="truncate">{p.name}</span>
+                      <span className="shrink-0 text-[10px] text-white/35">{has ? "added" : `${p.count}`}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            <button
+              onClick={addToNew}
+              className="flex w-full items-center gap-1.5 border-t border-white/5 px-3 py-2 text-left text-xs font-medium text-emerald-300 hover:bg-white/5"
+            >
+              <FolderPlus className="h-3.5 w-3.5" /> New playlist…
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
