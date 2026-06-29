@@ -23,7 +23,7 @@ import { Popover } from "../components/Popover";
 import { useDialog } from "../os/dialog";
 import { usePersisted } from "../os/usePersisted";
 import { musicApi, type Track, type Playlist } from "../lib/api";
-import { useMusic, play, playQueue, enqueue, toggle, currentTrack, removeFromQueue, clearQueue } from "../os/musicBus";
+import { useMusic, playInContext, playList, playFromQueue, enqueue, toggle, currentTrack, removeFromQueue, clearQueue } from "../os/musicBus";
 import { usedPlaylists } from "../os/musicPlaylists";
 import { useDiscover } from "../os/musicDiscover";
 
@@ -97,7 +97,7 @@ function Discover() {
       ) : tracks.length === 0 ? (
         <Empty message="Nothing to show yet. Play a few songs and your feed will fill in." />
       ) : (
-        <TrackList tracks={tracks} onPlayAll={() => playQueue(tracks, 0)} />
+        <TrackList tracks={tracks} onPlayAll={() => playList(tracks, 0)} />
       )}
     </div>
   );
@@ -163,7 +163,7 @@ function SearchTab() {
       ) : results.length === 0 ? (
         <Empty message="No results." />
       ) : (
-        <TrackList tracks={results} onPlayAll={() => playQueue(results, 0)} />
+        <TrackList tracks={results} onPlayAll={() => playList(results, 0)} />
       )}
     </div>
   );
@@ -307,7 +307,7 @@ function PlaylistDetail({ id, onBack }: { id: number; onBack: () => void }) {
         </div>
         {tracks.length > 0 && (
           <Tooltip label="Play all" place="bottom">
-            <button onClick={() => playQueue(tracks, 0)} className="flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1 text-[11px] font-medium text-white hover:bg-white/15">
+            <button onClick={() => playList(tracks, 0)} className="flex items-center gap-1 rounded-lg bg-white/10 px-2 py-1 text-[11px] font-medium text-white hover:bg-white/15">
               <Play className="h-3 w-3" /> Play
             </button>
           </Tooltip>
@@ -327,7 +327,7 @@ function PlaylistDetail({ id, onBack }: { id: number; onBack: () => void }) {
       ) : (
         <TrackList
           tracks={tracks}
-          onPlayAll={() => playQueue(tracks, 0)}
+          onPlayAll={() => playList(tracks, 0)}
           rowAction={(t) => (
             <Tooltip label="Remove from playlist" place="left">
               <button onClick={() => removeTrack(id, t.id)} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-red-300">
@@ -354,7 +354,7 @@ function Queue() {
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-[11px] text-white/40">{m.queue.length} track{m.queue.length === 1 ? "" : "s"} · plays in order</p>
+        <p className="text-[11px] text-white/40">{m.queue.length} track{m.queue.length === 1 ? "" : "s"} · plays next, before continuing</p>
         <Tooltip label="Clear the queue" place="left">
           <button onClick={clearQueue} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-white/55 hover:bg-white/10 hover:text-red-300">
             <ListX className="h-3 w-3" /> Clear
@@ -370,7 +370,7 @@ function Queue() {
               track={t}
               active={isCurrent}
               playing={isCurrent && m.playing}
-              onPlay={() => (isCurrent ? toggle() : play(t))}
+              onPlay={() => (isCurrent ? toggle() : playFromQueue(t.id))}
               action={
                 <Tooltip label="Remove from queue" place="left">
                   <button onClick={() => removeFromQueue(t.id)} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-red-300">
@@ -403,7 +403,7 @@ function TrackList({
     <div className="space-y-1">
       {onPlayAll && tracks.length > 1 && (
         <div className="mb-1 flex justify-end">
-          <Tooltip label="Play all as a queue" place="left">
+          <Tooltip label="Play this list in order" place="left">
             <button onClick={onPlayAll} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-white/55 hover:bg-white/10 hover:text-white">
               <Play className="h-3 w-3" /> Play all
             </button>
@@ -418,7 +418,9 @@ function TrackList({
             track={t}
             active={isCurrent}
             playing={isCurrent && m.playing}
-            onPlay={() => (isCurrent ? toggle() : play(t))}
+            // Playing a row plays the whole list as the running context, so
+            // playback continues to the next list item (not into the queue).
+            onPlay={() => (isCurrent ? toggle() : playInContext(t, tracks))}
             action={rowAction ? rowAction(t) : <AddToActions track={t} />}
           />
         );

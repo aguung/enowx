@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, X, Music2, Loader2 } from "lucide-react";
 import { Tooltip } from "../components/Tooltip";
 import { Popover } from "../components/Popover";
-import { useMusic, toggle, next, prev, seek, setVolume, currentTrack, clearQueue, fmtTime } from "./musicBus";
+import { useMusic, toggle, next, prev, seek, setVolume, currentTrack, stop, fmtTime } from "./musicBus";
 
 // Now-playing readout that lives in the TopBar center. Compact controls inline;
 // click the track to open a popover with the seek bar, prev, and volume. Renders
@@ -146,12 +146,12 @@ function NowPlayingPopover({ pct, onClose }: { pct: number; onClose: () => void 
 
         <button
           onClick={() => {
-            clearQueue();
+            stop();
             onClose();
           }}
           className="mt-2.5 w-full rounded-lg border border-white/10 py-1.5 text-[11px] text-white/45 hover:bg-white/5 hover:text-red-300"
         >
-          Close player &amp; clear queue
+          Close player
         </button>
       </div>
     </Popover>

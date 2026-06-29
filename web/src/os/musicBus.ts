@@ -3,15 +3,29 @@ import { musicApi, type Track } from "../lib/api";
 
 // Shared music player state. A single module-level <audio> element owns
 // playback so it keeps playing when the user switches center views or opens
-// other apps — React just reflects the store. Queue / current / volume persist
-// to localStorage so the player survives a reload (see AGENTS.md persistence +
-// "shared data stays in sync across views").
+// other apps — React just reflects the store. State persists to localStorage so
+// the player survives a reload (see AGENTS.md persistence + "shared data stays
+// in sync across views").
+//
+// Playback model:
+//   • context  — the list that is "playing" (Discover feed, a playlist, search
+//     results). Playing a track from a list sets it as the context and plays
+//     in order from there.
+//   • queue    — an interrupt list ("play next"). When a track ends, the queue
+//     is consumed first; once empty, playback continues through the context.
+// So playing from Discover does NOT fill the queue: it advances the context,
+// and a non-empty queue simply takes priority until drained.
 
 const LS = "enx.music";
 
+export type PlaySource = "queue" | "context";
+
 export interface MusicState {
-  queue: Track[];
-  index: number; // -1 = nothing loaded
+  current: Track | null; // the track actually loaded/playing
+  source: PlaySource; // where `current` came from
+  context: Track[]; // the running list (Discover / playlist / search)
+  contextIndex: number; // position of the last-played context track (-1 none)
+  queue: Track[]; // interrupt list, played before continuing the context
   playing: boolean;
   position: number; // seconds
   duration: number; // seconds
@@ -21,8 +35,11 @@ export interface MusicState {
 }
 
 interface Persisted {
+  current: Track | null;
+  source: PlaySource;
+  context: Track[];
+  contextIndex: number;
   queue: Track[];
-  index: number;
   volume: number;
 }
 
@@ -32,23 +49,29 @@ function loadPersisted(): Persisted {
     if (raw) {
       const p = JSON.parse(raw) as Partial<Persisted>;
       return {
+        current: p.current ?? null,
+        source: p.source === "queue" ? "queue" : "context",
+        context: Array.isArray(p.context) ? p.context : [],
+        contextIndex: typeof p.contextIndex === "number" ? p.contextIndex : -1,
         queue: Array.isArray(p.queue) ? p.queue : [],
-        index: typeof p.index === "number" ? p.index : -1,
         volume: typeof p.volume === "number" ? p.volume : 1,
       };
     }
   } catch {
     // ignore
   }
-  return { queue: [], index: -1, volume: 1 };
+  return { current: null, source: "context", context: [], contextIndex: -1, queue: [], volume: 1 };
 }
 
 const persisted = loadPersisted();
 
 let state: MusicState = {
+  current: persisted.current,
+  source: persisted.source,
+  context: persisted.context,
+  contextIndex: persisted.contextIndex,
   queue: persisted.queue,
-  index: -1, // don't auto-resume playback; user re-plays the loaded track
-  playing: false,
+  playing: false, // don't auto-resume audio on load
   position: 0,
   duration: 0,
   volume: persisted.volume,
@@ -66,7 +89,14 @@ function set(patch: Partial<MusicState>) {
 }
 function savePersisted() {
   try {
-    const p: Persisted = { queue: state.queue, index: state.index, volume: state.volume };
+    const p: Persisted = {
+      current: state.current,
+      source: state.source,
+      context: state.context,
+      contextIndex: state.contextIndex,
+      queue: state.queue,
+      volume: state.volume,
+    };
     localStorage.setItem(LS, JSON.stringify(p));
   } catch {
     // ignore
@@ -101,7 +131,7 @@ function getAudio(): HTMLAudioElement {
 let recordedFor = "";
 
 function recordCurrentPlay() {
-  const track = state.queue[state.index];
+  const track = state.current;
   if (!track || recordedFor === track.id) return;
   recordedFor = track.id;
   musicApi.recordPlay(track).catch(() => {
@@ -109,88 +139,137 @@ function recordCurrentPlay() {
   });
 }
 
-function loadIndex(i: number, autoplay: boolean) {
-  const track = state.queue[i];
-  if (!track) return;
+// load makes `track` the current track and starts playing. `patch` carries the
+// source/context bookkeeping that goes with it.
+function load(track: Track, patch: Partial<MusicState>, autoplay: boolean) {
   const a = getAudio();
-  recordedFor = ""; // new load — allow a fresh history record on play
-  set({ index: i, error: "", position: 0, duration: 0, loading: true });
+  recordedFor = "";
+  set({ current: track, error: "", position: 0, duration: 0, loading: true, ...patch });
   savePersisted();
   a.src = musicApi.streamUrl(track.id);
   a.load();
-  if (autoplay) {
-    a.play().catch(() => set({ loading: false }));
-  }
+  if (autoplay) a.play().catch(() => set({ loading: false }));
 }
 
 // ---- public actions ----
 
+// play a single track. If it belongs to the current context, continue the
+// context from there; otherwise it becomes a one-item context.
 export function play(track: Track) {
-  // If already in the queue, jump to it; otherwise append and play.
-  const existing = state.queue.findIndex((t) => t.id === track.id);
-  if (existing >= 0) {
-    loadIndex(existing, true);
-    return;
+  const i = state.context.findIndex((t) => t.id === track.id);
+  if (i >= 0) {
+    load(track, { source: "context", contextIndex: i }, true);
+  } else {
+    load(track, { source: "context", context: [track], contextIndex: 0 }, true);
   }
-  set({ queue: [...state.queue, track] });
-  loadIndex(state.queue.length - 1, true);
 }
 
-export function playQueue(tracks: Track[], startAt = 0) {
-  set({ queue: tracks });
-  loadIndex(startAt, true);
+// playInContext plays a track that is part of a list, setting that whole list
+// as the running context (used by Discover / playlist / search "play").
+export function playInContext(track: Track, context: Track[]) {
+  const i = context.findIndex((t) => t.id === track.id);
+  load(track, { source: "context", context, contextIndex: Math.max(0, i) }, true);
 }
 
+// playList starts a list as the context from a given position (e.g. "Play all").
+export function playList(tracks: Track[], startAt = 0) {
+  if (tracks.length === 0) return;
+  const i = Math.min(Math.max(0, startAt), tracks.length - 1);
+  load(tracks[i], { source: "context", context: tracks, contextIndex: i }, true);
+}
+
+// enqueue adds a track to the interrupt queue ("play next"). It does not change
+// what is currently playing; if nothing is playing yet, it starts the queue.
 export function enqueue(track: Track) {
   if (state.queue.some((t) => t.id === track.id)) return;
-  set({ queue: [...state.queue, track] });
+  const queue = [...state.queue, track];
+  if (!state.current) {
+    // nothing playing — pull it straight off the queue
+    set({ queue });
+    playNextFromQueue();
+    return;
+  }
+  set({ queue });
   savePersisted();
-  if (state.index < 0) loadIndex(state.queue.length - 1, false);
 }
 
 export function removeFromQueue(id: string) {
-  const i = state.queue.findIndex((t) => t.id === id);
-  if (i < 0) return;
-  const queue = state.queue.filter((t) => t.id !== id);
-  let index = state.index;
-  if (i < index) index -= 1;
-  else if (i === index) index = Math.min(index, queue.length - 1);
-  set({ queue, index });
+  set({ queue: state.queue.filter((t) => t.id !== id) });
   savePersisted();
 }
 
+// playFromQueue jumps straight to a queued track now, dropping the items before
+// it (they were going to play first, but the user picked this one).
+export function playFromQueue(id: string) {
+  const i = state.queue.findIndex((t) => t.id === id);
+  if (i < 0) return;
+  const track = state.queue[i];
+  load(track, { source: "queue", queue: state.queue.slice(i + 1) }, true);
+}
+
 export function clearQueue() {
+  set({ queue: [] });
+  savePersisted();
+}
+
+// stop tears down playback entirely (used by "close player").
+export function stop() {
   const a = getAudio();
   a.pause();
   a.removeAttribute("src");
   a.load();
-  set({ queue: [], index: -1, playing: false, position: 0, duration: 0 });
+  set({ current: null, source: "context", queue: [], context: [], contextIndex: -1, playing: false, position: 0, duration: 0 });
   savePersisted();
 }
 
 export function toggle() {
   const a = getAudio();
-  if (state.index < 0) {
-    if (state.queue.length) loadIndex(0, true);
+  if (!state.current) {
+    next(); // nothing loaded — start whatever is up next
     return;
   }
   if (a.paused) a.play().catch(() => {});
   else a.pause();
 }
 
+function playNextFromQueue() {
+  const [head, ...rest] = state.queue;
+  if (!head) return false;
+  load(head, { source: "queue", queue: rest }, true);
+  return true;
+}
+
+// next advances playback: the queue takes priority, then the context continues.
 export function next() {
-  if (state.index + 1 < state.queue.length) loadIndex(state.index + 1, true);
-  else set({ playing: false });
+  // 1) Anything in the queue plays first.
+  if (state.queue.length > 0) {
+    playNextFromQueue();
+    return;
+  }
+  // 2) Otherwise continue the context from where we left off.
+  const nextIdx = state.contextIndex + 1;
+  if (nextIdx < state.context.length) {
+    load(state.context[nextIdx], { source: "context", contextIndex: nextIdx }, true);
+    return;
+  }
+  // 3) Nothing left.
+  set({ playing: false });
 }
 
 export function prev() {
   const a = getAudio();
-  // Restart the track if we're more than 3s in; otherwise go to the previous.
-  if (a.currentTime > 3 || state.index <= 0) {
+  // Restart the track if we're more than 3s in.
+  if (a.currentTime > 3) {
     a.currentTime = 0;
     return;
   }
-  loadIndex(state.index - 1, true);
+  // Step back within the context if possible; otherwise just restart.
+  if (state.source === "context" && state.contextIndex > 0) {
+    const i = state.contextIndex - 1;
+    load(state.context[i], { source: "context", contextIndex: i }, true);
+  } else {
+    a.currentTime = 0;
+  }
 }
 
 export function seek(seconds: number) {
@@ -223,7 +302,7 @@ export function useMusic(): MusicState {
 }
 
 export function currentTrack(): Track | null {
-  return state.queue[state.index] ?? null;
+  return state.current;
 }
 
 export function fmtTime(sec: number): string {
