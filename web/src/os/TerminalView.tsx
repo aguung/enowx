@@ -28,6 +28,20 @@ export function TerminalView() {
     term.open(host.current);
     fit.fit();
 
+    // The PTY shell is loopback-only on the server (it exposes your machine).
+    // When the UI is reached over a tunnel/remote host the WebSocket would be
+    // refused with a cryptic error — explain it instead of trying.
+    if (!isLocalHost(window.location.hostname)) {
+      term.writeln("\x1b[33mTerminal is available on localhost only.\x1b[0m");
+      term.writeln("");
+      term.writeln("\x1b[90mFor safety the shell (and file browser) are not served\x1b[0m");
+      term.writeln("\x1b[90mover a public tunnel or remote host. Open enowx locally\x1b[0m");
+      term.writeln("\x1b[90mat http://localhost:1430 to use the terminal.\x1b[0m");
+      return () => {
+        term.dispose();
+      };
+    }
+
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const ws = new WebSocket(`${proto}://${window.location.host}/api/terminal`);
     ws.binaryType = "arraybuffer";
@@ -73,4 +87,10 @@ export function TerminalView() {
       <div ref={host} className="h-full w-full" />
     </div>
   );
+}
+
+// isLocalHost mirrors the server's loopback guard: the terminal only connects
+// when the UI itself is served from localhost.
+function isLocalHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname.startsWith("127.");
 }
