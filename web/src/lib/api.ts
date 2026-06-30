@@ -451,6 +451,7 @@ export interface ChatMessage {
   wears_tag?: boolean;
   guild_tag?: string;
   reactions?: Reaction[];
+  channel?: string;
 }
 
 export interface Reaction {
@@ -459,12 +460,25 @@ export interface Reaction {
   me: boolean;
 }
 
+export interface ChatChannel {
+  key: string;
+  label: string;
+}
+
 export const chatApi = {
-  list: (before?: number) => api.get<{ messages: ChatMessage[] }>(`/api/chat/messages${before ? `?before=${before}` : ""}`),
-  send: (content: string, reply_to?: number) => api.post<ChatMessage>("/api/chat/messages", { content, reply_to: reply_to ?? null }),
+  list: (channel?: string) =>
+    api.get<{ messages: ChatMessage[]; channel: string; channels: ChatChannel[] }>(
+      `/api/chat/messages${channel ? `?channel=${encodeURIComponent(channel)}` : ""}`,
+    ),
+  send: (content: string, channel: string, reply_to?: number) =>
+    api.post<ChatMessage>("/api/chat/messages", { content, channel, reply_to: reply_to ?? null }),
   edit: (id: number, content: string) => api.patch<{ id: number; content: string }>(`/api/chat/messages/${id}`, { content }),
   remove: (id: number) => api.del<{ deleted: number }>(`/api/chat/messages/${id}`),
   react: (id: number, emoji: string) => api.post<{ message_id: number; reactions: Reaction[] }>(`/api/chat/messages/${id}/reactions`, { emoji }),
+};
+
+export const modApi = {
+  setModerator: (userId: string, on: boolean) => api.post<{ is_moderator: boolean }>(`/api/admin/users/${userId}/moderator`, { on }),
 };
 
 // PublicProfile is what other members can see (social data only — no secrets).

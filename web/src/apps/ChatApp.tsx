@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Send, Wifi, WifiOff, Pencil, Trash2, Copy, Reply, X, SmilePlus } from "lucide-react";
+import { Loader2, Send, Wifi, WifiOff, Pencil, Trash2, Copy, Reply, X, SmilePlus, ShieldCheck } from "lucide-react";
 import { AppShell } from "./shell";
 import { Popover } from "../components/Popover";
 import { ProfileCard } from "../components/ProfileCard";
 import { EmojiPicker } from "../components/EmojiPicker";
 import { useProfile } from "../os/useProfile";
-import { useChat, sendChat, editChat, deleteChat, reactChat } from "../os/chatBus";
+import { useChat, sendChat, editChat, deleteChat, reactChat, loadChannel } from "../os/chatBus";
 import { useDialog } from "../os/dialog";
-import { profileApi, type ChatMessage, type PublicProfile } from "../lib/api";
+import { profileApi, modApi, type ChatMessage, type PublicProfile } from "../lib/api";
 
 interface ReplyTarget {
   id: number;
@@ -30,14 +30,14 @@ export function ChatApp() {
     );
   }
   return (
-    <AppShell title="Community" subtitle="#general" flush>
+    <AppShell title="Community" subtitle="Channels" flush>
       <ChatRoom />
     </AppShell>
   );
 }
 
 function ChatRoom() {
-  const { messages, loading, connected } = useChat();
+  const { messages, channels, channel, loading, connected } = useChat();
   const profile = useProfile();
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -76,9 +76,21 @@ function ChatRoom() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-1.5 border-b border-white/5 px-4 py-1.5 text-[10px] uppercase tracking-wide text-white/30">
-        {connected ? <Wifi className="h-3 w-3 text-emerald-400/70" /> : <WifiOff className="h-3 w-3 text-white/30" />}
-        {connected ? "live" : "connecting…"}
+      {/* Channel tabs */}
+      <div className="flex items-center gap-1 overflow-x-auto border-b border-white/5 px-3 py-1.5">
+        {channels.map((c) => (
+          <button
+            key={c.key}
+            onClick={() => loadChannel(c.key)}
+            className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${c.key === channel ? "bg-white/15 text-white" : "text-white/50 hover:bg-white/5 hover:text-white"}`}
+          >
+            #{c.label}
+          </button>
+        ))}
+        <span className="ml-auto flex shrink-0 items-center gap-1.5 px-1 text-[10px] uppercase tracking-wide text-white/30">
+          {connected ? <Wifi className="h-3 w-3 text-emerald-400/70" /> : <WifiOff className="h-3 w-3 text-white/30" />}
+          {connected ? "live" : "…"}
+        </span>
       </div>
 
       <div className="min-h-0 flex-1 space-y-0.5 overflow-auto px-2 py-3">
@@ -121,7 +133,7 @@ function ChatRoom() {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), submit())}
-          placeholder={reply ? `Reply to ${reply.author}` : "Message #general"}
+          placeholder={reply ? `Reply to ${reply.author}` : `Message #${channel}`}
           maxLength={1000}
           className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-white/25"
         />
@@ -302,15 +314,50 @@ function ActBtn({ label, onClick, danger, children }: { label: string; onClick: 
   );
 }
 
-// UserCard fetches and shows a member's public profile inside the popover.
+// UserCard fetches and shows a member's public profile inside the popover. A
+// moderator viewing another member gets a grant/revoke-moderator control.
 function UserCard({ userId }: { userId: string }) {
+  const profile = useProfile();
   const [p, setP] = useState<PublicProfile | null>(null);
   const [err, setErr] = useState(false);
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
     profileApi.publicById(userId).then(setP).catch(() => setErr(true));
   }, [userId]);
 
   if (err) return <div className="p-4 text-xs text-white/50">Couldn't load profile.</div>;
   if (!p) return <div className="flex h-24 items-center justify-center"><Loader2 className="h-4 w-4 animate-spin text-white/30" /></div>;
-  return <ProfileCard p={p} compact />;
+
+  const canManage = profile.has("chat.moderate") && p.username !== profile.user?.username;
+  async function toggleMod() {
+    if (!p) return;
+    setBusy(true);
+    try {
+      const r = await modApi.setModerator(p.id, !p.is_moderator);
+      setP({ ...p, is_moderator: r.is_moderator });
+    } catch {
+      /* ignore */
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <ProfileCard
+      p={p}
+      compact
+      footer={
+        canManage ? (
+          <button
+            onClick={toggleMod}
+            disabled={busy}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 px-2 py-1.5 text-xs font-medium text-white/80 hover:bg-white/5 disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+            {p.is_moderator ? "Revoke moderator" : "Make moderator"}
+          </button>
+        ) : undefined
+      }
+    />
+  );
 }

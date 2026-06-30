@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { chatApi, type ChatMessage, type Reaction } from "../lib/api";
+import { chatApi, type ChatMessage, type Reaction, type ChatChannel } from "../lib/api";
 
-// chatBus is the shared community-chat store: it loads history, holds the live
-// message list, and keeps a single SSE connection (/api/chat/stream) open so new
-// messages arrive in realtime. Module-level so every Chat view shares one feed.
+// chatBus is the shared community-chat store: it loads history for the active
+// channel, holds the live message list, and keeps a single SSE connection
+// (/api/chat/stream) open so new messages arrive in realtime.
 let messages: ChatMessage[] = [];
-let loaded = false;
+let channels: ChatChannel[] = [];
+let channel = "general";
 let loading = false;
 let es: EventSource | null = null;
 let connected = false;
@@ -15,16 +16,17 @@ function emit() {
   listeners.forEach((l) => l());
 }
 
-async function loadHistory() {
-  if (loaded || loading) return;
+export async function loadChannel(ch?: string) {
+  if (ch !== undefined) channel = ch;
   loading = true;
+  emit();
   try {
-    const r = await chatApi.list();
+    const r = await chatApi.list(channel);
     // Server returns newest-first; show oldest-first.
     messages = (r.messages ?? []).slice().reverse();
-    loaded = true;
+    if (r.channels) channels = r.channels;
   } catch {
-    /* leave empty; user can retry by reopening */
+    /* leave as-is */
   } finally {
     loading = false;
     emit();
@@ -47,7 +49,8 @@ function ensureStream() {
     try {
       const ev = JSON.parse(e.data) as { event: string; data: any };
       if (ev.event === "chat_message" && ev.data) {
-        // De-dupe (our own sent message may also arrive via broadcast).
+        // Only show messages for the channel we're viewing; de-dupe by id.
+        if (ev.data.channel && ev.data.channel !== channel) return;
         if (!messages.some((m) => m.id === ev.data.id)) {
           messages = [...messages, ev.data as ChatMessage];
           emit();
@@ -77,7 +80,7 @@ function ensureStream() {
 }
 
 export async function sendChat(content: string, replyTo?: number) {
-  const msg = await chatApi.send(content, replyTo);
+  const msg = await chatApi.send(content, channel, replyTo);
   // Optimistically append (broadcast de-dupes by id).
   if (msg && !messages.some((m) => m.id === msg.id)) {
     messages = [...messages, msg];
@@ -108,20 +111,27 @@ export async function reactChat(id: number, emoji: string) {
 
 export interface ChatState {
   messages: ChatMessage[];
+  channels: ChatChannel[];
+  channel: string;
   loading: boolean;
   connected: boolean;
 }
+
+let everLoaded = false;
 
 export function useChat(): ChatState {
   const [, force] = useState(0);
   useEffect(() => {
     const l = () => force((n) => n + 1);
     listeners.add(l);
-    loadHistory();
+    if (!everLoaded) {
+      everLoaded = true;
+      loadChannel();
+    }
     ensureStream();
     return () => {
       listeners.delete(l);
     };
   }, []);
-  return { messages, loading, connected };
+  return { messages, channels, channel, loading, connected };
 }
