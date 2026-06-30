@@ -42,6 +42,17 @@ func (s *logStore) SummaryToday(ctx context.Context) (store.LogSummary, error) {
 	return sum, err
 }
 
+// TotalOutTokens returns the all-time cumulative output tokens from successful
+// requests. Used to credit Kleos for usage (the cloud server idempotently
+// credits only the delta past its watermark).
+func (s *logStore) TotalOutTokens(ctx context.Context) (int64, error) {
+	var total int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(out_tokens), 0) FROM request_logs WHERE status = 'success'`,
+	).Scan(&total)
+	return total, err
+}
+
 func (s *logStore) Series(ctx context.Context, r store.SeriesRange) ([]store.SeriesPoint, error) {
 	// bucket = strftime format; where = time window predicate.
 	bucket := "%Y-%m-%d" // daily buckets by default

@@ -215,6 +215,7 @@ type LogStore interface {
 	Insert(ctx context.Context, l RequestLog) error
 	Recent(ctx context.Context, limit int) ([]RequestLog, error)
 	SummaryToday(ctx context.Context) (LogSummary, error)
+	TotalOutTokens(ctx context.Context) (int64, error)
 	Series(ctx context.Context, r SeriesRange) ([]SeriesPoint, error)
 	TopModels(ctx context.Context, limit int) ([]ModelStat, error)
 	Clear(ctx context.Context) error

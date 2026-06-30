@@ -7,6 +7,8 @@ package sync
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,20 +29,34 @@ const DefaultServerURL = "https://api-dev.enowxlabs.com"
 const (
 	keyServerURL = "sync_server_url"
 	keyToken     = "sync_token"
-	keyEnabled   = "sync_enabled"
-	keyCursor    = "sync_cursor" // last pull watermark (unix millis)
-	keyUser      = "sync_user"   // cached /me JSON (identity + plan)
+	keyEnabled   = "sync_enabled" // logged in (token present, not revoked)
+	keyAuto      = "sync_auto"    // user's global automatic-sync toggle
+	keyCursor    = "sync_cursor"  // last pull watermark (unix millis)
+	keyUser      = "sync_user"    // cached /me JSON (identity + plan)
+	keyDevice    = "sync_device"  // stable per-device id (for usage watermark)
 )
 
 // Manager owns the client-side sync state and the HTTP calls to enowxlabs.
 type Manager struct {
 	settings store.SettingsStore
 	music    store.MusicStore
+	logs     store.LogStore
 	http     *http.Client
 }
 
-func New(settings store.SettingsStore, music store.MusicStore) *Manager {
-	return &Manager{settings: settings, music: music, http: &http.Client{Timeout: 30 * time.Second}}
+func New(settings store.SettingsStore, music store.MusicStore, logs store.LogStore) *Manager {
+	return &Manager{settings: settings, music: music, logs: logs, http: &http.Client{Timeout: 30 * time.Second}}
+}
+
+// deviceID returns a stable id for this device, generating one on first use.
+// Used so the cloud usage-watermark advances per device, not globally.
+func (m *Manager) deviceID(ctx context.Context) string {
+	if id := m.get(ctx, keyDevice); id != "" {
+		return id
+	}
+	id := randHex(8)
+	_ = m.settings.Set(ctx, keyDevice, id)
+	return id
 }
 
 func (m *Manager) get(ctx context.Context, key string) string {
@@ -55,6 +71,21 @@ func (m *Manager) Configured(ctx context.Context) bool {
 
 func (m *Manager) Enabled(ctx context.Context) bool {
 	return m.get(ctx, keyEnabled) == "1" && m.Configured(ctx)
+}
+
+// AutoEnabled reports the user's global automatic-sync toggle. Defaults to on
+// (only an explicit "0" turns it off), and requires being logged in.
+func (m *Manager) AutoEnabled(ctx context.Context) bool {
+	return m.get(ctx, keyAuto) != "0" && m.Enabled(ctx)
+}
+
+// SetAuto flips the global automatic-sync toggle.
+func (m *Manager) SetAuto(ctx context.Context, on bool) error {
+	v := "1"
+	if !on {
+		v = "0"
+	}
+	return m.settings.Set(ctx, keyAuto, v)
 }
 
 // SetServer stores the cloud base URL (e.g. https://labs.enowxlabs.com).
@@ -238,6 +269,29 @@ func (m *Manager) Sync(ctx context.Context) (pushed, pulled int, err error) {
 		_ = m.settings.Set(ctx, keyCursor, fmt.Sprint(pull.Now))
 	}
 	return pushed, pulled, nil
+}
+
+// reportUsage tells the server this device's cumulative successful output-token
+// count, so the server can credit Kleos for the delta (idempotent). Best effort
+// — failures are non-fatal and just retried on the next cycle.
+func (m *Manager) reportUsage(ctx context.Context) {
+	if m.logs == nil || !m.Configured(ctx) {
+		return
+	}
+	total, err := m.logs.TotalOutTokens(ctx)
+	if err != nil {
+		return
+	}
+	_ = m.call(ctx, http.MethodPost, "/usage/report", map[string]any{
+		"out_tokens": total,
+		"device_id":  m.deviceID(ctx),
+	}, nil)
+}
+
+func randHex(n int) string {
+	b := make([]byte, n)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func (m *Manager) cursor(ctx context.Context) int64 {

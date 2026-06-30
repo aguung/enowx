@@ -56,9 +56,11 @@ func main() {
 
 	px := proxy.New(reg, pool.New(db.Accounts()), doer)
 	tun := tunnel.New(cfg.RuntimeDir, cfg.Port)
-	syncMgr := syncpkg.New(db.Settings(), db.Music())
-	// Maintain the live channel to the cloud server (no-op until logged in).
+	syncMgr := syncpkg.New(db.Settings(), db.Music(), db.Logs())
+	// Maintain the live channel (pull side) and the automatic push side. Both
+	// are no-ops until logged in; auto-push also obeys the global toggle.
 	go syncMgr.RunLive(context.Background(), nil)
+	go syncMgr.RunAuto(context.Background(), nil)
 
 	srv := server.New(cfg.Addr(), server.Deps{
 		Proxy:      px,
