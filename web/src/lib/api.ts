@@ -289,11 +289,16 @@ export interface SyncUser {
   roles: string[];
   plan: string;
   top_role?: TopRole | null;
+  wears_tag?: boolean;
+  guild_tag?: string;
+  kleos?: number;
+  entitlements?: string[];
 }
 
 export interface SyncStatus {
   configured: boolean;
   enabled: boolean;
+  auto: boolean;
   server_url: string;
   user: SyncUser | null;
 }
@@ -306,6 +311,7 @@ export const syncApi = {
     api.get<{ done: boolean; user: SyncUser | null }>(`/api/sync/login/poll?state=${encodeURIComponent(state)}`),
   logout: () => api.post<{ ok: boolean }>("/api/sync/logout"),
   now: () => api.post<{ pushed: number; pulled: number }>("/api/sync/now"),
+  setAuto: (on: boolean) => api.post<{ auto: boolean }>("/api/sync/auto", { on }),
 };
 
 export interface AuthStatus {

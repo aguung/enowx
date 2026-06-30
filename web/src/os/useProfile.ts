@@ -28,10 +28,13 @@ export interface Profile {
   loggedIn: boolean;
   user: SyncUser | null;
   plan: string; // "free" when not logged in
+  autoSync: boolean; // global automatic-sync toggle (only meaningful when logged in)
   refresh: () => Promise<void>;
   startLogin: () => Promise<{ authorize_url: string; state: string }>;
   pollLogin: (state: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  setAutoSync: (on: boolean) => Promise<void>;
+  has: (capability: string) => boolean; // server-computed entitlement check (lock UX)
 }
 
 export function useProfile(): Profile {
@@ -51,6 +54,7 @@ export function useProfile(): Profile {
     loggedIn,
     user: cache?.user ?? null,
     plan: cache?.user?.plan ?? "free",
+    autoSync: !!cache?.auto,
     refresh: refreshProfile,
     startLogin: () => syncApi.loginStart(),
     pollLogin: async (state: string) => {
@@ -62,6 +66,11 @@ export function useProfile(): Profile {
       await syncApi.logout();
       await refreshProfile();
     },
+    setAutoSync: async (on: boolean) => {
+      await syncApi.setAuto(on);
+      await refreshProfile();
+    },
+    has: (capability: string) => !!cache?.user?.entitlements?.includes(capability),
   };
 }
 

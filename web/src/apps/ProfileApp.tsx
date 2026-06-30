@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, LogOut, LogIn, RefreshCw, Check, ShieldCheck, Sparkles } from "lucide-react";
+import { Loader2, LogOut, LogIn, ShieldCheck, Sparkles, Coins, Settings as SettingsIcon } from "lucide-react";
 import { AppShell } from "./shell";
 import { Tooltip } from "../components/Tooltip";
 import { useProfile } from "../os/useProfile";
-import { syncApi, type SyncUser } from "../lib/api";
+import { type SyncUser } from "../lib/api";
 
 // ProfileApp is the account surface: sign in with Discord to unlock features
 // (sync runs automatically in the background once signed in). No server URL to
-// configure — the cloud endpoint is built into enowx.
+// configure — the cloud endpoint is built into enowx. Sync controls live in
+// Settings → Cloud Sync.
 export function ProfileApp() {
   const profile = useProfile();
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [synced, setSynced] = useState("");
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -54,20 +54,6 @@ export function ProfileApp() {
     }
   }
 
-  async function syncNow() {
-    setSynced("");
-    setBusy("Syncing…");
-    try {
-      const r = await syncApi.now();
-      setSynced(`Synced · ${r.pushed} up, ${r.pulled} down`);
-      setTimeout(() => setSynced(""), 4000);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "sync failed");
-    } finally {
-      setBusy("");
-    }
-  }
-
   if (profile.loading) {
     return (
       <AppShell title="Profile" subtitle="Your enowx account">
@@ -95,8 +81,9 @@ export function ProfileApp() {
             )}
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-white">{profile.user.username || "Signed in"}</div>
-              <div className="mt-1 flex items-center gap-1.5">
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <RoleBadge user={profile.user} />
+                {profile.user.wears_tag && <TagBadge tag={profile.user.guild_tag} />}
                 <span className="text-[11px] text-white/40">via Discord</span>
               </div>
             </div>
@@ -110,22 +97,33 @@ export function ProfileApp() {
             <p className="text-xs leading-relaxed text-white/55">
               Your playlists sync automatically across signed-in devices. More account-gated features will appear here.
             </p>
-            <div className="mt-3 flex items-center gap-2">
-              <Tooltip label="Sync your data now" place="bottom">
-                <button
-                  onClick={syncNow}
-                  disabled={!!busy}
-                  className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/15 disabled:opacity-50"
-                >
-                  {busy === "Syncing…" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Sync now
-                </button>
-              </Tooltip>
-              {synced && (
-                <span className="flex items-center gap-1 text-[11px] text-emerald-300">
-                  <Check className="h-3 w-3" /> {synced}
+            <Tooltip
+              label="Kleos — your reputation, earned by using enowx (more usage = more Kleos). Spend it on profile cosmetics & unlocks."
+              place="top"
+              maxWidth={240}
+              block
+            >
+              <div className="mt-3 flex w-full cursor-help items-center justify-between gap-2 rounded-lg border border-amber-400/15 bg-amber-400/[0.04] px-3 py-2">
+                <span className="flex items-center gap-1.5 text-[11px] font-medium leading-none text-amber-100/80">
+                  <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-500 shadow-sm shadow-amber-500/30">
+                    <Coins className="h-2.5 w-2.5 text-amber-950" />
+                  </span>
+                  Kleos
                 </span>
-              )}
+                <span className="font-mono text-xs font-semibold leading-none text-amber-200">
+                  {(profile.user.kleos ?? 0).toLocaleString()}
+                </span>
+              </div>
+            </Tooltip>
+            {!profile.user.wears_tag && (
+              <p className="mt-2 text-[11px] leading-relaxed text-white/40">
+                Wear the <span className="font-semibold text-white/60">[enow]</span> server tag on Discord to unlock
+                extra profile features.
+              </p>
+            )}
+            <div className="mt-3 flex items-center gap-1.5 text-[11px] text-white/40">
+              <SettingsIcon className="h-3 w-3" />
+              Manage sync in Settings → Cloud Sync.
             </div>
           </div>
 
@@ -163,6 +161,15 @@ export function ProfileApp() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+// TagBadge shows that the user is actively wearing the server's Discord tag.
+function TagBadge({ tag }: { tag?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-200 ring-1 ring-inset ring-indigo-400/20">
+      <ShieldCheck className="h-3 w-3" /> {tag ? `[${tag}]` : "Tag"}
+    </span>
   );
 }
 
