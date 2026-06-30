@@ -274,12 +274,21 @@ export const docsApi = {
   get: () => api.get<Docs>("/api/docs"),
 };
 
+export interface TopRole {
+  name: string;
+  icon_url: string;
+  color: number; // legacy single color (decimal)
+  primary: number; // gradient primary (decimal)
+  secondary: number | null; // gradient secondary (decimal)
+}
+
 export interface SyncUser {
   discord_id: string;
   username: string;
   avatar_url: string;
   roles: string[];
   plan: string;
+  top_role?: TopRole | null;
 }
 
 export interface SyncStatus {

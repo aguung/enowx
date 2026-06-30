@@ -3,7 +3,7 @@ import { Loader2, LogOut, LogIn, RefreshCw, Check, ShieldCheck, Sparkles } from 
 import { AppShell } from "./shell";
 import { Tooltip } from "../components/Tooltip";
 import { useProfile } from "../os/useProfile";
-import { syncApi } from "../lib/api";
+import { syncApi, type SyncUser } from "../lib/api";
 
 // ProfileApp is the account surface: sign in with Discord to unlock features
 // (sync runs automatically in the background once signed in). No server URL to
@@ -95,11 +95,9 @@ export function ProfileApp() {
             )}
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-white">{profile.user.username || "Signed in"}</div>
-              <div className="mt-0.5 flex items-center gap-1.5">
-                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-300">
-                  {profile.user.plan}
-                </span>
-                <span className="text-[11px] text-white/40">signed in with Discord</span>
+              <div className="mt-1 flex items-center gap-1.5">
+                <RoleBadge user={profile.user} />
+                <span className="text-[11px] text-white/40">via Discord</span>
               </div>
             </div>
           </div>
@@ -165,5 +163,40 @@ export function ProfileApp() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+// hex turns a Discord decimal color into #rrggbb.
+function hex(n: number): string {
+  return "#" + (n & 0xffffff).toString(16).padStart(6, "0");
+}
+
+// RoleBadge shows the user's top Discord role with its icon + gradient color,
+// falling back to the plan name when no role detail is available.
+function RoleBadge({ user }: { user: SyncUser }) {
+  const tr = user.top_role;
+  if (!tr || !tr.name) {
+    return (
+      <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-300">
+        {user.plan}
+      </span>
+    );
+  }
+  const c1 = hex(tr.primary || tr.color);
+  const c2 = tr.secondary ? hex(tr.secondary) : c1;
+  const gradient = `linear-gradient(90deg, ${c1}, ${c2})`;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ring-white/10"
+      style={{ background: `${c1}22` }}
+    >
+      {tr.icon_url && <img src={tr.icon_url} alt="" className="h-3.5 w-3.5" />}
+      <span
+        className="bg-clip-text text-transparent"
+        style={{ backgroundImage: gradient, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}
+      >
+        {tr.name}
+      </span>
+    </span>
   );
 }
