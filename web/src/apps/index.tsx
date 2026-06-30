@@ -1,4 +1,4 @@
-import { KeyRound, ScrollText, Boxes, Settings, BarChart3, FolderOpen, Flame, KeySquare, Music, Globe, Cloud } from "lucide-react";
+import { KeyRound, ScrollText, Boxes, Settings, BarChart3, FolderOpen, Flame, KeySquare, Music, Globe, UserCircle } from "lucide-react";
 import type { DesktopApp } from "../os/types";
 import { AccountsApp } from "./AccountsApp";
 import { RequestsApp } from "./RequestsApp";
@@ -10,7 +10,7 @@ import { WarmupLogsApp } from "./WarmupLogsApp";
 import { ApiKeysApp } from "./ApiKeysApp";
 import { MusicApp } from "./MusicApp";
 import { TunnelApp } from "./TunnelApp";
-import { SyncApp } from "./SyncApp";
+import { ProfileApp } from "./ProfileApp";
 
 // `home` is the default location: a dock side or the Apps drawer. The dock
 // starts minimal (core apps); everything else lives in the Apps drawer and the
@@ -27,6 +27,6 @@ export function buildApps(): DesktopApp[] {
     { id: "api-keys", label: "API Keys", icon: <KeySquare />, accent: "from-cyan-500 to-blue-600", home: "drawer", render: () => <ApiKeysApp /> },
     { id: "music", label: "Music", icon: <Music />, accent: "from-pink-500 to-rose-600", home: "drawer", render: () => <MusicApp /> },
     { id: "tunnel", label: "Tunnel", icon: <Globe />, accent: "from-blue-500 to-cyan-600", home: "drawer", render: () => <TunnelApp /> },
-    { id: "sync", label: "Sync", icon: <Cloud />, accent: "from-indigo-500 to-violet-600", home: "drawer", render: () => <SyncApp /> },
+    { id: "profile", label: "Profile", icon: <UserCircle />, accent: "from-indigo-500 to-violet-600", home: "drawer", render: () => <ProfileApp /> },
   ];
 }

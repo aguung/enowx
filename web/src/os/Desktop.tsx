@@ -69,7 +69,7 @@ export function Desktop() {
     k: "api-keys",
     m: "music",
     t: "tunnel",
-    c: "sync",
+    c: "profile",
   };
   const leaderActive = useShortcuts((k) => {
     const v: Record<string, CenterView> = { "1": "widget", "2": "terminal", "3": "apps", "4": "docs" };

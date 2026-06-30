@@ -87,7 +87,7 @@ var shortcutGroups = []shortcutGroup{
 			{Keys: "Ctrl/Alt + K", Desc: "API Keys"},
 			{Keys: "Ctrl/Alt + M", Desc: "Music"},
 			{Keys: "Ctrl/Alt + T", Desc: "Tunnel"},
-			{Keys: "Ctrl/Alt + C", Desc: "Sync"},
+			{Keys: "Ctrl/Alt + C", Desc: "Profile"},
 		},
 	},
 }

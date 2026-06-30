@@ -17,6 +17,11 @@ import (
 	"github.com/enowdev/enowx/store"
 )
 
+// DefaultServerURL is the built-in enowx cloud endpoint. Users don't configure
+// this; it's fixed (swap to the production URL when ready). An override can
+// still be stored via SetServer for development.
+const DefaultServerURL = "https://api-dev.enowxlabs.com"
+
 // settings keys (in the gateway's settings KV)
 const (
 	keyServerURL = "sync_server_url"
@@ -42,9 +47,9 @@ func (m *Manager) get(ctx context.Context, key string) string {
 	return v
 }
 
-// Configured reports whether a server URL + token are set.
+// Configured reports whether a token is set (the server URL is built-in).
 func (m *Manager) Configured(ctx context.Context) bool {
-	return m.get(ctx, keyServerURL) != "" && m.get(ctx, keyToken) != ""
+	return m.get(ctx, keyToken) != ""
 }
 
 func (m *Manager) Enabled(ctx context.Context) bool {
@@ -73,8 +78,14 @@ func (m *Manager) Logout(ctx context.Context) error {
 	return m.settings.Set(ctx, keyEnabled, "0")
 }
 
-func (m *Manager) ServerURL(ctx context.Context) string { return m.get(ctx, keyServerURL) }
-func (m *Manager) UserJSON(ctx context.Context) string  { return m.get(ctx, keyUser) }
+// ServerURL returns the configured override or the built-in default.
+func (m *Manager) ServerURL(ctx context.Context) string {
+	if v := m.get(ctx, keyServerURL); v != "" {
+		return v
+	}
+	return DefaultServerURL
+}
+func (m *Manager) UserJSON(ctx context.Context) string { return m.get(ctx, keyUser) }
 
 // --- Discord login (device-code style against enowxlabs) ---
 
