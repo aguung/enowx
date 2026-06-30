@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { Lock, LogOut, Loader2, Check, RefreshCw, Cloud } from "lucide-react";
+import { Lock, LogOut, Loader2, Check, RefreshCw, Cloud, ShieldAlert } from "lucide-react";
 import { AppShell } from "./shell";
 import { Tooltip } from "../components/Tooltip";
 import { useDialog } from "../os/dialog";
-import { authApi, settingsApi, syncApi, type AuthStatus, type Settings } from "../lib/api";
+import { authApi, settingsApi, syncApi, adminApi, type AuthStatus, type Settings, type FlaggedLink } from "../lib/api";
 import { useProfile } from "../os/useProfile";
 
 export function SettingsApp() {
+  const profile = useProfile();
   const [info, setInfo] = useState<Settings | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
 
@@ -29,6 +30,12 @@ export function SettingsApp() {
         <CloudSyncCard />
       </Section>
 
+      {profile.has("chat.moderate") && (
+        <Section title="Moderation · duplicate accounts">
+          <FlagsCard />
+        </Section>
+      )}
+
       <Section title="Dashboard password">
         <PasswordCard auth={auth} reload={loadAuth} />
       </Section>
@@ -41,6 +48,68 @@ export function SettingsApp() {
         </div>
       </Section>
     </AppShell>
+  );
+}
+
+// FlagsCard is the moderator-only review queue of suspected duplicate accounts.
+function FlagsCard() {
+  const [links, setLinks] = useState<FlaggedLink[] | null>(null);
+  const [busy, setBusy] = useState(0);
+
+  async function load() {
+    try {
+      const r = await adminApi.flags();
+      setLinks(r.links ?? []);
+    } catch {
+      setLinks([]);
+    }
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function review(id: number) {
+    setBusy(id);
+    try {
+      await adminApi.review(id);
+      setLinks((l) => (l ? l.filter((x) => x.id !== id) : l));
+    } finally {
+      setBusy(0);
+    }
+  }
+
+  if (!links) return <div className="h-10 animate-pulse rounded-lg bg-white/5" />;
+  if (links.length === 0) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3.5 text-[11px] text-white/50">
+        No flagged accounts. Suspected duplicates (shared email or IP) show up here for review.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {links.map((l) => (
+        <div key={l.id} className="flex items-center gap-3 rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-3">
+          <ShieldAlert className="h-4 w-4 shrink-0 text-amber-300" />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-xs text-white">
+              <span className="font-semibold">{l.name_a}</span> <span className="text-white/40">↔</span>{" "}
+              <span className="font-semibold">{l.name_b}</span>
+            </div>
+            <div className="mt-0.5 text-[10px] text-white/40">
+              score {l.score} · {l.reasons.replace(/_/g, " ")}
+            </div>
+          </div>
+          <button
+            onClick={() => review(l.id)}
+            disabled={busy === l.id}
+            className="rounded-lg border border-white/15 px-2.5 py-1 text-[11px] text-white/70 hover:bg-white/5 disabled:opacity-50"
+          >
+            {busy === l.id ? "…" : "Dismiss"}
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
 

@@ -236,6 +236,24 @@ func (m *Manager) PublicProfile(ctx context.Context, id string) (string, error) 
 	return string(raw), nil
 }
 
+// AdminFlags fetches the moderator duplicate-account review queue.
+func (m *Manager) AdminFlags(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/flags", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// AdminReviewFlag dismisses a flagged link.
+func (m *Manager) AdminReviewFlag(ctx context.Context, id string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPost, "/admin/flags/"+id+"/review", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // Shop fetches the cosmetics catalog + the user's owned/equipped/balance.
 func (m *Manager) Shop(ctx context.Context) (string, error) {
 	var raw json.RawMessage

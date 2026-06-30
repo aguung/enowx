@@ -114,6 +114,35 @@ func (h *Sync) PublicProfile(w http.ResponseWriter, r *http.Request) {
 	writeData(w, profile)
 }
 
+// AdminFlags proxies the moderator duplicate-account review queue.
+func (h *Sync) AdminFlags(w http.ResponseWriter, r *http.Request) {
+	raw, err := h.mgr.AdminFlags(r.Context())
+	if err != nil {
+		writeAPIErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	var out any
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &out)
+	}
+	writeData(w, out)
+}
+
+// AdminReviewFlag proxies dismissing a flagged link.
+func (h *Sync) AdminReviewFlag(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	raw, err := h.mgr.AdminReviewFlag(r.Context(), id)
+	if err != nil {
+		writeAPIErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	var out any
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &out)
+	}
+	writeData(w, out)
+}
+
 // Shop proxies the cosmetics catalog + owned/equipped/balance.
 func (h *Sync) Shop(w http.ResponseWriter, r *http.Request) {
 	raw, err := h.mgr.Shop(r.Context())

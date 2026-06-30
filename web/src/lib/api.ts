@@ -351,6 +351,23 @@ export const shopApi = {
   equip: (kind: string, item_id: string) => api.post<{ equipped: Equipped }>("/api/shop/equip", { kind, item_id }),
 };
 
+// FlaggedLink is a suspected duplicate-account pair (moderator review queue).
+export interface FlaggedLink {
+  id: number;
+  user_a: string;
+  user_b: string;
+  name_a: string;
+  name_b: string;
+  reasons: string;
+  score: number;
+  created_at: string;
+}
+
+export const adminApi = {
+  flags: () => api.get<{ links: FlaggedLink[] }>("/api/admin/flags"),
+  review: (id: number) => api.post<{ reviewed: number }>(`/api/admin/flags/${id}/review`),
+};
+
 // ChatMessage carries the message + a snapshot of the author's identity.
 export interface ChatMessage {
   id: number;
