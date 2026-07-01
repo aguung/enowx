@@ -7,6 +7,32 @@
   --radius-window: 14px;
 }
 
+/* Role-colored chat name. Solid by default; on hover the gradient flows and the
+   text glows (no underline). Colors come from inline --c1/--c2 per message. */
+.role-name {
+  color: var(--c1, rgba(255, 255, 255, 0.9));
+  transition: filter 0.2s ease;
+}
+.role-name.role-gradient {
+  background-image: linear-gradient(90deg, var(--c1), var(--c2), var(--c1));
+  background-size: 200% auto;
+  background-position: 0% center;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.role-name-btn:hover .role-name {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--c1) 55%, transparent));
+}
+.role-name-btn:hover .role-name.role-gradient {
+  animation: role-flow 1.6s linear infinite;
+}
+@keyframes role-flow {
+  to {
+    background-position: -200% center;
+  }
+}
+
 html,
 body,
 #root {

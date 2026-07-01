@@ -4,11 +4,12 @@ import { AppShell } from "./shell";
 import { Popover } from "../components/Popover";
 import { ProfileCard } from "../components/ProfileCard";
 import { EmojiPicker } from "../components/EmojiPicker";
+import { Tooltip } from "../components/Tooltip";
 import { useProfile } from "../os/useProfile";
 import { useChat, sendChat, editChat, deleteChat, reactChat, loadChannel } from "../os/chatBus";
 import { useDialog } from "../os/dialog";
 import { openProfile } from "../os/profileViewer";
-import { profileApi, modApi, type ChatMessage, type PublicProfile } from "../lib/api";
+import { profileApi, modApi, type ChatMessage, type PublicProfile, type TopRole } from "../lib/api";
 
 interface ReplyTarget {
   id: number;
@@ -255,8 +256,13 @@ function MessageRow({
           </div>
         )}
         <div className="flex items-baseline gap-2">
-          <button onClick={onOpenUser} className="text-xs font-semibold text-white hover:underline">
-            {name}
+          <button onClick={onOpenUser} className="role-name-btn flex items-center gap-1 text-xs font-semibold" style={roleVars(m.top_role)}>
+            {m.top_role?.icon_url && (
+              <Tooltip label={m.top_role.name} place="top">
+                <img src={m.top_role.icon_url} alt="" className="h-3.5 w-3.5 self-center" />
+              </Tooltip>
+            )}
+            <span className={`role-name${roleHasGradient(m.top_role) ? " role-gradient" : ""}`}>{name}</span>
           </button>
           <span className="text-[10px] text-white/30">{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
         </div>
@@ -301,6 +307,26 @@ function MessageRow({
       </div>
     </div>
   );
+}
+
+// hex turns a Discord decimal color into #rrggbb.
+function hexColor(n: number): string {
+  return "#" + (n & 0xffffff).toString(16).padStart(6, "0");
+}
+
+// roleHasGradient reports whether the role has a distinct secondary color.
+function roleHasGradient(role?: TopRole | null): boolean {
+  if (!role || !role.name || !role.secondary) return false;
+  return hexColor(role.secondary) !== hexColor(role.primary || role.color);
+}
+
+// roleVars exposes the role colors as CSS vars (--c1/--c2) the .role-name styles
+// read, so the gradient can flow + glow on hover via CSS.
+function roleVars(role?: TopRole | null): React.CSSProperties {
+  if (!role || !role.name) return {};
+  const c1 = hexColor(role.primary || role.color);
+  const c2 = role.secondary ? hexColor(role.secondary) : c1;
+  return { ["--c1" as string]: c1, ["--c2" as string]: c2 };
 }
 
 function ActBtn({ label, onClick, danger, children }: { label: string; onClick: () => void; danger?: boolean; children: React.ReactNode }) {
