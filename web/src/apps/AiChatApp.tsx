@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Send, Trash2, Loader2, Bot, User, ChevronDown, FolderOpen, Shield, Check, X, Terminal, FileEdit, Wrench, Folder, CornerLeftUp, Settings2 } from "lucide-react";
+import { Send, Trash2, Loader2, Bot, User, ChevronDown, ChevronRight, FolderOpen, Shield, Check, X, Terminal, FileEdit, FileText, FilePlus, Globe, Wrench, Folder, CornerLeftUp, Settings2 } from "lucide-react";
 import { accountsApi, keysApi, filesApi, type ProviderModel, type DirListing } from "../lib/api";
 import { Markdown } from "../components/Markdown";
-import { TOOL_SCHEMAS, runTool, needsApproval, type PermLevel, type ToolName, type ToolResult } from "./agent/tools";
+import { TOOL_SCHEMAS, TOOL_META, lineDiff, runTool, needsApproval, type PermLevel, type ToolName, type ToolResult } from "./agent/tools";
 
 const DEFAULT_SYSTEM = `You are a helpful coding assistant running inside the enowx dashboard.
 Reply in the same language the user writes in. Be concise and precise.
@@ -325,52 +325,86 @@ function MessageRow({ msg }: { msg: ChatMsg }) {
   );
 }
 
+const TOOL_ICONS: Record<string, typeof Terminal> = {
+  read_file: FileText, list_dir: Folder, write_file: FilePlus, edit_file: FileEdit, run_command: Terminal, http_request: Globe,
+};
+
+// ToolCard is a compact, robloxkit-style tool row: one line with an
+// icon/chevron + filename (parent path beneath) + a right-side +N/-N (for
+// edits) or status; expands to an LCS line diff or the raw output.
 function ToolCard({ call, result }: { call: ToolCall; result?: ToolResult }) {
-  const [open, setOpen] = useState(false);
-  const icon = call.name === "run_command" ? <Terminal className="h-3.5 w-3.5" /> : call.name.includes("file") ? <FileEdit className="h-3.5 w-3.5" /> : <Wrench className="h-3.5 w-3.5" />;
+  const [userToggled, setUserToggled] = useState<boolean | null>(null);
+  let args: Record<string, unknown> = {};
+  try { args = JSON.parse(call.args || "{}"); } catch { /* streaming/partial */ }
+
   const running = !result;
-  const diff = result?.meta?.diff as { old: string; new: string } | undefined;
+  const isEdit = call.name === "write_file" || call.name === "edit_file";
+  const Icon = TOOL_ICONS[call.name] ?? Wrench;
+
+  // Compute the diff for write/edit from the result meta (old/new).
+  const diffMeta = result?.meta?.diff as { old: string; new: string } | undefined;
+  const diff = useMemo(() => {
+    if (call.name === "write_file" && diffMeta) return lineDiff(diffMeta.old, diffMeta.new);
+    if (call.name === "edit_file") return lineDiff(String(args.old ?? ""), String(args.new ?? ""));
+    return null;
+  }, [call.name, diffMeta, args.old, args.new]);
+
+  // Label: filename + parent path (for file tools); else the target arg.
+  const path = String(args.path ?? "");
+  const fileName = path ? path.split("/").pop() : (args.command ? String(args.command) : args.url ? String(args.url) : call.name);
+  const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+
+  const hasDiff = isEdit && diff && diff.rows.length > 0;
+  const hasOutput = !isEdit && result;
+  const canExpand = !!(hasDiff || hasOutput);
+  const open = userToggled !== null ? userToggled : false;
+
   return (
-    <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20 text-xs">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-white/[0.03]">
-        <span className="text-white/50">{icon}</span>
-        <span className="font-mono text-white/80">{call.name}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-white/35">{call.args}</span>
-        {running ? <Loader2 className="h-3.5 w-3.5 animate-spin text-white/40" /> : result.ok ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <X className="h-3.5 w-3.5 text-red-400" />}
-      </button>
-      {open && (
-        <div className="border-t border-white/5 p-2">
-          {diff ? (
-            <DiffView old={diff.old} next={diff.new} />
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.02] text-xs">
+      <button onClick={() => canExpand && setUserToggled(!open)} className={`flex w-full items-start gap-2 px-2.5 py-1.5 text-left ${canExpand ? "cursor-pointer hover:bg-white/[0.04]" : "cursor-default"}`}>
+        <span className="mt-[1px] shrink-0 text-white/45">
+          {canExpand ? (open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />) : <Icon className="h-3.5 w-3.5" />}
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className={`truncate font-mono ${isEdit ? "text-indigo-300" : "text-white/85"}`}>
+            <span className="text-[9px] uppercase tracking-wide text-white/35">{TOOL_META[call.name]?.label ?? call.name}</span>{" "}
+            {fileName}
+          </span>
+          {parent && <span className="truncate font-mono text-[9px] text-white/35">{parent}/</span>}
+        </span>
+        <span className="mt-[1px] flex shrink-0 items-center gap-1.5 text-[10px] font-semibold">
+          {running ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
+          ) : isEdit && diff ? (
+            <>
+              {diff.added > 0 && <span className="text-emerald-400">+{diff.added}</span>}
+              {diff.removed > 0 && <span className="text-red-400">-{diff.removed}</span>}
+              {diff.added === 0 && diff.removed === 0 && <Check className="h-3.5 w-3.5 text-emerald-400/70" />}
+            </>
+          ) : result?.ok ? (
+            <Check className="h-3.5 w-3.5 text-emerald-400/70" />
           ) : (
-            <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] text-white/70">{result?.output ?? "running…"}</pre>
+            <span className="text-red-400">error</span>
+          )}
+        </span>
+      </button>
+      {open && canExpand && (
+        <div className="border-t border-white/10 bg-black/25">
+          {hasDiff ? (
+            <div className="max-h-64 overflow-auto py-1 font-mono text-[11px] leading-[1.45]">
+              {diff!.rows.slice(0, 400).map((r, ri) => (
+                <div key={ri} className={`flex gap-2 px-2.5 ${r.type === "add" ? "bg-emerald-500/10 text-emerald-200/90" : r.type === "del" ? "bg-red-500/10 text-red-300/80" : "text-white/60"}`}>
+                  <span className={`select-none ${r.type === "add" ? "text-emerald-400" : r.type === "del" ? "text-red-400" : "text-transparent"}`}>{r.type === "add" ? "+" : r.type === "del" ? "-" : " "}</span>
+                  <span className="whitespace-pre">{r.text || " "}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words px-2.5 py-1.5 font-mono text-[10px] text-white/70">{result?.output ?? ""}</pre>
           )}
         </div>
       )}
     </div>
-  );
-}
-
-// DiffView shows a minimal line-level added/removed diff.
-function DiffView({ old, next }: { old: string; next: string }) {
-  const a = old.split("\n"), b = next.split("\n");
-  const max = Math.max(a.length, b.length);
-  const rows: { sign: string; text: string }[] = [];
-  for (let i = 0; i < max; i++) {
-    if (a[i] === b[i]) rows.push({ sign: " ", text: a[i] ?? "" });
-    else {
-      if (i < a.length && !b.includes(a[i])) rows.push({ sign: "-", text: a[i] });
-      if (i < b.length) rows.push({ sign: "+", text: b[i] });
-    }
-  }
-  return (
-    <pre className="max-h-72 overflow-auto font-mono text-[10px] leading-relaxed">
-      {rows.slice(0, 200).map((r, i) => (
-        <div key={i} className={r.sign === "+" ? "bg-emerald-500/10 text-emerald-300" : r.sign === "-" ? "bg-red-500/10 text-red-300" : "text-white/50"}>
-          {r.sign} {r.text}
-        </div>
-      ))}
-    </pre>
   );
 }
 

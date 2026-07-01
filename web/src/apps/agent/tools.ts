@@ -90,6 +90,45 @@ export const TOOL_SCHEMAS = [
 
 export type ToolName = "read_file" | "list_dir" | "write_file" | "edit_file" | "run_command" | "http_request";
 
+// Per-tool display metadata (verb label + which lucide icon name to use).
+export const TOOL_META: Record<string, { label: string; icon: string }> = {
+  read_file: { label: "read", icon: "file" },
+  list_dir: { label: "list", icon: "folder" },
+  write_file: { label: "create", icon: "edit" },
+  edit_file: { label: "edit", icon: "edit" },
+  run_command: { label: "run", icon: "terminal" },
+  http_request: { label: "http", icon: "globe" },
+};
+
+export interface DiffRow {
+  type: "ctx" | "add" | "del";
+  text: string;
+}
+
+// lineDiff computes an LCS line diff between two strings (robloxkit style).
+export function lineDiff(oldText: string, newText: string): { rows: DiffRow[]; added: number; removed: number } {
+  const a = (oldText || "").replace(/\n$/, "").split("\n");
+  const b = (newText || "").replace(/\n$/, "").split("\n");
+  if (!oldText) return { rows: b.map((text) => ({ type: "add", text })), added: b.length, removed: 0 };
+  const n = a.length, m = b.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const rows: DiffRow[] = [];
+  let i = 0, j = 0, added = 0, removed = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { rows.push({ type: "ctx", text: a[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { rows.push({ type: "del", text: a[i] }); i++; removed++; }
+    else { rows.push({ type: "add", text: b[j] }); j++; added++; }
+  }
+  while (i < n) { rows.push({ type: "del", text: a[i] }); i++; removed++; }
+  while (j < m) { rows.push({ type: "add", text: b[j] }); j++; added++; }
+  return { rows, added, removed };
+}
+
 // Which tools mutate/side-effect (need approval at the "Sedang" level).
 export const WRITE_TOOLS = new Set<ToolName>(["write_file", "edit_file", "run_command", "http_request"]);
 
