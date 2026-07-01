@@ -79,18 +79,23 @@ function renderLines(text: string): ReactNode[] {
 }
 
 // inlineRe matches the inline tokens (order matters: longer markers first).
-// The @mention pattern mirrors the server's mention regex.
-const inlineRe =
-  /(\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*]+\*|_[^_]+_|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)]+\)|https?:\/\/[^\s]+|@[A-Za-z0-9_.]{2,32})/g;
+// The inline pattern (@mention mirrors the server's mention regex). Source only —
+// a FRESH RegExp is created per call below, because renderInline recurses and a
+// shared global regex's lastIndex would be clobbered by the inner call, which
+// could restart the outer loop and hang the tab (OOM).
+const inlineSrc =
+  "(\\*\\*[^*]+\\*\\*|__[^_]+__|~~[^~]+~~|\\*[^*]+\\*|_[^_]+_|`[^`]+`|\\[[^\\]]+\\]\\(https?:\\/\\/[^)]+\\)|https?:\\/\\/[^\\s]+|@[A-Za-z0-9_.]{2,32})";
 
 // renderInline parses bold/italic/underline/strike/code/links within a line.
 function renderInline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
-  inlineRe.lastIndex = 0;
+  const inlineRe = new RegExp(inlineSrc, "g"); // per-call: recursion-safe
   let k = 0;
   while ((m = inlineRe.exec(text)) !== null) {
+    // Guard against a zero-width match ever stalling the loop.
+    if (m.index === inlineRe.lastIndex) { inlineRe.lastIndex++; continue; }
     if (m.index > last) nodes.push(text.slice(last, m.index));
     const tok = m[0];
     const key = `i-${k++}`;
