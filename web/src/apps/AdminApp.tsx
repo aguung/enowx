@@ -284,6 +284,7 @@ function ModelsTab() {
       fields: [
         { name: "model_id", label: "Model ID", placeholder: "gemini-3.1-pro" },
         { name: "name", label: "Display name", placeholder: "Gemini 3.1 Pro" },
+        { name: "type", label: "Type (chat or image)", placeholder: "chat" },
         { name: "owned_by", label: "Owned by", placeholder: "google" },
         { name: "max_input", label: "Max input tokens", placeholder: "200000" },
         { name: "max_output", label: "Max output tokens", placeholder: "64000" },
@@ -292,7 +293,8 @@ function ModelsTab() {
     });
     if (!res || !res.model_id?.trim()) return;
     await adminApi.upsertModel({
-      provider, model_id: res.model_id.trim(), name: (res.name || res.model_id).trim(), type: "chat",
+      provider, model_id: res.model_id.trim(), name: (res.name || res.model_id).trim(),
+      type: res.type?.trim() === "image" ? "image" : "chat",
       owned_by: (res.owned_by || "").trim(), enabled: true, sort_order: (models?.length ?? 0) * 10 + 10,
       max_input: parseInt(res.max_input || "0", 10) || 0, max_output: parseInt(res.max_output || "0", 10) || 0,
     });
@@ -304,6 +306,7 @@ function ModelsTab() {
       title: "Edit model",
       fields: [
         { name: "name", label: "Display name", defaultValue: m.name },
+        { name: "type", label: "Type (chat or image)", defaultValue: m.type || "chat" },
         { name: "owned_by", label: "Owned by", defaultValue: m.owned_by || "" },
         { name: "max_input", label: "Max input tokens", defaultValue: String(m.max_input || 0) },
         { name: "max_output", label: "Max output tokens", defaultValue: String(m.max_output || 0) },
@@ -312,7 +315,8 @@ function ModelsTab() {
     });
     if (!res) return;
     await adminApi.updateModel(m.id, {
-      ...m, name: (res.name || m.model_id).trim(), owned_by: (res.owned_by || "").trim(),
+      ...m, name: (res.name || m.model_id).trim(), type: res.type?.trim() === "image" ? "image" : "chat",
+      owned_by: (res.owned_by || "").trim(),
       max_input: parseInt(res.max_input || "0", 10) || 0, max_output: parseInt(res.max_output || "0", 10) || 0,
     });
     load();
@@ -344,7 +348,7 @@ function ModelsTab() {
         return (
           <div key={m.id ?? m.model_id} className={`flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-1.5 ${m.enabled ? "" : "opacity-50"}`}>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm text-white">{m.name}</div>
+              <div className="flex items-center gap-1.5"><span className="truncate text-sm text-white">{m.name}</span>{m.type === "image" && <span className="rounded bg-fuchsia-500/20 px-1 text-[9px] text-fuchsia-300">IMG</span>}</div>
               <div className="flex flex-wrap items-center gap-x-1.5 text-[10px] text-white/35">
                 <span className="font-mono">{m.model_id}</span>
                 {m.owned_by && <span>· {m.owned_by}</span>}

@@ -250,10 +250,12 @@ func (m *Manager) UserByName(ctx context.Context, name string) (string, error) {
 // CatalogModel is a DB-catalog model entry from the cloud (for non-fetchable
 // providers).
 type CatalogModel struct {
-	ModelID string `json:"model_id"`
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	OwnedBy string `json:"owned_by"`
+	ModelID   string `json:"model_id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	OwnedBy   string `json:"owned_by"`
+	MaxInput  int    `json:"max_input"`
+	MaxOutput int    `json:"max_output"`
 }
 
 // rawOrNil returns body as a request payload, or nil if empty (so an empty body

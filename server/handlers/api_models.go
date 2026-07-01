@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/enowdev/enowx/core/provider"
+	"github.com/enowdev/enowx/core/proxy"
 	"github.com/enowdev/enowx/core/sync"
 	"github.com/enowdev/enowx/store"
 )
@@ -42,19 +43,48 @@ func (h *Models) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	prefix := proxy.ProviderPrefix(acc.Provider)
+
 	// Fetchable provider → live from upstream using this account's creds.
 	if fetcher, ok := prov.(provider.ModelFetcher); ok {
 		models, err := fetcher.Models(provider.Account{ID: acc.ID, Secret: acc.Secret, Creds: acc.Creds})
 		if err == nil {
-			writeData(w, map[string]any{"provider": acc.Provider, "source": "upstream", "models": models})
+			out := make([]modelDTO, 0, len(models))
+			for _, m := range models {
+				out = append(out, modelDTO{ID: prefixed(prefix, m.ID), ModelID: prefixed(prefix, m.ID), Name: m.Name, Type: m.Type, OwnedBy: m.OwnedBy})
+			}
+			writeData(w, map[string]any{"provider": acc.Provider, "source": "upstream", "models": out})
 			return
 		}
 		// If the live fetch fails, fall through to the DB catalog as a backup.
 	}
 
 	// Non-fetchable (or fetch failed) → cloud DB catalog.
-	models := h.mgr.ProviderModels(r.Context(), acc.Provider)
-	writeData(w, map[string]any{"provider": acc.Provider, "source": "catalog", "models": models})
+	cat := h.mgr.ProviderModels(r.Context(), acc.Provider)
+	out := make([]modelDTO, 0, len(cat))
+	for _, m := range cat {
+		out = append(out, modelDTO{ID: prefixed(prefix, m.ModelID), ModelID: prefixed(prefix, m.ModelID), Name: m.Name, Type: m.Type, OwnedBy: m.OwnedBy, MaxInput: m.MaxInput, MaxOutput: m.MaxOutput})
+	}
+	writeData(w, map[string]any{"provider": acc.Provider, "source": "catalog", "models": out})
+}
+
+// modelDTO is the per-account model list item (model_id carries the provider
+// prefix, e.g. "kr/claude-sonnet-4.5").
+type modelDTO struct {
+	ID        string `json:"id"`
+	ModelID   string `json:"model_id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	OwnedBy   string `json:"owned_by,omitempty"`
+	MaxInput  int    `json:"max_input,omitempty"`
+	MaxOutput int    `json:"max_output,omitempty"`
+}
+
+func prefixed(prefix, id string) string {
+	if prefix == "" {
+		return id
+	}
+	return prefix + "/" + id
 }
 
 func (h *Models) account(r *http.Request, id int64) (store.Account, error) {

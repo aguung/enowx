@@ -42,15 +42,20 @@ func (h *V1) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid request")
 		return
 	}
-	// Resolve an aliased model to its real id (rewriting the raw body too), so
-	// the request routes + reaches upstream as the real model.
+	// Resolve an aliased model to its real id, then strip any provider prefix
+	// (kr/, cb/) so upstream sees the bare model id. The raw body is rewritten to
+	// match; routing still uses the prefixed/aliased id first.
+	orig := req.Model
 	if h.resolver != nil {
-		if real := h.resolver.Resolve(r.Context(), req.Model); real != req.Model {
-			req.Raw = proxy.RewriteBody(req.Raw, req.Model, real)
-			req.Model = real
-		}
+		req.Model = h.resolver.Resolve(r.Context(), req.Model)
 	}
 	providerName := h.route(req.Model)
+	if _, bare := proxy.SplitModel(req.Model); bare != req.Model {
+		req.Model = bare
+	}
+	if req.Model != orig {
+		req.Raw = proxy.RewriteBody(req.Raw, orig, req.Model)
+	}
 	stream, err := h.proxy.Forward(r.Context(), providerName, req)
 	if err != nil {
 		h.log(providerName, req.Model, "error", start, model.Usage{})

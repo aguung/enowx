@@ -42,13 +42,17 @@ func (h *Anthropic) Messages(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid request")
 		return
 	}
+	orig := req.Model
 	if h.resolver != nil {
-		if real := h.resolver.Resolve(r.Context(), req.Model); real != req.Model {
-			req.Raw = proxy.RewriteBody(req.Raw, req.Model, real)
-			req.Model = real
-		}
+		req.Model = h.resolver.Resolve(r.Context(), req.Model)
 	}
 	providerName := h.route(req.Model)
+	if _, bare := proxy.SplitModel(req.Model); bare != req.Model {
+		req.Model = bare
+	}
+	if req.Model != orig {
+		req.Raw = proxy.RewriteBody(req.Raw, orig, req.Model)
+	}
 	stream, err := h.proxy.Forward(r.Context(), providerName, req)
 	if err != nil {
 		h.log(providerName, req.Model, "error", start, model.Usage{})
