@@ -71,7 +71,7 @@ func seedApiTest(db *sql.DB) {
   ]
 }`
 	anthBody := `{
-  "model": "cb/claude-sonnet-4.5",
+  "model": "cb/gemini-3.1-pro",
   "max_tokens": 64,
   "stream": true,
   "system": "You are a helpful assistant.",

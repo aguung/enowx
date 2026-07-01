@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Send, Plus, Trash2, Loader2, Save, FolderPlus, ChevronRight, ChevronDown, History, Globe, X } from "lucide-react";
+import { Send, Plus, Trash2, Loader2, Save, FolderPlus, ChevronRight, ChevronDown, History, Globe, X, Pencil } from "lucide-react";
 import {
   apitestApi,
   keysApi,
@@ -9,6 +9,7 @@ import {
   type ApiHistoryItem,
   type KV,
 } from "../lib/api";
+import { useDialog } from "../os/dialog";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 const METHODS: Method[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -70,6 +71,7 @@ export function ApiTestApp() {
   const [history, setHistory] = useState<ApiHistoryItem[]>([]);
   const [apiKey, setApiKey] = useState("");
 
+  const dialog = useDialog();
   const [draft, setDraft] = useState<Draft>(blankDraft);
   const [reqTab, setReqTab] = useState<"params" | "auth" | "headers" | "body">("body");
   const [sidebarTab, setSidebarTab] = useState<"collections" | "history">("collections");
@@ -129,6 +131,22 @@ export function ApiTestApp() {
       auth: (() => { try { return JSON.parse(r.auth || "{}"); } catch { return { type: "none" }; } })(),
     });
     setReqTab(r.body_type && r.body_type !== "none" ? "body" : "params");
+  }
+
+  // Create a fresh blank request in a collection and load it for editing.
+  async function newRequest(cid: number) {
+    const { id } = await apitestApi.saveRequest({ collection_id: cid, name: "New request", method: "GET", url: "", body_type: "none" });
+    await reload();
+    setDraft({ ...blankDraft(), id, collection_id: cid, name: "New request" });
+    setOpenCols((p) => ({ ...p, [cid]: true }));
+  }
+
+  async function renameCollection(c: ApiCollection) {
+    const name = await dialog.prompt({ title: "Rename collection", defaultValue: c.name });
+    if (name && name.trim() && name.trim() !== c.name) {
+      await apitestApi.renameCollection(c.id, name.trim());
+      reload();
+    }
   }
 
   // Build the final URL with query params appended + env interpolation.
@@ -268,8 +286,9 @@ export function ApiTestApp() {
                     <button onClick={() => setOpenCols((p) => ({ ...p, [c.id]: !p[c.id] }))} className="text-white/40">
                       {openCols[c.id] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
                     </button>
-                    <span className="flex-1 truncate text-xs text-white/80">{c.name}</span>
-                    <button onClick={() => saveRequest(c.id)} title="Save current here" className="text-white/30 opacity-0 hover:text-white group-hover:opacity-100"><Save className="h-3 w-3" /></button>
+                    <button onClick={() => setOpenCols((p) => ({ ...p, [c.id]: !p[c.id] }))} className="flex-1 truncate text-left text-xs text-white/80">{c.name}</button>
+                    <button onClick={() => newRequest(c.id)} title="New request" className="text-white/30 opacity-0 hover:text-white group-hover:opacity-100"><Plus className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => renameCollection(c)} title="Rename collection" className="text-white/30 opacity-0 hover:text-white group-hover:opacity-100"><Pencil className="h-3 w-3" /></button>
                     <button onClick={() => apitestApi.deleteCollection(c.id).then(reload)} title="Delete collection" className="text-white/30 opacity-0 hover:text-red-400 group-hover:opacity-100"><Trash2 className="h-3 w-3" /></button>
                   </div>
                   {openCols[c.id] &&
