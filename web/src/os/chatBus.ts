@@ -6,7 +6,7 @@ import { chatApi, type ChatMessage, type Reaction, type ChatChannel } from "../l
 // (/api/chat/stream) open so new messages arrive in realtime.
 let messages: ChatMessage[] = [];
 let channels: ChatChannel[] = [];
-let channel = "general";
+let channel = "indonesia";
 let loading = false;
 let es: EventSource | null = null;
 let connected = false;
