@@ -300,6 +300,7 @@ export interface SyncUser {
   primary_color?: string;
   pronouns?: string;
   equipped?: Equipped;
+  banner_url?: string;
   links?: ProfileLink[];
   created_at?: string;
 }
@@ -322,7 +323,18 @@ export const profileApi = {
   update: (e: ProfileEdit) => api.patch<SyncUser>("/api/profile", e),
   publicById: (id: string) => api.get<PublicProfile>(`/api/users/${encodeURIComponent(id)}/profile`),
   posts: (id: string) => api.get<{ posts: Post[] }>(`/api/users/${encodeURIComponent(id)}/posts`),
+  uploadAvatar: (file: File) => uploadFile<{ avatar_url: string }>("/api/profile/avatar", file),
+  uploadBanner: (file: File) => uploadFile<{ banner_url: string }>("/api/profile/banner", file),
 };
+
+// uploadFile posts a single file as multipart/form-data.
+async function uploadFile<T>(path: string, file: File): Promise<T> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(path, { method: "POST", body: fd });
+  if (!res.ok) throw new Error((await res.text()) || `upload failed (${res.status})`);
+  return res.json() as Promise<T>;
+}
 
 export interface Equipped {
   title: string;
@@ -539,6 +551,7 @@ export interface PublicProfile {
   pronouns: string;
   is_moderator?: boolean;
   equipped?: Equipped;
+  banner_url?: string;
   links: ProfileLink[];
   created_at: string;
 }

@@ -237,6 +237,27 @@ func (m *Manager) PublicProfile(ctx context.Context, id string) (string, error) 
 	return string(raw), nil
 }
 
+// UploadMedia forwards a raw multipart body (avatar/banner) to the cloud with
+// the given content type, returning the JSON response.
+func (m *Manager) UploadMedia(ctx context.Context, path, contentType string, body []byte) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.ServerURL(ctx)+path, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+m.get(ctx, keyToken))
+	req.Header.Set("Content-Type", contentType)
+	resp, err := m.http.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if resp.StatusCode >= 300 {
+		return "", fmt.Errorf("upload failed (%d): %s", resp.StatusCode, string(raw))
+	}
+	return string(raw), nil
+}
+
 // UserPosts fetches a user's posts (for their profile page).
 func (m *Manager) UserPosts(ctx context.Context, id string) (string, error) {
 	var raw json.RawMessage

@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { Loader2, Check, Plus, X, Pencil } from "lucide-react";
-import { useProfile } from "../os/useProfile";
+import { useRef, useState } from "react";
+import { Loader2, Check, Plus, X, Pencil, ImagePlus, Lock } from "lucide-react";
+import { useProfile, refreshProfile } from "../os/useProfile";
 import { ProfileCard } from "../components/ProfileCard";
-import type { ProfileLink } from "../lib/api";
+import { profileApi, type ProfileLink } from "../lib/api";
 
 // Field limits mirror the server (it re-validates; this is just nicer UX).
 const MAX_DISPLAY = 32;
@@ -25,9 +25,44 @@ export function ProfileEditor() {
   const [primary, setPrimary] = useState(u?.primary_color || "#2b2d36");
   const [accent, setAccent] = useState(u?.accent_color || "#2b2d36");
   const [links, setLinks] = useState<ProfileLink[]>(u?.links ?? []);
+  const [avatarUrl, setAvatarUrl] = useState(u?.avatar_url ?? "");
+  const [bannerUrl, setBannerUrl] = useState(u?.banner_url ?? "");
+  const [uploading, setUploading] = useState("");
+  const avatarInput = useRef<HTMLInputElement>(null);
+  const bannerInput = useRef<HTMLInputElement>(null);
+  const canBanner = profile.has("profile.banner");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
+
+  async function pickAvatar(file?: File) {
+    if (!file) return;
+    setError("");
+    setUploading("avatar");
+    try {
+      const r = await profileApi.uploadAvatar(file);
+      setAvatarUrl(r.avatar_url);
+      refreshProfile();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "avatar upload failed");
+    } finally {
+      setUploading("");
+    }
+  }
+  async function pickBanner(file?: File) {
+    if (!file) return;
+    setError("");
+    setUploading("banner");
+    try {
+      const r = await profileApi.uploadBanner(file);
+      setBannerUrl(r.banner_url);
+      refreshProfile();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "banner upload failed");
+    } finally {
+      setUploading("");
+    }
+  }
 
   if (!u) return null;
 
@@ -50,6 +85,8 @@ export function ProfileEditor() {
     bio,
     primary_color: primary,
     accent_color: accent,
+    avatar_url: avatarUrl,
+    banner_url: bannerUrl,
     links: links.filter((l) => l.url.trim()),
   };
 
@@ -104,6 +141,31 @@ export function ProfileEditor() {
               {/* Left: the form */}
               <div className="space-y-4 overflow-auto px-4 py-4">
                 {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
+
+                <Field label="Avatar & banner">
+                  <div className="flex items-center gap-2">
+                    <input ref={avatarInput} type="file" accept="image/*" hidden onChange={(e) => pickAvatar(e.target.files?.[0])} />
+                    <input ref={bannerInput} type="file" accept="image/*" hidden onChange={(e) => pickBanner(e.target.files?.[0])} />
+                    <button
+                      onClick={() => avatarInput.current?.click()}
+                      disabled={!!uploading}
+                      className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-50"
+                    >
+                      {uploading === "avatar" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+                      Avatar
+                    </button>
+                    <button
+                      onClick={() => canBanner && bannerInput.current?.click()}
+                      disabled={!!uploading || !canBanner}
+                      title={canBanner ? "" : "Wear the [enow] tag to unlock banners"}
+                      className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-50"
+                    >
+                      {uploading === "banner" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : canBanner ? <ImagePlus className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                      Banner
+                    </button>
+                  </div>
+                  {!canBanner && <p className="mt-1 text-[10px] text-white/35">Banner is a tag-gated perk (wear the [enow] server tag).</p>}
+                </Field>
 
                 <Field label="Display name" hint={`${displayName.length}/${MAX_DISPLAY}`}>
                   <input

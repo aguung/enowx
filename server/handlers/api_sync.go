@@ -120,6 +120,16 @@ func (h *Sync) PublicProfile(w http.ResponseWriter, r *http.Request) {
 	writeData(w, profile)
 }
 
+// UploadAvatar / UploadBanner proxy a multipart image upload to the cloud.
+func (h *Sync) UploadAvatar(w http.ResponseWriter, r *http.Request) { h.uploadMedia(w, r, "/me/avatar") }
+func (h *Sync) UploadBanner(w http.ResponseWriter, r *http.Request) { h.uploadMedia(w, r, "/me/banner") }
+
+func (h *Sync) uploadMedia(w http.ResponseWriter, r *http.Request, path string) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 20<<20))
+	out, err := h.mgr.UploadMedia(r.Context(), path, r.Header.Get("Content-Type"), body)
+	proxyJSON(w, out, err)
+}
+
 // UserPosts proxies a user's posts (profile page).
 func (h *Sync) UserPosts(w http.ResponseWriter, r *http.Request) {
 	out, err := h.mgr.UserPosts(r.Context(), chi.URLParam(r, "id"))
