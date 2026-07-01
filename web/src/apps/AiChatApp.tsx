@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Send, Trash2, Loader2, Bot, ChevronDown, ChevronRight, FolderOpen, Shield, Check, X, Terminal, FileEdit, FileText, FilePlus, Globe, Wrench, Folder, CornerLeftUp, Settings2 } from "lucide-react";
 import { accountsApi, keysApi, filesApi, type ProviderModel, type DirListing } from "../lib/api";
 import { Markdown } from "../components/Markdown";
@@ -289,7 +289,7 @@ export function AiChatApp() {
             <p className="text-[11px]">Enable <span className="text-emerald-300/70">Agent</span> to give it tools (read/write files, run commands).</p>
           </div>
         )}
-        {msgs.map((m, i) => <MessageRow key={i} msg={m} />)}
+        <Conversation msgs={msgs} />
         {pending && <ApprovalCard call={pending.call} onDecide={pending.resolve} />}
         {err && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</div>}
       </div>
@@ -351,50 +351,76 @@ function ModelPicker({ current, open, setOpen, filter, setFilter, models, model,
   );
 }
 
-// groupCalls collapses consecutive groupable tool calls (read/list/http) into a
-// single { group: [...] } block, while write/edit/run stay standalone — so the
-// chat shows one "Read 5 files" dropdown instead of five separate cards.
-function groupCalls(calls: ToolCall[]): ({ single: ToolCall } | { group: ToolCall[] })[] {
-  const out: ({ single: ToolCall } | { group: ToolCall[] })[] = [];
-  let run: ToolCall[] = [];
-  const flush = () => {
-    if (run.length >= 2) out.push({ group: run });
-    else run.forEach((c) => out.push({ single: c }));
+// A render item is a user bubble, an assistant text block, a standalone tool
+// call, or a group of consecutive groupable tool calls — the last two are built
+// across the WHOLE conversation so grouping spans agentic steps (not just one
+// message), avoiding a spam of "Read N files" blocks.
+type RenderItem =
+  | { kind: "user"; content: string; key: string }
+  | { kind: "text"; content: string; key: string }
+  | { kind: "spinner"; key: string }
+  | { kind: "tool"; call: ToolCall; result?: ToolResult; key: string }
+  | { kind: "group"; calls: ToolCall[]; results: Record<string, ToolResult>; key: string };
+
+function buildItems(msgs: ChatMsg[]): RenderItem[] {
+  const items: RenderItem[] = [];
+  let run: { call: ToolCall; result?: ToolResult }[] = [];
+  const flushRun = () => {
+    if (run.length >= 2) {
+      const results: Record<string, ToolResult> = {};
+      run.forEach((r) => { if (r.result) results[r.call.id] = r.result; });
+      items.push({ kind: "group", calls: run.map((r) => r.call), results, key: `g_${run[0].call.id}` });
+    } else {
+      run.forEach((r) => items.push({ kind: "tool", call: r.call, result: r.result, key: `t_${r.call.id}` }));
+    }
     run = [];
   };
-  for (const c of calls) {
-    if (GROUPABLE_TOOLS.has(c.name as ToolName)) run.push(c);
-    else { flush(); out.push({ single: c }); }
-  }
-  flush();
-  return out;
+  msgs.forEach((m, i) => {
+    if (m.role === "tool") return;
+    if (m.role === "user") { flushRun(); items.push({ kind: "user", content: m.content, key: `u_${i}` }); return; }
+    // assistant
+    if (m.content) { flushRun(); items.push({ kind: "text", content: m.content, key: `a_${i}` }); }
+    else if (!m.tool_calls?.length) { flushRun(); items.push({ kind: "spinner", key: `s_${i}` }); }
+    for (const c of m.tool_calls ?? []) {
+      const result = m.results?.[c.id];
+      if (GROUPABLE_TOOLS.has(c.name as ToolName)) run.push({ call: c, result });
+      else { flushRun(); items.push({ kind: "tool", call: c, result, key: `t_${c.id}` }); }
+    }
+  });
+  flushRun();
+  return items;
 }
 
-function MessageRow({ msg }: { msg: ChatMsg }) {
-  if (msg.role === "tool") return null; // tool results render inside the assistant turn
+// TextBlock is memoized so completed assistant text isn't re-parsed as Markdown
+// on every streaming frame — only the block whose content actually changed
+// re-renders. This is the main guard against the "Aw, Snap" crash on long chats.
+const TextBlock = memo(function TextBlock({ content }: { content: string }) {
+  return <div className="min-w-0 text-sm text-white/90"><Markdown text={content} /></div>;
+});
 
-  // User: compact right-aligned bubble.
-  if (msg.role === "user") {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] break-words rounded-2xl bg-indigo-500/90 px-3.5 py-2 text-sm text-white">
-          <div className="whitespace-pre-wrap">{msg.content}</div>
-        </div>
-      </div>
-    );
-  }
-
-  // Assistant: no bubble, full width. Text + grouped tool blocks.
-  const results = msg.results ?? {};
+function Conversation({ msgs }: { msgs: ChatMsg[] }) {
+  const items = useMemo(() => buildItems(msgs), [msgs]);
   return (
-    <div className="min-w-0 space-y-1.5 text-sm text-white/90">
-      {msg.content ? <Markdown text={msg.content} /> : !msg.tool_calls?.length ? <Loader2 className="h-4 w-4 animate-spin text-white/40" /> : null}
-      {msg.tool_calls && groupCalls(msg.tool_calls).map((b, i) =>
-        "group" in b
-          ? <ToolGroup key={i} calls={b.group} results={results} />
-          : <ToolCard key={b.single.id} call={b.single} result={results[b.single.id]} />,
-      )}
-    </div>
+    <>
+      {items.map((it) => {
+        switch (it.kind) {
+          case "user":
+            return (
+              <div key={it.key} className="flex justify-end">
+                <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl bg-indigo-500/90 px-3.5 py-2 text-sm text-white">{it.content}</div>
+              </div>
+            );
+          case "text":
+            return <TextBlock key={it.key} content={it.content} />;
+          case "spinner":
+            return <Loader2 key={it.key} className="h-4 w-4 animate-spin text-white/40" />;
+          case "tool":
+            return <ToolCard key={it.key} call={it.call} result={it.result} />;
+          case "group":
+            return <ToolGroup key={it.key} calls={it.calls} results={it.results} />;
+        }
+      })}
+    </>
   );
 }
 
@@ -404,7 +430,7 @@ const TOOL_ICONS: Record<string, typeof Terminal> = {
 
 // ToolGroup collapses a run of groupable tool calls into one dropdown:
 // collapsed shows a summary ("Read 5 files"); expanded shows each row.
-function ToolGroup({ calls, results }: { calls: ToolCall[]; results: Record<string, ToolResult> }) {
+const ToolGroup = memo(function ToolGroup({ calls, results }: { calls: ToolCall[]; results: Record<string, ToolResult> }) {
   const [open, setOpen] = useState(false);
   const names = [...new Set(calls.map((c) => c.name))];
   const n = calls.length;
@@ -428,7 +454,7 @@ function ToolGroup({ calls, results }: { calls: ToolCall[]; results: Record<stri
       )}
     </div>
   );
-}
+});
 
 // GroupRow is one line inside an expanded ToolGroup: status + tool + target.
 function GroupRow({ call, result }: { call: ToolCall; result?: ToolResult }) {
@@ -448,7 +474,7 @@ function GroupRow({ call, result }: { call: ToolCall; result?: ToolResult }) {
 // ToolCard is a compact, robloxkit-style tool row: one line with an
 // icon/chevron + filename (parent path beneath) + a right-side +N/-N (for
 // edits) or status; expands to an LCS line diff or the raw output.
-function ToolCard({ call, result }: { call: ToolCall; result?: ToolResult }) {
+const ToolCard = memo(function ToolCard({ call, result }: { call: ToolCall; result?: ToolResult }) {
   const [userToggled, setUserToggled] = useState<boolean | null>(null);
   let args: Record<string, unknown> = {};
   try { args = JSON.parse(call.args || "{}"); } catch { /* streaming/partial */ }
@@ -522,7 +548,7 @@ function ToolCard({ call, result }: { call: ToolCall; result?: ToolResult }) {
       )}
     </div>
   );
-}
+});
 
 // FolderBrowser navigates the local filesystem (dirs only) and picks a folder as
 // the agent's working directory. Uses the read-only Files handler.
