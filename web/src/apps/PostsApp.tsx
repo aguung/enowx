@@ -16,6 +16,7 @@ import { profileApi, commentsApi, searchApi, type Post, type PublicProfile, type
 
 export function PostsApp() {
   const profile = useProfile();
+  const openedPost = usePostViewer();
   if (!profile.loggedIn) {
     return (
       <AppShell title="Posts" subtitle="Community feed">
@@ -23,9 +24,11 @@ export function PostsApp() {
       </AppShell>
     );
   }
+  // When a post is opened, the app swaps the feed for the detail view (with a
+  // Back button) instead of covering the whole desktop with a modal.
   return (
-    <AppShell title="Posts" subtitle="Community feed">
-      <Feed />
+    <AppShell title="Posts" subtitle={openedPost ? "Post" : "Community feed"}>
+      {openedPost ? <PostDetailView opened={openedPost} /> : <Feed />}
     </AppShell>
   );
 }
@@ -350,28 +353,24 @@ function PostCard({ p, myUsername, detail = false }: { p: Post; myUsername?: str
   );
 }
 
-// PostDetail is the full-page post overlay: the post plus its comment thread.
-// Mounted once in Desktop; driven by the postViewer store.
-export function PostDetail() {
-  const opened = usePostViewer();
+// PostDetailView is the in-app post detail: shown inside the Posts panel (not a
+// modal), replacing the feed, with a Back button. Driven by the postViewer store.
+function PostDetailView({ opened }: { opened: Post }) {
   const { posts } = useFeed();
   const profile = useProfile();
   const myUsername = profile.user?.username;
   const canMod = profile.has("chat.moderate");
-  if (!opened) return null;
   // Prefer the live post from the feed (so upvotes/reactions/edits reflect here);
   // fall back to the snapshot if it's not currently in the loaded feed.
   const post = posts.find((x) => x.id === opened.id) ?? opened;
   return (
-    <div className="fixed inset-0 z-[10500] flex justify-center overflow-y-auto bg-black/70 backdrop-blur-sm p-4" onClick={closePost}>
-      <div className="mt-4 h-fit w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
-        <button onClick={closePost} className="mb-2 flex items-center gap-1 text-xs text-white/50 hover:text-white">
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to feed
-        </button>
-        <PostCard p={post} myUsername={myUsername} detail />
-        <div className="mt-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
-          <CommentThread postId={post.id} myUsername={myUsername} canMod={canMod} />
-        </div>
+    <div className="space-y-2">
+      <button onClick={closePost} className="flex items-center gap-1 text-xs text-white/50 hover:text-white">
+        <ArrowLeft className="h-3.5 w-3.5" /> Back to feed
+      </button>
+      <PostCard p={post} myUsername={myUsername} detail />
+      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <CommentThread postId={post.id} myUsername={myUsername} canMod={canMod} />
       </div>
     </div>
   );
