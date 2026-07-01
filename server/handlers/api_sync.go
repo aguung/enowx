@@ -334,6 +334,32 @@ func (h *Sync) AdminStats(w http.ResponseWriter, r *http.Request) {
 	writeData(w, out)
 }
 
+// AdminModels proxies the model catalog for admin editing (?provider=).
+func (h *Sync) AdminModels(w http.ResponseWriter, r *http.Request) {
+	raw, err := h.mgr.AdminModels(r.Context(), r.URL.Query().Get("provider"))
+	proxyJSON(w, raw, err)
+}
+
+// AdminUpsertModel proxies creating/updating a catalog entry.
+func (h *Sync) AdminUpsertModel(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+	raw, err := h.mgr.AdminUpsertModel(r.Context(), body)
+	proxyJSON(w, raw, err)
+}
+
+// AdminUpdateModel proxies editing a catalog entry.
+func (h *Sync) AdminUpdateModel(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<16))
+	raw, err := h.mgr.AdminUpdateModel(r.Context(), chi.URLParam(r, "id"), body)
+	proxyJSON(w, raw, err)
+}
+
+// AdminDeleteModel proxies deleting a catalog entry.
+func (h *Sync) AdminDeleteModel(w http.ResponseWriter, r *http.Request) {
+	raw, err := h.mgr.AdminDeleteModel(r.Context(), chi.URLParam(r, "id"))
+	proxyJSON(w, raw, err)
+}
+
 // AdminUsers proxies the default admin user list.
 func (h *Sync) AdminUsers(w http.ResponseWriter, r *http.Request) {
 	raw, err := h.mgr.AdminUsers(r.Context())

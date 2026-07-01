@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Trash2, Power, PowerOff, RefreshCw, Zap } from "lucide-react";
+import { Search, Trash2, Power, PowerOff, RefreshCw, Zap, Boxes, X } from "lucide-react";
 import { AppShell } from "./shell";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { Tooltip } from "../components/Tooltip";
-import { accountsApi, providersApi, type Account, type Provider, type Usage } from "../lib/api";
+import { accountsApi, providersApi, type Account, type Provider, type Usage, type ProviderModel } from "../lib/api";
 import { useDialog } from "../os/dialog";
 import { startWarmup, finishWarmup } from "../os/warmupBus";
 
@@ -26,6 +26,7 @@ export function AccountsApp() {
   const [busy, setBusy] = useState<number | null>(null);
   const [warming, setWarming] = useState<number | null>(null);
   const [usage, setUsage] = useState<Record<number, Usage>>({});
+  const [modelsFor, setModelsFor] = useState<Account | null>(null);
   const dialog = useDialog();
 
   async function load() {
@@ -199,6 +200,9 @@ export function AccountsApp() {
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
+                    <ActionBtn title="View accessible models" disabled={busy === a.id} onClick={() => setModelsFor(a)}>
+                      <Boxes className="h-3.5 w-3.5" />
+                    </ActionBtn>
                     <ActionBtn title="Warm up (test request + credit)" disabled={busy === a.id || warming === a.id} onClick={() => warmup(a)}>
                       <Zap className={`h-3.5 w-3.5 ${warming === a.id ? "animate-pulse text-amber-300" : ""}`} />
                     </ActionBtn>
@@ -221,7 +225,52 @@ export function AccountsApp() {
           )}
         </div>
       </div>
+      {modelsFor && <AccountModelsPanel account={modelsFor} onClose={() => setModelsFor(null)} />}
     </AppShell>
+  );
+}
+
+// AccountModelsPanel is the side popup listing the models an account can access
+// (fetched live for fetchable providers, or from the cloud catalog otherwise).
+function AccountModelsPanel({ account, onClose }: { account: Account; onClose: () => void }) {
+  const [data, setData] = useState<{ source: string; models: ProviderModel[] } | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    accountsApi
+      .models(account.id)
+      .then((r) => setData({ source: r.source, models: r.models ?? [] }))
+      .catch((e) => setErr(e instanceof Error ? e.message : "failed to load models"));
+  }, [account.id]);
+  return (
+    <div className="fixed inset-0 z-[10600] flex justify-end bg-black/50" onClick={onClose}>
+      <div className="h-full w-80 overflow-y-auto border-l border-white/10 bg-[#0e1016] p-4" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-1 flex items-center justify-between">
+          <div className="text-sm font-semibold text-white">Models</div>
+          <button onClick={onClose} className="rounded p-1 text-white/50 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="mb-3 text-[11px] text-white/40">
+          {account.label || account.provider} · <span className="capitalize">{account.provider}</span>
+          {data && <span className="ml-1 rounded bg-white/10 px-1.5 py-0.5">{data.source === "upstream" ? "live" : "catalog"}</span>}
+        </div>
+        {err && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</div>}
+        {!data && !err && <div className="h-16 animate-pulse rounded-lg bg-white/5" />}
+        {data && data.models.length === 0 && <div className="text-[11px] text-white/40">No models found for this account.</div>}
+        <div className="space-y-1">
+          {data?.models.map((m) => (
+            <div key={m.model_id} className="rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-sm text-white">{m.name}</span>
+                {m.type === "image" && <span className="rounded bg-fuchsia-500/20 px-1 text-[9px] text-fuchsia-300">IMG</span>}
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-white/35">
+                <span className="font-mono">{m.model_id}</span>
+                {m.owned_by && <span>· {m.owned_by}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

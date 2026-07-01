@@ -247,6 +247,75 @@ func (m *Manager) UserByName(ctx context.Context, name string) (string, error) {
 	return string(raw), nil
 }
 
+// CatalogModel is a DB-catalog model entry from the cloud (for non-fetchable
+// providers).
+type CatalogModel struct {
+	ModelID string `json:"model_id"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	OwnedBy string `json:"owned_by"`
+}
+
+// rawOrNil returns body as a request payload, or nil if empty (so an empty body
+// isn't marshaled to "null").
+func rawOrNil(body json.RawMessage) any {
+	if len(body) == 0 {
+		return nil
+	}
+	return body
+}
+
+// AdminModels fetches the full model catalog for a provider (admin editing).
+func (m *Manager) AdminModels(ctx context.Context, providerName string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/models?provider="+url.QueryEscape(providerName), nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// AdminUpsertModel creates/updates a catalog entry.
+func (m *Manager) AdminUpsertModel(ctx context.Context, body json.RawMessage) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPost, "/admin/models", rawOrNil(body), &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// AdminUpdateModel edits a catalog entry by id.
+func (m *Manager) AdminUpdateModel(ctx context.Context, id string, body json.RawMessage) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPatch, "/admin/models/"+id, rawOrNil(body), &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// AdminDeleteModel removes a catalog entry by id.
+func (m *Manager) AdminDeleteModel(ctx context.Context, id string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodDelete, "/admin/models/"+id, nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// ProviderModels asks the cloud for a provider's DB-managed model catalog
+// (best-effort; empty on any error, e.g. offline).
+func (m *Manager) ProviderModels(ctx context.Context, providerName string) []CatalogModel {
+	var out struct {
+		Models []CatalogModel `json:"models"`
+	}
+	if err := m.call(ctx, http.MethodGet, "/models?provider="+url.QueryEscape(providerName), nil, &out); err != nil {
+		return []CatalogModel{}
+	}
+	if out.Models == nil {
+		return []CatalogModel{}
+	}
+	return out.Models
+}
+
 // MentionUsers returns @mention autocomplete candidates (empty q = default list).
 func (m *Manager) MentionUsers(ctx context.Context, q string) (string, error) {
 	var raw json.RawMessage

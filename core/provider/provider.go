@@ -67,3 +67,19 @@ type Usage struct {
 type UsageReporter interface {
 	Usage(acc Account) (*Usage, error)
 }
+
+// Model is one model a provider account can access.
+type Model struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`               // chat | image
+	OwnedBy string `json:"owned_by,omitempty"`
+}
+
+// ModelFetcher is an optional capability: providers whose upstream exposes a
+// /models endpoint implement it, so the model list is fetched live using the
+// account's credentials. Providers WITHOUT this fall back to the cloud DB
+// catalog (managed from the admin panel).
+type ModelFetcher interface {
+	Models(acc Account) ([]Model, error)
+}

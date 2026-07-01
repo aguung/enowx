@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search, MoreHorizontal, Ban, VolumeX, AlertTriangle, Plus, Minus } from "lucide-react";
+import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search, MoreHorizontal, Ban, VolumeX, AlertTriangle, Plus, Minus, Boxes, Trash2 } from "lucide-react";
 import { AppShell } from "./shell";
 import { openProfile } from "../os/profileViewer";
 import { useAdminEvents } from "../os/adminBus";
 import { useDialog } from "../os/dialog";
-import { adminApi, modApi, searchApi, type FlaggedLink, type ModAction, type AdminStats } from "../lib/api";
+import { adminApi, modApi, searchApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel } from "../lib/api";
 
-type Tab = "stats" | "flags" | "users" | "log";
+type Tab = "stats" | "flags" | "users" | "models" | "log";
 
 // AdminApp is the moderator-only Admin Tools app. It only appears in the dock
 // for moderators (see apps registry), and every endpoint it calls is role-gated
@@ -17,6 +17,7 @@ export function AdminApp() {
     { id: "stats", label: "Overview", icon: BarChart3 },
     { id: "flags", label: "Duplicates", icon: Copy },
     { id: "users", label: "Users", icon: Users },
+    { id: "models", label: "Models", icon: Boxes },
     { id: "log", label: "Mod log", icon: ScrollText },
   ];
   return (
@@ -41,6 +42,7 @@ export function AdminApp() {
       {tab === "stats" && <StatsTab />}
       {tab === "flags" && <FlagsTab />}
       {tab === "users" && <UsersTab />}
+      {tab === "models" && <ModelsTab />}
       {tab === "log" && <LogTab />}
     </AppShell>
   );
@@ -258,6 +260,71 @@ function ActBtn({ onClick, tone, icon: Icon, children }: { onClick: () => void; 
       <Icon className="h-3.5 w-3.5" />
       {children}
     </button>
+  );
+}
+
+// ModelsTab manages the DB catalog for providers WITHOUT a live /models endpoint
+// (fetchable providers resolve live and aren't stored). Only the catalog
+// providers are editable here.
+const CATALOG_PROVIDERS = ["codebuddy"];
+
+function ModelsTab() {
+  const dialog = useDialog();
+  const [provider, setProvider] = useState(CATALOG_PROVIDERS[0]);
+  const [models, setModels] = useState<ProviderModel[] | null>(null);
+
+  const load = useCallback(() => {
+    adminApi.models(provider).then((r) => setModels(r.models ?? [])).catch(() => setModels([]));
+  }, [provider]);
+  useEffect(() => load(), [load]);
+
+  async function add() {
+    const res = await dialog.form({
+      title: "Add model",
+      fields: [
+        { name: "model_id", label: "Model ID", placeholder: "gemini-3.1-pro" },
+        { name: "name", label: "Display name", placeholder: "Gemini 3.1 Pro" },
+        { name: "owned_by", label: "Owned by", placeholder: "google" },
+      ],
+      confirmLabel: "Add",
+    });
+    if (!res || !res.model_id?.trim()) return;
+    await adminApi.upsertModel({ provider, model_id: res.model_id.trim(), name: (res.name || res.model_id).trim(), type: "chat", owned_by: (res.owned_by || "").trim(), enabled: true, sort_order: (models?.length ?? 0) * 10 + 10 });
+    load();
+  }
+  async function toggle(m: ProviderModel) {
+    if (!m.id) return;
+    await adminApi.updateModel(m.id, { ...m, enabled: !m.enabled });
+    load();
+  }
+  async function remove(m: ProviderModel) {
+    if (!m.id) return;
+    const ok = await dialog.confirm({ title: `Delete ${m.name}?`, confirmLabel: "Delete" });
+    if (ok) { await adminApi.deleteModel(m.id); load(); }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <select value={provider} onChange={(e) => setProvider(e.target.value)} className="rounded-lg border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white outline-none">
+          {CATALOG_PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
+        <button onClick={add} className="ml-auto flex items-center gap-1 rounded-lg border border-emerald-400/20 px-2.5 py-1.5 text-[11px] text-emerald-300 hover:bg-emerald-400/10"><Plus className="h-3.5 w-3.5" /> Add model</button>
+      </div>
+      <p className="text-[10px] text-white/35">Only providers without a live model endpoint are edited here. Fetchable providers (kiro, openai-compat) show their models live per account.</p>
+      {!models && <div className="h-10 animate-pulse rounded-lg bg-white/5" />}
+      {models?.length === 0 && <div className="text-[11px] text-white/40">No models for this provider.</div>}
+      {models?.map((m) => (
+        <div key={m.id ?? m.model_id} className={`flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-1.5 ${m.enabled ? "" : "opacity-50"}`}>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm text-white">{m.name}</div>
+            <div className="truncate text-[10px] text-white/35"><span className="font-mono">{m.model_id}</span>{m.owned_by && ` · ${m.owned_by}`}</div>
+          </div>
+          <button onClick={() => toggle(m)} className={`rounded-lg border px-2 py-1 text-[10px] ${m.enabled ? "border-white/10 text-white/60 hover:bg-white/5" : "border-emerald-400/20 text-emerald-300 hover:bg-emerald-400/10"}`}>{m.enabled ? "Disable" : "Enable"}</button>
+          <button onClick={() => remove(m)} className="rounded p-1 text-red-400/60 hover:bg-red-500/15 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>
+        </div>
+      ))}
+    </div>
   );
 }
 

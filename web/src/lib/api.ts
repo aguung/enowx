@@ -54,6 +54,19 @@ export interface Usage {
   message?: string;
 }
 
+// ProviderModel is one model an account can access (from live fetch or the
+// cloud DB catalog).
+export interface ProviderModel {
+  id?: number; // present for DB catalog entries (admin editing)
+  provider?: string;
+  model_id: string;
+  name: string;
+  type: string; // chat | image
+  owned_by?: string;
+  enabled?: boolean;
+  sort_order?: number;
+}
+
 export const accountsApi = {
   list: (provider?: string) =>
     api.get<Account[]>(`/api/accounts${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`),
@@ -64,6 +77,7 @@ export const accountsApi = {
     api.patch<{ ok: boolean }>(`/api/accounts/${id}/disabled`, { disabled }),
   remove: (id: number) => api.del<{ ok: boolean }>(`/api/accounts/${id}`),
   usage: (id: number) => api.get<{ supported: boolean; usage?: Usage }>(`/api/accounts/${id}/usage`),
+  models: (id: number) => api.get<{ provider: string; source: string; models: ProviderModel[] }>(`/api/accounts/${id}/models`),
   warmup: (id: number) =>
     api.post<{ ok: boolean; status: string; error?: string; usage_supported?: boolean; usage?: Usage }>(
       `/api/accounts/${id}/warmup`,
@@ -424,6 +438,10 @@ export const adminApi = {
   log: () => api.get<{ actions: ModAction[] }>("/api/admin/log"),
   stats: () => api.get<AdminStats>("/api/admin/stats"),
   users: () => api.get<{ users: AdminUser[] }>("/api/admin/users"),
+  models: (provider: string) => api.get<{ provider: string; models: ProviderModel[] }>(`/api/admin/models?provider=${encodeURIComponent(provider)}`),
+  upsertModel: (m: ProviderModel) => api.post<{ id: number }>("/api/admin/models", m),
+  updateModel: (id: number, m: ProviderModel) => api.patch<{ ok: boolean }>(`/api/admin/models/${id}`, m),
+  deleteModel: (id: number) => api.del<{ deleted: number }>(`/api/admin/models/${id}`),
   ban: (id: string, on: boolean) => api.post<{ banned: boolean }>(`/api/admin/users/${id}/ban`, { on }),
   mute: (id: string, minutes: number) => api.post<{ muted_minutes: number }>(`/api/admin/users/${id}/mute`, { minutes }),
   warn: (id: string, message: string) => api.post<{ warned: boolean }>(`/api/admin/users/${id}/warn`, { message }),
