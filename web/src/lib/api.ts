@@ -99,6 +99,8 @@ export const accountsApi = {
   usage: (id: number) => api.get<{ supported: boolean; usage?: Usage }>(`/api/accounts/${id}/usage`),
   models: (id: number) => api.get<{ provider: string; source: string; models: ProviderModel[] }>(`/api/accounts/${id}/models`),
   allModels: () => api.get<{ models: ProviderModel[] }>("/api/models"),
+  testModel: (id: number, model: string) =>
+    api.post<{ ok: boolean; model: string; latency: number; response?: string; error?: string }>(`/api/accounts/${id}/test-model`, { model }),
   warmup: (id: number) =>
     api.post<{ ok: boolean; status: string; error?: string; usage_supported?: boolean; usage?: Usage }>(
       `/api/accounts/${id}/warmup`,

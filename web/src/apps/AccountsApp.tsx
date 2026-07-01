@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Trash2, Power, PowerOff, RefreshCw, Zap, Boxes, X, Copy, Check, Plus } from "lucide-react";
+import { Search, Trash2, Power, PowerOff, RefreshCw, Zap, Boxes, X, Copy, Check, Plus, Play, Loader2 } from "lucide-react";
 import { AppShell } from "./shell";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { Tooltip } from "../components/Tooltip";
@@ -284,7 +284,7 @@ function AccountModelsPanel({ account, onClose }: { account: Account; onClose: (
           {err && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</div>}
           {!data && !err && <div className="h-16 animate-pulse rounded-lg bg-white/5" />}
           {data && shown.length === 0 && <div className="text-[11px] text-white/40">No models found.</div>}
-          {shown.map((m) => <ModelRow key={m.model_id} m={m} aliases={aliasesFor(m.model_id)} onAddAlias={() => addAlias(m.model_id)} onRemoveAlias={removeAlias} />)}
+          {shown.map((m) => <ModelRow key={m.model_id} m={m} accountId={account.id} aliases={aliasesFor(m.model_id)} onAddAlias={() => addAlias(m.model_id)} onRemoveAlias={removeAlias} />)}
         </div>
       </div>
     </div>
@@ -293,41 +293,68 @@ function AccountModelsPanel({ account, onClose }: { account: Account; onClose: (
 
 // ModelRow renders one model with context sizes, a copy-id button, and the
 // user's LOCAL aliases (add/remove your own custom name for this model).
-function ModelRow({ m, aliases, onAddAlias, onRemoveAlias }: { m: ProviderModel; aliases: ModelAlias[]; onAddAlias: () => void; onRemoveAlias: (alias: string) => void }) {
+function ModelRow({ m, accountId, aliases, onAddAlias, onRemoveAlias }: { m: ProviderModel; accountId: number; aliases: ModelAlias[]; onAddAlias: () => void; onRemoveAlias: (alias: string) => void }) {
   const [copied, setCopied] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const copy = () => {
     navigator.clipboard?.writeText(m.model_id);
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   };
+  const test = async () => {
+    setTesting(true);
+    setResult(null);
+    try {
+      const r = await accountsApi.testModel(accountId, m.model_id);
+      setResult({ ok: r.ok, text: r.ok ? `${(r.response || "ok").slice(0, 80)} · ${r.latency}ms` : (r.error || "failed") });
+    } catch (e) {
+      setResult({ ok: false, text: e instanceof Error ? e.message : "failed" });
+    } finally {
+      setTesting(false);
+    }
+  };
   const ctx = (n?: number) => (n && n > 0 ? (n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`) : null);
   const inTok = ctx(m.max_input), outTok = ctx(m.max_output);
   return (
-    <div className="group flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-2">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm text-white">{m.name}</span>
-          {m.type === "image" && <span className="rounded bg-fuchsia-500/20 px-1 text-[9px] text-fuchsia-300">IMG</span>}
+    <div className="group rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-2">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm text-white">{m.name}</span>
+            {m.type === "image" && <span className="rounded bg-fuchsia-500/20 px-1 text-[9px] text-fuchsia-300">IMG</span>}
+          </div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-white/35">
+            <span className="font-mono">{m.model_id}</span>
+            {m.owned_by && <span>· {m.owned_by}</span>}
+            {inTok && <span>· in {inTok}</span>}
+            {outTok && <span>· out {outTok}</span>}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {aliases.map((a) => (
+              <span key={a.alias} className="group/a flex items-center gap-0.5 rounded bg-indigo-500/15 px-1.5 py-0.5 font-mono text-[9px] text-indigo-300">
+                {a.alias}
+                <button onClick={() => onRemoveAlias(a.alias)} className="opacity-60 hover:opacity-100"><X className="h-2.5 w-2.5" /></button>
+              </span>
+            ))}
+            <button onClick={onAddAlias} className="flex items-center gap-0.5 rounded border border-dashed border-white/15 px-1.5 py-0.5 text-[9px] text-white/40 hover:border-white/30 hover:text-white/70"><Plus className="h-2.5 w-2.5" /> alias</button>
+          </div>
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-white/35">
-          <span className="font-mono">{m.model_id}</span>
-          {m.owned_by && <span>· {m.owned_by}</span>}
-          {inTok && <span>· in {inTok}</span>}
-          {outTok && <span>· out {outTok}</span>}
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-1">
-          {aliases.map((a) => (
-            <span key={a.alias} className="group/a flex items-center gap-0.5 rounded bg-indigo-500/15 px-1.5 py-0.5 font-mono text-[9px] text-indigo-300">
-              {a.alias}
-              <button onClick={() => onRemoveAlias(a.alias)} className="opacity-60 hover:opacity-100"><X className="h-2.5 w-2.5" /></button>
-            </span>
-          ))}
-          <button onClick={onAddAlias} className="flex items-center gap-0.5 rounded border border-dashed border-white/15 px-1.5 py-0.5 text-[9px] text-white/40 hover:border-white/30 hover:text-white/70"><Plus className="h-2.5 w-2.5" /> alias</button>
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+          <button onClick={test} disabled={testing} title="Test model" className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white disabled:opacity-50">
+            {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+          </button>
+          <button onClick={copy} title="Copy model id" className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white">
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
         </div>
       </div>
-      <button onClick={copy} title="Copy model id" className="shrink-0 rounded p-1 text-white/40 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100">
-        {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-      </button>
+      {result && (
+        <div className={`mt-1.5 flex items-start gap-1.5 rounded border px-2 py-1 text-[10px] ${result.ok ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300" : "border-red-500/25 bg-red-500/10 text-red-300"}`}>
+          {result.ok ? <Check className="mt-[1px] h-3 w-3 shrink-0" /> : <X className="mt-[1px] h-3 w-3 shrink-0" />}
+          <span className="min-w-0 break-words">{result.text}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -339,19 +366,17 @@ function CreditMeter({ u }: { u: Usage }) {
   // Window-based providers (e.g. Codex 5h + weekly) show a bar per window.
   if (u.windows && u.windows.length > 0) {
     return (
-      <div className="mt-2 max-w-[220px] space-y-1.5">
+      <div className="mt-1.5 max-w-[240px] space-y-1">
         {u.windows.map((w, i) => {
           const pct = Math.min(100, Math.round(w.used_percent));
           const tone = pct >= 90 ? "bg-red-400" : pct >= 70 ? "bg-amber-400" : "bg-emerald-400";
           return (
-            <div key={i}>
-              <div className="mb-0.5 flex items-center justify-between text-[10px] text-white/40">
-                <span>{w.label}</span>
-                <span className="tabular-nums">{pct}%{w.reset_in_secs ? ` · ${fmtReset(w.reset_in_secs)}` : ""}</span>
-              </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div key={i} className="flex items-center gap-2 text-[10px] text-white/40">
+              <span className="w-10 shrink-0">{w.label}</span>
+              <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
                 <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
               </div>
+              <span className="w-16 shrink-0 text-right tabular-nums">{pct}%{w.reset_in_secs ? ` · ${fmtReset(w.reset_in_secs)}` : ""}</span>
             </div>
           );
         })}

@@ -116,6 +116,7 @@ func New(addr string, d Deps) *Server {
 		r.Post("/apitest/history", apitest.AddHistory)
 		r.Delete("/apitest/history", apitest.ClearHistory)
 		r.Post("/accounts/{id}/warmup", warmup.Run)
+		r.Post("/accounts/{id}/test-model", warmup.TestModel)
 		r.Get("/warmup-logs", warmup.List)
 		r.Delete("/warmup-logs", warmup.Clear)
 		r.Delete("/accounts/{id}", accounts.Delete)

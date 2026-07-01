@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -73,6 +74,7 @@ func NewWarmup(p *proxy.Proxy, reg *provider.Registry, s store.AccountStore, log
 var warmupModel = map[string]string{
 	"codebuddy": "gemini-2.5-flash",
 	"kiro":      "claude-sonnet-4",
+	"codex":     "gpt-5.4-mini",
 }
 
 // warmupSystem is set for providers that reject requests without a system turn
@@ -105,6 +107,85 @@ func (h *Warmup) Run(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, resp := h.WarmAccount(r.Context(), acc)
+	writeData(w, resp)
+}
+
+// TestModel sends a real "reply with hi" probe to a SPECIFIC model on a specific
+// account and records it in the request log — the "Test model" button. It does
+// not change the account status.
+// POST /api/accounts/{id}/test-model  { "model": "cx/gpt-5.4" }
+func (h *Warmup) TestModel(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeAPIErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in struct {
+		Model string `json:"model"`
+	}
+	body, _ := io.ReadAll(r.Body)
+	_ = json.Unmarshal(body, &in)
+	if strings.TrimSpace(in.Model) == "" {
+		writeAPIErr(w, http.StatusBadRequest, "model is required")
+		return
+	}
+
+	rows, err := h.store.List(r.Context(), "")
+	if err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	var acc *store.Account
+	for i := range rows {
+		if rows[i].ID == id {
+			acc = &rows[i]
+			break
+		}
+	}
+	if acc == nil {
+		writeAPIErr(w, http.StatusNotFound, "account not found")
+		return
+	}
+
+	// The picker sends the prefixed id (e.g. cx/gpt-5.4); strip it for upstream.
+	_, bare := proxy.SplitModel(in.Model)
+	pacc := provider.Account{ID: acc.ID, Secret: acc.Secret, Creds: acc.Creds}
+	req := probeRequest(acc.Provider, bare)
+
+	start := time.Now()
+	res := h.proxy.Probe(r.Context(), acc.Provider, pacc, req)
+	durMS := time.Since(start).Milliseconds()
+
+	// Record it as a request so it shows in Requests + Statistics.
+	if h.reqLogs != nil {
+		var inTok, outTok int64
+		if res.Usage != nil {
+			inTok, outTok = res.Usage.PromptTokens, res.Usage.CompletionTokens
+		}
+		logStatus := "success"
+		if res.Outcome != provider.OutcomeOK {
+			logStatus = "error"
+		}
+		_ = h.reqLogs.Insert(r.Context(), store.RequestLog{
+			Provider:  acc.Provider,
+			Model:     in.Model,
+			Status:    logStatus,
+			Source:    "test",
+			InTokens:  inTok,
+			OutTokens: outTok,
+			LatencyMS: durMS,
+		})
+	}
+
+	resp := map[string]any{
+		"ok":       res.Outcome == provider.OutcomeOK,
+		"model":    in.Model,
+		"latency":  durMS,
+		"response": res.Response,
+	}
+	if res.Err != nil && res.Outcome != provider.OutcomeOK {
+		resp["error"] = res.Err.Error()
+	}
 	writeData(w, resp)
 }
 
@@ -272,7 +353,11 @@ func (h *Warmup) List(w http.ResponseWriter, r *http.Request) {
 // passthrough providers (via Raw) and structured ones (via Messages). A system
 // turn is included for providers that require it (e.g. codebuddy).
 func warmupRequest(providerName string) *model.Request {
-	modelID := warmupModel[providerName]
+	return probeRequest(providerName, warmupModel[providerName])
+}
+
+// probeRequest builds a "reply with hi" probe for a specific model id.
+func probeRequest(providerName, modelID string) *model.Request {
 	if modelID == "" {
 		modelID = "gpt-4o-mini"
 	}
