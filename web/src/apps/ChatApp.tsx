@@ -15,6 +15,7 @@ import { ImageGrid } from "../components/ImageGrid";
 import { MentionDropdown } from "../components/MentionDropdown";
 import { MentionInput } from "../components/MentionInput";
 import { useMention } from "../os/useMention";
+import { mentionsMe } from "../os/mentions";
 import { profileApi, modApi, type ChatMessage, type PublicProfile, type TopRole } from "../lib/api";
 
 interface ReplyTarget {
@@ -69,6 +70,7 @@ function ChatRoom() {
   }, [reply]);
 
   const myUsername = profile.user?.username;
+  const myDisplayName = profile.user?.display_name;
   const canModerate = profile.has("chat.moderate");
 
   function startReply(m: ChatMessage) {
@@ -123,6 +125,7 @@ function ChatRoom() {
               key={m.id}
               m={m}
               mine={!!myUsername && m.username === myUsername}
+              pingsMe={mentionsMe(m.content, myUsername, myDisplayName)}
               canModerate={canModerate}
               onOpenUser={() => setOpenUser(m.user_id)}
               open={openUser === m.user_id}
@@ -197,6 +200,7 @@ function ChatRoom() {
 function MessageRow({
   m,
   mine,
+  pingsMe,
   canModerate,
   onOpenUser,
   open,
@@ -205,6 +209,7 @@ function MessageRow({
 }: {
   m: ChatMessage;
   mine: boolean;
+  pingsMe: boolean;
   canModerate: boolean;
   onOpenUser: () => void;
   open: boolean;
@@ -252,7 +257,7 @@ function MessageRow({
   }
 
   return (
-    <div className="group relative flex gap-2.5 rounded-lg px-2 py-1 hover:bg-white/[0.03]">
+    <div className={`group relative flex gap-2.5 rounded-lg px-2 py-1 ${pingsMe ? "border-l-2 border-amber-400/70 bg-amber-400/[0.07] hover:bg-amber-400/10" : "hover:bg-white/[0.03]"}`}>
       {/* Hover action menu (top-right). */}
       <div className={`absolute -top-2 right-2 items-center gap-0.5 rounded-lg border border-white/10 bg-[#16181f] px-1 py-0.5 shadow-lg ${pickerOpen ? "flex" : "hidden group-hover:flex"}`}>
         <div className="relative">

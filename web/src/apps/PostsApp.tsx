@@ -15,6 +15,7 @@ import { ImageGrid } from "../components/ImageGrid";
 import { MentionDropdown } from "../components/MentionDropdown";
 import { MentionInput } from "../components/MentionInput";
 import { useMention } from "../os/useMention";
+import { mentionsMe } from "../os/mentions";
 import { profileApi, commentsApi, searchApi, type Post, type PublicProfile, type Comment, type SearchPostHit, type SearchUserHit } from "../lib/api";
 
 export function PostsApp() {
@@ -373,13 +374,13 @@ function PostDetailView({ opened }: { opened: Post }) {
       </button>
       <PostCard p={post} myUsername={myUsername} detail />
       <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
-        <CommentThread postId={post.id} myUsername={myUsername} canMod={canMod} />
+        <CommentThread postId={post.id} myUsername={myUsername} myDisplayName={profile.user?.display_name} canMod={canMod} />
       </div>
     </div>
   );
 }
 
-function CommentThread({ postId, myUsername, canMod }: { postId: number; myUsername?: string; canMod: boolean }) {
+function CommentThread({ postId, myUsername, myDisplayName, canMod }: { postId: number; myUsername?: string; myDisplayName?: string; canMod: boolean }) {
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -425,16 +426,20 @@ function CommentThread({ postId, myUsername, canMod }: { postId: number; myUsern
     if (r) setComments((cs) => (cs ? cs.map((c) => (c.id === id ? { ...c, reactions: r.reactions } : c)) : cs));
   }
 
-  // Group into top-level comments + their 1-level replies.
+  // Group into top-level comments + their 1-level replies. byId lets a reply
+  // show an embed preview of the comment it replies to.
   const tops = (comments ?? []).filter((c) => !c.reply_to);
+  const byId = new Map<number, Comment>();
   const repliesByParent = new Map<number, Comment[]>();
   for (const c of comments ?? []) {
+    byId.set(c.id, c);
     if (c.reply_to) {
       const arr = repliesByParent.get(c.reply_to) ?? [];
       arr.push(c);
       repliesByParent.set(c.reply_to, arr);
     }
   }
+  const pings = (c: Comment) => mentionsMe(c.body, myUsername, myDisplayName);
 
   return (
     <div className="space-y-2">
@@ -446,10 +451,10 @@ function CommentThread({ postId, myUsername, canMod }: { postId: number; myUsern
       ) : (
         tops.map((c) => (
           <div key={c.id}>
-            <CommentItem c={c} mine={!!myUsername && c.username === myUsername} canMod={canMod} onReply={() => setReplyTo(c)} onRemove={() => remove(c.id)} onReact={(e) => react(c.id, e)} />
+            <CommentItem c={c} mine={!!myUsername && c.username === myUsername} pingsMe={pings(c)} canMod={canMod} onReply={() => setReplyTo(c)} onRemove={() => remove(c.id)} onReact={(e) => react(c.id, e)} />
             {(repliesByParent.get(c.id) ?? []).map((rc) => (
               <div key={rc.id} className="ml-8 mt-2 border-l border-white/10 pl-2">
-                <CommentItem c={rc} mine={!!myUsername && rc.username === myUsername} canMod={canMod} onReply={() => setReplyTo(c)} onRemove={() => remove(rc.id)} onReact={(e) => react(rc.id, e)} />
+                <CommentItem c={rc} mine={!!myUsername && rc.username === myUsername} pingsMe={pings(rc)} parent={rc.reply_to ? byId.get(rc.reply_to) : undefined} canMod={canMod} onReply={() => setReplyTo(c)} onRemove={() => remove(rc.id)} onReact={(e) => react(rc.id, e)} />
               </div>
             ))}
           </div>
@@ -486,15 +491,23 @@ function CommentThread({ postId, myUsername, canMod }: { postId: number; myUsern
   );
 }
 
-function CommentItem({ c, mine, canMod, onReply, onRemove, onReact }: { c: Comment; mine: boolean; canMod: boolean; onReply: () => void; onRemove: () => void; onReact: (emoji: string) => void }) {
+function CommentItem({ c, mine, pingsMe, parent, canMod, onReply, onRemove, onReact }: { c: Comment; mine: boolean; pingsMe?: boolean; parent?: Comment; canMod: boolean; onReply: () => void; onRemove: () => void; onReact: (emoji: string) => void }) {
   return (
-    <div className="group/c flex gap-2">
+    <div className={`group/c flex gap-2 rounded-lg ${pingsMe ? "border-l-2 border-amber-400/70 bg-amber-400/[0.07] py-1 pl-1.5 pr-1" : ""}`}>
       {c.avatar_url ? (
         <img src={c.avatar_url} alt="" className="h-6 w-6 shrink-0 rounded-full" />
       ) : (
         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold text-white">{(c.display_name || c.username).charAt(0).toUpperCase()}</div>
       )}
       <div className="min-w-0 flex-1">
+        {/* Embed preview of the comment being replied to. */}
+        {parent && (
+          <div className="mb-0.5 flex items-center gap-1 truncate text-[10px] text-white/40">
+            <Reply className="h-2.5 w-2.5 shrink-0" />
+            <span className="text-white/55">{parent.display_name || parent.username}</span>
+            <span className="truncate text-white/35">{parent.body}</span>
+          </div>
+        )}
         <div className="flex items-baseline gap-1.5">
           <span className="text-[11px] font-semibold text-white">{c.display_name || c.username}</span>
           <span className="text-[10px] text-white/30">{new Date(c.created_at).toLocaleDateString()}{c.edited_at ? " · edited" : ""}</span>
