@@ -3,14 +3,13 @@ import { X, ExternalLink, Copy, Check, RefreshCw, Download } from "lucide-react"
 import { ProviderIcon } from "./ProviderIcon";
 import { kiroApi, localApi, type AwsStart, type LocalSource, type Provider } from "../lib/api";
 
-type Tab = "local" | "oauth" | "aws" | "manual" | "refresh";
+type Tab = "oauth" | "aws" | "refresh" | "manual";
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: "local", label: "From IDE/CLI" },
   { id: "oauth", label: "OAuth" },
   { id: "aws", label: "AWS" },
-  { id: "manual", label: "Manual" },
   { id: "refresh", label: "Refresh token" },
+  { id: "manual", label: "Manual" },
 ];
 
 export function KiroAddModal({
@@ -22,7 +21,7 @@ export function KiroAddModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [tab, setTab] = useState<Tab>("local");
+  const [tab, setTab] = useState<Tab>("oauth");
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
@@ -56,11 +55,10 @@ export function KiroAddModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto p-4">
-          {tab === "local" && <LocalTab onSaved={onSaved} />}
           {tab === "oauth" && <OAuthTab onSaved={onSaved} />}
           {tab === "aws" && <AwsTab onSaved={onSaved} />}
-          {tab === "manual" && <ManualTab onSaved={onSaved} />}
           {tab === "refresh" && <RefreshTab onSaved={onSaved} />}
+          {tab === "manual" && <ManualTab onSaved={onSaved} />}
         </div>
       </div>
     </div>
@@ -81,79 +79,6 @@ function PrimaryBtn({ onClick, disabled, children }: { onClick: () => void; disa
     >
       {children}
     </button>
-  );
-}
-
-function LocalTab({ onSaved }: { onSaved: () => void }) {
-  const [sources, setSources] = useState<LocalSource[] | null>(null);
-  const [err, setErr] = useState("");
-  const [importing, setImporting] = useState("");
-
-  const scan = async () => {
-    setErr("");
-    setSources(null);
-    try {
-      const s = await localApi.scan();
-      setSources((s ?? []).filter((x) => x.provider === "kiro"));
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "scan failed");
-      setSources([]);
-    }
-  };
-
-  useEffect(() => {
-    scan();
-  }, []);
-
-  const doImport = async (s: LocalSource) => {
-    setErr("");
-    setImporting(s.target);
-    try {
-      await localApi.import(s.provider, s.target);
-      onSaved();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "import failed");
-    } finally {
-      setImporting("");
-    }
-  };
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-white/50">Detected from Kiro logged in on this machine.</p>
-        <button onClick={scan} className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-white/60 hover:bg-white/5 hover:text-white">
-          <RefreshCw className="h-3 w-3" /> Rescan
-        </button>
-      </div>
-
-      {sources === null ? (
-        <div className="h-16 animate-pulse rounded-lg bg-white/5" />
-      ) : sources.length === 0 ? (
-        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4 text-center text-xs text-white/40">
-          No Kiro credentials found. Log in to Kiro Desktop or CLI, then Rescan — or use another tab.
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {sources.map((s) => (
-            <div key={s.target} className="flex items-center gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2.5">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-white">{s.target}</p>
-                <p className="truncate font-mono text-[10px] text-white/35">{s.path}</p>
-              </div>
-              <button
-                onClick={() => doImport(s)}
-                disabled={!!importing}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90 disabled:opacity-50"
-              >
-                <Download className="h-3.5 w-3.5" /> {importing === s.target ? "Importing..." : "Import"}
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      <Err msg={err} />
-    </div>
   );
 }
 
@@ -207,11 +132,27 @@ function ManualTab({ onSaved }: { onSaved: () => void }) {
   );
 }
 
+// RefreshTab: paste a refresh token manually, OR pull it from the Kiro IDE/CLI
+// logged in on this machine (rescan + import).
 function RefreshTab({ onSaved }: { onSaved: () => void }) {
   const [token, setToken] = useState("");
   const [region, setRegion] = useState("us-east-1");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
+  const [sources, setSources] = useState<LocalSource[] | null>(null);
+  const [importing, setImporting] = useState("");
+
+  const scan = async () => {
+    setErr("");
+    try {
+      const rows = await localApi.scan();
+      setSources(rows.filter((s) => s.provider === "kiro"));
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "scan failed");
+      setSources([]);
+    }
+  };
+  useEffect(() => { scan(); }, []);
 
   const submit = async () => {
     setErr("");
@@ -225,22 +166,69 @@ function RefreshTab({ onSaved }: { onSaved: () => void }) {
       setSaving(false);
     }
   };
+  const doImport = async (s: LocalSource) => {
+    setErr("");
+    setImporting(s.target);
+    try {
+      await localApi.import(s.provider, s.target);
+      onSaved();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "import failed");
+    } finally {
+      setImporting("");
+    }
+  };
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-white/50">Add by refresh token; the access token is fetched on first use.</p>
+      {/* From IDE/CLI */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-white/50">Pull the token from Kiro IDE/CLI on this machine.</p>
+        <button onClick={scan} className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-white/60 hover:bg-white/5 hover:text-white">
+          <RefreshCw className="h-3 w-3" /> Rescan
+        </button>
+      </div>
+      {sources === null ? (
+        <div className="h-12 animate-pulse rounded-lg bg-white/5" />
+      ) : sources.length === 0 ? (
+        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3 text-center text-[11px] text-white/40">
+          No local Kiro login found — paste a refresh token below instead.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {sources.map((s) => (
+            <div key={s.target} className="flex items-center gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-white">{s.target}</p>
+                <p className="truncate font-mono text-[10px] text-white/35">{s.path}</p>
+              </div>
+              <button onClick={() => doImport(s)} disabled={!!importing} className="flex shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90 disabled:opacity-50">
+                <Download className="h-3.5 w-3.5" /> {importing === s.target ? "Importing…" : "Import"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 pt-1 text-[10px] uppercase tracking-wide text-white/25">
+        <div className="h-px flex-1 bg-white/10" /> or paste manually <div className="h-px flex-1 bg-white/10" />
+      </div>
+
+      {/* Manual refresh token */}
       <Input label="Refresh token" value={token} onChange={setToken} secret />
       <Input label="SSO region" value={region} onChange={setRegion} />
       <Err msg={err} />
       <PrimaryBtn onClick={submit} disabled={saving || !token.trim()}>
-        {saving ? "Saving..." : "Add account"}
+        {saving ? "Saving…" : "Add account"}
       </PrimaryBtn>
     </div>
   );
 }
 
 function AwsTab({ onSaved }: { onSaved: () => void }) {
+  const [mode, setMode] = useState<"builder-id" | "idc">("builder-id");
   const [region, setRegion] = useState("us-east-1");
+  const [startUrl, setStartUrl] = useState("");
   const [start, setStart] = useState<AwsStart | null>(null);
   const [status, setStatus] = useState("");
   const [err, setErr] = useState("");
@@ -253,7 +241,7 @@ function AwsTab({ onSaved }: { onSaved: () => void }) {
     setErr("");
     setBusy(true);
     try {
-      const s = await kiroApi.awsStart(region.trim());
+      const s = await kiroApi.awsStart({ region: region.trim(), auth_method: mode, start_url: startUrl.trim() });
       setStart(s);
       setStatus("Waiting for authorization...");
       poll.current = window.setInterval(async () => {
@@ -299,10 +287,22 @@ function AwsTab({ onSaved }: { onSaved: () => void }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-white/50">AWS Builder ID / Identity Center via device code.</p>
+      <p className="text-xs text-white/50">Sign in with AWS via device code. Builder ID for the default Kiro flow, or IAM Identity Center for enterprise AWS SSO.</p>
+      <div className="grid grid-cols-2 gap-2">
+        {([{ k: "builder-id", label: "Builder ID" }, { k: "idc", label: "Identity Center" }] as const).map((o) => (
+          <button
+            key={o.k}
+            onClick={() => setMode(o.k)}
+            className={`rounded-lg border px-3 py-2 text-xs ${mode === o.k ? "border-white/30 bg-white/10 text-white" : "border-white/10 text-white/50 hover:bg-white/5"}`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
       <Input label="SSO region" value={region} onChange={setRegion} />
+      {mode === "idc" && <Input label="Start URL (IdC portal)" value={startUrl} onChange={setStartUrl} />}
       <Err msg={err} />
-      <PrimaryBtn onClick={begin} disabled={busy}>
+      <PrimaryBtn onClick={begin} disabled={busy || (mode === "idc" && !startUrl.trim())}>
         {busy ? "Starting..." : "Start AWS login"}
       </PrimaryBtn>
     </div>

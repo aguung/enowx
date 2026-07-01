@@ -28,6 +28,7 @@ type awsSession struct {
 	client     *kiro.AWSClient
 	deviceCode string
 	region     string
+	authMethod string
 	created    time.Time
 }
 
@@ -102,18 +103,31 @@ func (h *Kiro) Refresh(w http.ResponseWriter, r *http.Request) {
 	writeData(w, map[string]any{"id": id})
 }
 
-// POST /api/accounts/kiro/aws/start  { "region": "" }
+// POST /api/accounts/kiro/aws/start  { "region": "", "auth_method": "builder-id|idc", "start_url": "" }
 func (h *Kiro) AWSStart(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Region string }
+	var in struct {
+		Region     string `json:"region"`
+		AuthMethod string `json:"auth_method"`
+		StartURL   string `json:"start_url"`
+	}
 	readJSON(r, &in)
-	client, dev, err := kiro.StartAWSDevice(h.doer, in.Region)
+	authMethod := "builder-id"
+	if in.AuthMethod == "idc" {
+		authMethod = "idc"
+	}
+	// Builder ID ignores start_url (uses the default portal); IdC needs it.
+	startURL := ""
+	if authMethod == "idc" {
+		startURL = in.StartURL
+	}
+	client, dev, err := kiro.StartAWSDevice(h.doer, in.Region, startURL)
 	if err != nil {
 		writeAPIErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	h.mu.Lock()
 	sid := h.id()
-	h.aws[sid] = &awsSession{client: client, deviceCode: dev.DeviceCode, region: nz(in.Region, "us-east-1"), created: time.Now()}
+	h.aws[sid] = &awsSession{client: client, deviceCode: dev.DeviceCode, region: nz(in.Region, "us-east-1"), authMethod: authMethod, created: time.Now()}
 	h.mu.Unlock()
 	writeData(w, map[string]any{
 		"session":                   sid,
@@ -135,7 +149,7 @@ func (h *Kiro) AWSPoll(w http.ResponseWriter, r *http.Request) {
 		writeAPIErr(w, http.StatusNotFound, "unknown session")
 		return
 	}
-	creds, pending, err := kiro.PollAWSDevice(h.doer, s.client, s.deviceCode, s.region)
+	creds, pending, err := kiro.PollAWSDevice(h.doer, s.client, s.deviceCode, s.region, s.authMethod)
 	if err != nil {
 		writeAPIErr(w, http.StatusBadGateway, err.Error())
 		return

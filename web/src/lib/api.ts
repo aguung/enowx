@@ -112,7 +112,8 @@ export const kiroApi = {
     api.post<{ id: number }>("/api/accounts/kiro/manual", { json, label }),
   refresh: (refresh_token: string, region?: string, label?: string) =>
     api.post<{ id: number }>("/api/accounts/kiro/refresh", { refresh_token, region, label }),
-  awsStart: (region?: string) => api.post<AwsStart>("/api/accounts/kiro/aws/start", { region }),
+  awsStart: (opts?: { region?: string; auth_method?: "builder-id" | "idc"; start_url?: string }) =>
+    api.post<AwsStart>("/api/accounts/kiro/aws/start", opts ?? {}),
   awsPoll: (session: string) =>
     api.get<{ status: "pending" | "done"; id?: number }>(
       `/api/accounts/kiro/aws/poll?session=${encodeURIComponent(session)}`,

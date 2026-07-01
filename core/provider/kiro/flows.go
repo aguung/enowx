@@ -97,8 +97,12 @@ func registerAWSClient(doer transport.Doer, region string) (*AWSClient, error) {
 }
 
 // StartAWSDevice registers a client and begins device authorization.
-func StartAWSDevice(doer transport.Doer, region string) (*AWSClient, *AWSDeviceAuth, error) {
+// StartAWSDevice begins the AWS device-code flow. startURL is the SSO start URL:
+// empty uses the default Builder ID portal; an IAM Identity Center URL enables
+// enterprise SSO (IdC).
+func StartAWSDevice(doer transport.Doer, region, startURL string) (*AWSClient, *AWSDeviceAuth, error) {
 	region = orDefault(region, "us-east-1")
+	startURL = orDefault(startURL, awsDefaultURL)
 	client, err := registerAWSClient(doer, region)
 	if err != nil {
 		return nil, nil, err
@@ -114,7 +118,7 @@ func StartAWSDevice(doer transport.Doer, region string) (*AWSClient, *AWSDeviceA
 	code, raw, err := postJSON(doer, fmt.Sprintf("https://oidc.%s.amazonaws.com/device_authorization", region), map[string]string{
 		"clientId":     client.ClientID,
 		"clientSecret": client.ClientSecret,
-		"startUrl":     awsDefaultURL,
+		"startUrl":     startURL,
 	}, &out, nil)
 	if err != nil {
 		return nil, nil, err
@@ -132,9 +136,11 @@ func StartAWSDevice(doer transport.Doer, region string) (*AWSClient, *AWSDeviceA
 	}, nil
 }
 
-// PollAWSDevice polls once. pending=true means keep polling; creds!=nil means done.
-func PollAWSDevice(doer transport.Doer, client *AWSClient, deviceCode, region string) (creds map[string]string, pending bool, err error) {
+// PollAWSDevice polls once. pending=true means keep polling; creds!=nil means
+// done. authMethod ("builder-id" or "idc") is stored on the resulting creds.
+func PollAWSDevice(doer transport.Doer, client *AWSClient, deviceCode, region, authMethod string) (creds map[string]string, pending bool, err error) {
 	region = orDefault(region, "us-east-1")
+	authMethod = orDefault(authMethod, "builder-id")
 	var out struct {
 		AccessToken  string `json:"accessToken"`
 		RefreshToken string `json:"refreshToken"`
@@ -163,7 +169,7 @@ func PollAWSDevice(doer transport.Doer, client *AWSClient, deviceCode, region st
 		"access_token":  out.AccessToken,
 		"refresh_token": out.RefreshToken,
 		"sso_region":    region,
-		"auth_method":   "builder-id",
+		"auth_method":   authMethod,
 		"client_id":     client.ClientID,
 		"client_secret": client.ClientSecret,
 		"expires_at":    time.Now().Add(time.Duration(maxInt(out.ExpiresIn, 3600)) * time.Second).Format(time.RFC3339),
