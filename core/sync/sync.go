@@ -237,6 +237,15 @@ func (m *Manager) PublicProfile(ctx context.Context, id string) (string, error) 
 	return string(raw), nil
 }
 
+// UserPosts fetches a user's posts (for their profile page).
+func (m *Manager) UserPosts(ctx context.Context, id string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/users/"+id+"/posts", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // PostsList fetches a page of the community feed (query appended).
 func (m *Manager) PostsList(ctx context.Context, query string) (string, error) {
 	var raw json.RawMessage

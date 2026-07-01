@@ -7,6 +7,7 @@ import { EmojiPicker } from "../components/EmojiPicker";
 import { useProfile } from "../os/useProfile";
 import { useChat, sendChat, editChat, deleteChat, reactChat, loadChannel } from "../os/chatBus";
 import { useDialog } from "../os/dialog";
+import { openProfile } from "../os/profileViewer";
 import { profileApi, modApi, type ChatMessage, type PublicProfile } from "../lib/api";
 
 interface ReplyTarget {
@@ -347,16 +348,21 @@ function UserCard({ userId }: { userId: string }) {
       p={p}
       compact
       footer={
-        canManage ? (
-          <button
-            onClick={toggleMod}
-            disabled={busy}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 px-2 py-1.5 text-xs font-medium text-white/80 hover:bg-white/5 disabled:opacity-50"
-          >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-            {p.is_moderator ? "Revoke moderator" : "Make moderator"}
+        <div className="space-y-1.5">
+          <button onClick={() => openProfile(p.id)} className="w-full rounded-lg border border-white/15 px-2 py-1.5 text-xs text-white/80 hover:bg-white/5">
+            View full profile
           </button>
-        ) : undefined
+          {canManage && (
+            <button
+              onClick={toggleMod}
+              disabled={busy}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 px-2 py-1.5 text-xs font-medium text-white/80 hover:bg-white/5 disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+              {p.is_moderator ? "Revoke moderator" : "Make moderator"}
+            </button>
+          )}
+        </div>
       }
     />
   );

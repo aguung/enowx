@@ -321,6 +321,7 @@ export interface ProfileEdit {
 export const profileApi = {
   update: (e: ProfileEdit) => api.patch<SyncUser>("/api/profile", e),
   publicById: (id: string) => api.get<PublicProfile>(`/api/users/${encodeURIComponent(id)}/profile`),
+  posts: (id: string) => api.get<{ posts: Post[] }>(`/api/users/${encodeURIComponent(id)}/posts`),
 };
 
 export interface Equipped {
@@ -400,6 +401,7 @@ export interface Comment {
   body: string;
   created_at: string;
   edited_at?: string | null;
+  reply_to?: number | null;
   username: string;
   display_name?: string;
   avatar_url?: string;
@@ -411,7 +413,7 @@ export interface Comment {
 
 export const commentsApi = {
   list: (postId: number) => api.get<{ comments: Comment[] }>(`/api/posts/${postId}/comments`),
-  add: (postId: number, body: string) => api.post<Comment>(`/api/posts/${postId}/comments`, { body }),
+  add: (postId: number, body: string, reply_to?: number) => api.post<Comment>(`/api/posts/${postId}/comments`, { body, reply_to: reply_to ?? null }),
   edit: (id: number, body: string) => api.patch<{ id: number }>(`/api/comments/${id}`, { body }),
   remove: (id: number) => api.del<{ deleted: number }>(`/api/comments/${id}`),
   react: (id: number, emoji: string) => api.post<{ id: number; reactions: Reaction[] }>(`/api/comments/${id}/reactions`, { emoji }),

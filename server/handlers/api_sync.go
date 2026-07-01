@@ -114,6 +114,12 @@ func (h *Sync) PublicProfile(w http.ResponseWriter, r *http.Request) {
 	writeData(w, profile)
 }
 
+// UserPosts proxies a user's posts (profile page).
+func (h *Sync) UserPosts(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.UserPosts(r.Context(), chi.URLParam(r, "id"))
+	proxyJSON(w, out, err)
+}
+
 // PostsList proxies the community feed.
 func (h *Sync) PostsList(w http.ResponseWriter, r *http.Request) {
 	q := ""

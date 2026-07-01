@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, ChevronUp, Plus, SmilePlus, Pencil, Trash2, MessageSquare } from "lucide-react";
+import { Loader2, ChevronUp, Plus, SmilePlus, Pencil, Trash2, MessageSquare, Reply } from "lucide-react";
 import { AppShell } from "./shell";
 import { Popover } from "../components/Popover";
 import { ProfileCard } from "../components/ProfileCard";
@@ -7,6 +7,7 @@ import { EmojiPicker } from "../components/EmojiPicker";
 import { useProfile } from "../os/useProfile";
 import { useDialog } from "../os/dialog";
 import { useFeed, loadFeed, createPost, upvotePost, reactPost, editPost, deletePost } from "../os/postsBus";
+import { openProfile } from "../os/profileViewer";
 import { profileApi, commentsApi, type Post, type PublicProfile, type Comment } from "../lib/api";
 
 export function PostsApp() {
@@ -212,6 +213,7 @@ function CommentThread({ postId, myUsername, canMod }: { postId: number; myUsern
   const [comments, setComments] = useState<Comment[] | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
 
   async function load() {
     try {
@@ -227,9 +229,10 @@ function CommentThread({ postId, myUsername, canMod }: { postId: number; myUsern
     if (!draft.trim() || busy) return;
     setBusy(true);
     try {
-      const c = await commentsApi.add(postId, draft.trim());
+      const c = await commentsApi.add(postId, draft.trim(), replyTo?.id);
       setComments((cs) => [...(cs ?? []), c]);
       setDraft("");
+      setReplyTo(null);
     } catch {
       /* ignore */
     } finally {
@@ -245,58 +248,87 @@ function CommentThread({ postId, myUsername, canMod }: { postId: number; myUsern
     if (r) setComments((cs) => (cs ? cs.map((c) => (c.id === id ? { ...c, reactions: r.reactions } : c)) : cs));
   }
 
+  // Group into top-level comments + their 1-level replies.
+  const tops = (comments ?? []).filter((c) => !c.reply_to);
+  const repliesByParent = new Map<number, Comment[]>();
+  for (const c of comments ?? []) {
+    if (c.reply_to) {
+      const arr = repliesByParent.get(c.reply_to) ?? [];
+      arr.push(c);
+      repliesByParent.set(c.reply_to, arr);
+    }
+  }
+
   return (
     <div className="mt-3 space-y-2 border-t border-white/5 pt-3">
       {comments === null ? (
         <div className="flex justify-center py-2"><Loader2 className="h-4 w-4 animate-spin text-white/30" /></div>
-      ) : comments.length === 0 ? (
+      ) : tops.length === 0 ? (
         <p className="text-[11px] text-white/35">No comments yet.</p>
       ) : (
-        comments.map((c) => {
-          const cmine = !!myUsername && c.username === myUsername;
-          return (
-            <div key={c.id} className="group/c flex gap-2">
-              {c.avatar_url ? (
-                <img src={c.avatar_url} alt="" className="h-6 w-6 shrink-0 rounded-full" />
-              ) : (
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold text-white">{(c.display_name || c.username).charAt(0).toUpperCase()}</div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-[11px] font-semibold text-white">{c.display_name || c.username}</span>
-                  <span className="text-[10px] text-white/30">{new Date(c.created_at).toLocaleDateString()}{c.edited_at ? " · edited" : ""}</span>
-                  <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/c:opacity-100">
-                    <CommentReact onPick={(e) => react(c.id, e)} />
-                    {(cmine || canMod) && <button onClick={() => remove(c.id)} className="rounded p-0.5 text-red-400/60 hover:bg-red-500/15 hover:text-red-300"><Trash2 className="h-3 w-3" /></button>}
-                  </div>
-                </div>
-                <p className="whitespace-pre-wrap break-words text-xs text-white/75">{c.body}</p>
-                {c.reactions && c.reactions.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {c.reactions.map((rx) => (
-                      <button key={rx.emoji} onClick={() => react(c.id, rx.emoji)} className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${rx.me ? "border-indigo-400/40 bg-indigo-500/20 text-white" : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10"}`}>
-                        <span>{rx.emoji}</span><span className="tabular-nums">{rx.count}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+        tops.map((c) => (
+          <div key={c.id}>
+            <CommentItem c={c} mine={!!myUsername && c.username === myUsername} canMod={canMod} onReply={() => setReplyTo(c)} onRemove={() => remove(c.id)} onReact={(e) => react(c.id, e)} />
+            {(repliesByParent.get(c.id) ?? []).map((rc) => (
+              <div key={rc.id} className="ml-8 mt-2 border-l border-white/10 pl-2">
+                <CommentItem c={rc} mine={!!myUsername && rc.username === myUsername} canMod={canMod} onReply={() => setReplyTo(c)} onRemove={() => remove(rc.id)} onReact={(e) => react(rc.id, e)} />
               </div>
-            </div>
-          );
-        })
+            ))}
+          </div>
+        ))
+      )}
+
+      {replyTo && (
+        <div className="flex items-center justify-between gap-2 rounded-t-lg bg-white/5 px-2 py-1 text-[11px] text-white/50">
+          <span className="truncate">Replying to <span className="text-white/70">{replyTo.display_name || replyTo.username}</span></span>
+          <button onClick={() => setReplyTo(null)} className="text-white/40 hover:text-white">✕</button>
+        </div>
       )}
       <div className="flex items-center gap-2 pt-1">
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), send())}
-          placeholder="Add a comment…"
+          placeholder={replyTo ? `Reply to ${replyTo.display_name || replyTo.username}…` : "Add a comment…"}
           maxLength={2000}
           className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs text-white outline-none focus:border-white/25"
         />
         <button onClick={send} disabled={busy || !draft.trim()} className="rounded-lg bg-indigo-500/90 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Send"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function CommentItem({ c, mine, canMod, onReply, onRemove, onReact }: { c: Comment; mine: boolean; canMod: boolean; onReply: () => void; onRemove: () => void; onReact: (emoji: string) => void }) {
+  return (
+    <div className="group/c flex gap-2">
+      {c.avatar_url ? (
+        <img src={c.avatar_url} alt="" className="h-6 w-6 shrink-0 rounded-full" />
+      ) : (
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[10px] font-bold text-white">{(c.display_name || c.username).charAt(0).toUpperCase()}</div>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[11px] font-semibold text-white">{c.display_name || c.username}</span>
+          <span className="text-[10px] text-white/30">{new Date(c.created_at).toLocaleDateString()}{c.edited_at ? " · edited" : ""}</span>
+          <div className="ml-auto flex items-center gap-0.5 opacity-0 group-hover/c:opacity-100">
+            <button onClick={onReply} className="rounded p-0.5 text-white/40 hover:bg-white/10 hover:text-white"><Reply className="h-3 w-3" /></button>
+            <CommentReact onPick={onReact} />
+            {(mine || canMod) && <button onClick={onRemove} className="rounded p-0.5 text-red-400/60 hover:bg-red-500/15 hover:text-red-300"><Trash2 className="h-3 w-3" /></button>}
+          </div>
+        </div>
+        <p className="whitespace-pre-wrap break-words text-xs text-white/75">{c.body}</p>
+        {c.reactions && c.reactions.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {c.reactions.map((rx) => (
+              <button key={rx.emoji} onClick={() => onReact(rx.emoji)} className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] ${rx.me ? "border-indigo-400/40 bg-indigo-500/20 text-white" : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10"}`}>
+                <span>{rx.emoji}</span><span className="tabular-nums">{rx.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -320,5 +352,15 @@ function UserCard({ userId }: { userId: string }) {
   const [p, setP] = useState<PublicProfile | null>(null);
   useEffect(() => { profileApi.publicById(userId).then(setP).catch(() => {}); }, [userId]);
   if (!p) return <div className="flex h-24 items-center justify-center"><Loader2 className="h-4 w-4 animate-spin text-white/30" /></div>;
-  return <ProfileCard p={p} compact />;
+  return (
+    <ProfileCard
+      p={p}
+      compact
+      footer={
+        <button onClick={() => openProfile(userId)} className="w-full rounded-lg border border-white/15 px-2 py-1.5 text-xs text-white/80 hover:bg-white/5">
+          View full profile
+        </button>
+      }
+    />
+  );
 }
