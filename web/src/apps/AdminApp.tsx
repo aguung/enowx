@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search } from "lucide-react";
 import { AppShell } from "./shell";
 import { openProfile } from "../os/profileViewer";
+import { useAdminEvents } from "../os/adminBus";
 import { adminApi, modApi, searchApi, type FlaggedLink, type ModAction, type AdminStats, type SearchUserHit } from "../lib/api";
 
 type Tab = "stats" | "flags" | "users" | "log";
@@ -46,9 +47,11 @@ export function AdminApp() {
 
 function StatsTab() {
   const [s, setS] = useState<AdminStats | null>(null);
-  useEffect(() => {
+  const load = useCallback(() => {
     adminApi.stats().then(setS).catch(() => setS(null));
   }, []);
+  useEffect(() => load(), [load]);
+  useAdminEvents(load);
   if (!s) return <div className="h-20 animate-pulse rounded-lg bg-white/5" />;
   const cards = [
     { label: "Users", value: s.users },
@@ -72,9 +75,11 @@ function StatsTab() {
 function FlagsTab() {
   const [links, setLinks] = useState<FlaggedLink[] | null>(null);
   const [busy, setBusy] = useState(0);
-  useEffect(() => {
+  const load = useCallback(() => {
     adminApi.flags().then((r) => setLinks(r.links ?? [])).catch(() => setLinks([]));
   }, []);
+  useEffect(() => load(), [load]);
+  useAdminEvents(load);
   async function review(id: number) {
     setBusy(id);
     try {
@@ -167,9 +172,11 @@ function UsersTab() {
 
 function LogTab() {
   const [actions, setActions] = useState<ModAction[] | null>(null);
-  useEffect(() => {
+  const load = useCallback(() => {
     adminApi.log().then((r) => setActions(r.actions ?? [])).catch(() => setActions([]));
   }, []);
+  useEffect(() => load(), [load]);
+  useAdminEvents(load);
   if (!actions) return <div className="h-10 animate-pulse rounded-lg bg-white/5" />;
   if (actions.length === 0) return <div className="text-[11px] text-white/40">No moderation actions yet.</div>;
   return (
