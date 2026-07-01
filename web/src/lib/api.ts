@@ -132,13 +132,6 @@ export const kiroApi = {
     api.post<{ id: number }>("/api/accounts/kiro/oauth/exchange", { session, code }),
 };
 
-export const qwenApi = {
-  deviceStart: () =>
-    api.post<{ session: string; user_code: string; verification_uri: string; verification_uri_complete: string; interval: number }>("/api/accounts/qwen/device/start"),
-  devicePoll: (session: string) =>
-    api.get<{ status: "pending" | "done"; id?: number }>(`/api/accounts/qwen/device/poll?session=${encodeURIComponent(session)}`),
-};
-
 export const codexApi = {
   oauthStart: () => api.post<{ session: string; authorize_url: string }>("/api/accounts/codex/oauth/start"),
   // code may be a raw code or the full callback URL — backend extracts it.

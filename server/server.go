@@ -59,7 +59,6 @@ func New(addr string, d Deps) *Server {
 	docs := handlers.NewDocs(d.Settings.Version)
 	kiro := handlers.NewKiro(d.Doer, d.Accounts)
 	codex := handlers.NewCodex(d.Doer, d.Accounts)
-	qwen := handlers.NewQwen(d.Doer, d.Accounts)
 	local := handlers.NewLocal(d.Accounts)
 	usage := handlers.NewUsage(d.Registry, d.Accounts)
 	models := handlers.NewModels(d.Registry, d.Accounts, d.Sync)
@@ -70,7 +69,6 @@ func New(addr string, d Deps) *Server {
 	accounts.SetWarmer(warmup)
 	kiro.SetWarmer(warmup)
 	codex.SetWarmer(warmup)
-	qwen.SetWarmer(warmup)
 	local.SetWarmer(warmup)
 	dash := middleware.NewDashboard(d.SettingsKV)
 	term := handlers.NewTerminal(dash)
@@ -144,9 +142,6 @@ func New(addr string, d Deps) *Server {
 		r.Post("/accounts/codex/oauth/start", codex.OAuthStart)
 		r.Post("/accounts/codex/oauth/exchange", codex.OAuthExchange)
 		r.Post("/accounts/codex/manual", codex.Manual)
-
-		r.Post("/accounts/qwen/device/start", qwen.DeviceStart)
-		r.Get("/accounts/qwen/device/poll", qwen.DevicePoll)
 
 		r.Get("/local-sources", local.Scan)
 		r.Post("/local-sources/import", local.Import)

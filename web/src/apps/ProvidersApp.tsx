@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Plus, Image } from "lucide-react";
+import { Search, Plus } from "lucide-react";
 import { AppShell } from "./shell";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { AddAccountModal } from "../components/AddAccountModal";
 import { KiroAddModal } from "../components/KiroAddModal";
 import { CodexAddModal } from "../components/CodexAddModal";
-import { QwenAddModal } from "../components/QwenAddModal";
 import { providersApi, accountsApi, type Provider, type Account } from "../lib/api";
 
 export function ProvidersApp() {
@@ -108,17 +107,7 @@ export function ProvidersApp() {
           }}
         />
       )}
-      {adding && adding.name === "qwen" && (
-        <QwenAddModal
-          provider={adding}
-          onClose={() => setAdding(null)}
-          onSaved={() => {
-            setAdding(null);
-            load();
-          }}
-        />
-      )}
-      {adding && adding.name !== "kiro" && adding.name !== "codex" && adding.name !== "qwen" && (
+      {adding && adding.name !== "kiro" && adding.name !== "codex" && (
         <AddAccountModal
           provider={adding}
           onClose={() => setAdding(null)}
@@ -148,11 +137,6 @@ function ProviderCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-white">{provider.label}</p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-white/40">
-            {provider.images && (
-              <span className="inline-flex items-center gap-1 rounded-md bg-white/5 px-1.5 py-0.5">
-                <Image className="h-3 w-3" /> images
-              </span>
-            )}
             <span className="rounded-md bg-white/5 px-1.5 py-0.5">
               {count} {count === 1 ? "account" : "accounts"}
             </span>
