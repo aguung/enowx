@@ -53,7 +53,7 @@ func (s *apiTestStore) DeleteCollection(ctx context.Context, id int64) error {
 
 func (s *apiTestStore) Requests(ctx context.Context) ([]store.ApiRequest, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, collection_id, name, method, url, headers, query, body, body_type, auth, sort
+		`SELECT id, collection_id, name, method, base_url, url, headers, query, body, body_type, auth, sort
 		 FROM apitest_requests ORDER BY sort, id`)
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (s *apiTestStore) Requests(ctx context.Context) ([]store.ApiRequest, error)
 	out := []store.ApiRequest{}
 	for rows.Next() {
 		var r store.ApiRequest
-		if err := rows.Scan(&r.ID, &r.CollectionID, &r.Name, &r.Method, &r.URL, &r.Headers, &r.Query, &r.Body, &r.BodyType, &r.Auth, &r.Sort); err != nil {
+		if err := rows.Scan(&r.ID, &r.CollectionID, &r.Name, &r.Method, &r.BaseURL, &r.URL, &r.Headers, &r.Query, &r.Body, &r.BodyType, &r.Auth, &r.Sort); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -88,18 +88,18 @@ func (s *apiTestStore) SaveRequest(ctx context.Context, r store.ApiRequest) (int
 	}
 	if r.ID == 0 {
 		res, err := s.db.ExecContext(ctx,
-			`INSERT INTO apitest_requests (collection_id, name, method, url, headers, query, body, body_type, auth, sort)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			r.CollectionID, r.Name, r.Method, r.URL, r.Headers, r.Query, r.Body, r.BodyType, r.Auth, r.Sort)
+			`INSERT INTO apitest_requests (collection_id, name, method, base_url, url, headers, query, body, body_type, auth, sort)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			r.CollectionID, r.Name, r.Method, r.BaseURL, r.URL, r.Headers, r.Query, r.Body, r.BodyType, r.Auth, r.Sort)
 		if err != nil {
 			return 0, err
 		}
 		return res.LastInsertId()
 	}
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE apitest_requests SET collection_id=?, name=?, method=?, url=?, headers=?, query=?, body=?, body_type=?, auth=?, sort=?
+		`UPDATE apitest_requests SET collection_id=?, name=?, method=?, base_url=?, url=?, headers=?, query=?, body=?, body_type=?, auth=?, sort=?
 		 WHERE id=?`,
-		r.CollectionID, r.Name, r.Method, r.URL, r.Headers, r.Query, r.Body, r.BodyType, r.Auth, r.Sort, r.ID)
+		r.CollectionID, r.Name, r.Method, r.BaseURL, r.URL, r.Headers, r.Query, r.Body, r.BodyType, r.Auth, r.Sort, r.ID)
 	return r.ID, err
 }
 

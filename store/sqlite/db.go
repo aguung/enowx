@@ -77,11 +77,22 @@ func seedApiTest(db *sql.DB) {
   "system": "You are a helpful assistant.",
   "messages": [{ "role": "user", "content": "hi" }]
 }`
-	stmt := `INSERT INTO apitest_requests (collection_id, name, method, url, body, body_type, sort) VALUES (?,?,?,?,?,?,?)`
-	db.Exec(stmt, cid, "Chat Completions", "POST", "/v1/chat/completions", chatBody, "json", 0)
-	db.Exec(stmt, cid, "Anthropic Messages", "POST", "/anthropic/v1/messages", anthBody, "json", 1)
-	db.Exec(stmt, cid, "List accounts", "GET", "/api/accounts", "", "none", 2)
-	db.Exec(stmt, cid, "List models", "GET", "/api/models", "", "none", 3)
+	// Gateway samples use {{base_url}} + a Bearer {{api_key}} so the built-in
+	// "Local" environment supplies both — no magic auto-key injection.
+	const base = "{{base_url}}"
+	auth := `{"type":"bearer","token":"{{api_key}}"}`
+	stmt := `INSERT INTO apitest_requests (collection_id, name, method, base_url, url, body, body_type, auth, sort) VALUES (?,?,?,?,?,?,?,?,?)`
+	db.Exec(stmt, cid, "Chat Completions", "POST", base, "/v1/chat/completions", chatBody, "json", auth, 0)
+	db.Exec(stmt, cid, "Anthropic Messages", "POST", base, "/anthropic/v1/messages", anthBody, "json", auth, 1)
+	db.Exec(stmt, cid, "List accounts", "GET", base, "/api/accounts", "", "none", auth, 2)
+	db.Exec(stmt, cid, "List models", "GET", base, "/api/models", "", "none", auth, 3)
+
+	// Built-in "Local" environment: base_url + api_key (from an existing gateway
+	// key if there is one), so the Gateway samples run out of the box.
+	var key string
+	db.QueryRow(`SELECT secret FROM api_keys WHERE enabled = 1 ORDER BY id LIMIT 1`).Scan(&key)
+	vars := `[{"key":"base_url","value":"http://localhost:1430"},{"key":"api_key","value":"` + key + `"}]`
+	db.Exec(`INSERT INTO apitest_environments (name, vars, active) VALUES ('Local', ?, 1)`, vars)
 }
 
 func (d *DB) Accounts() store.AccountStore  { return d.acct }
@@ -116,6 +127,9 @@ func migrate(db *sql.DB) error {
 		return err
 	}
 	if err := ensureColumn(db, "request_logs", "source", "TEXT NOT NULL DEFAULT 'api'"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "apitest_requests", "base_url", "TEXT NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}
 	for _, c := range []struct{ name, decl string }{

@@ -90,6 +90,7 @@ type ApiRequest struct {
 	CollectionID int64  `json:"collection_id"`
 	Name         string `json:"name"`
 	Method       string `json:"method"`
+	BaseURL      string `json:"base_url"`
 	URL          string `json:"url"`
 	Headers      string `json:"headers"` // JSON: [{key,value,on}]
 	Query        string `json:"query"`   // JSON: [{key,value,on}]

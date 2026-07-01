@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Send, Plus, Trash2, Loader2, Save, FolderPlus, ChevronRight, ChevronDown, History, Globe, X, Pencil } from "lucide-react";
 import {
   apitestApi,
-  keysApi,
   type ApiCollection,
   type ApiSavedRequest,
   type ApiEnvironment,
@@ -32,6 +31,7 @@ interface Draft {
   collection_id: number;
   name: string;
   method: Method;
+  baseUrl: string;
   url: string;
   headers: KV[];
   query: KV[];
@@ -45,6 +45,7 @@ const blankDraft = (): Draft => ({
   collection_id: 0,
   name: "Untitled",
   method: "GET",
+  baseUrl: "",
   url: "",
   headers: [{ key: "", value: "", on: true }],
   query: [{ key: "", value: "", on: true }],
@@ -70,7 +71,6 @@ export function ApiTestApp() {
   const [saved, setSaved] = useState<ApiSavedRequest[]>([]);
   const [envs, setEnvs] = useState<ApiEnvironment[]>([]);
   const [history, setHistory] = useState<ApiHistoryItem[]>([]);
-  const [apiKey, setApiKey] = useState("");
 
   const dialog = useDialog();
   const ctx = useContextMenu();
@@ -102,10 +102,6 @@ export function ApiTestApp() {
 
   useEffect(() => {
     reload().catch(() => {});
-    keysApi.list().then((keys) => {
-      const k = keys.find((x) => x.enabled && x.secret);
-      if (k) setApiKey(k.secret);
-    }).catch(() => {});
   }, []);
 
   const activeEnv = envs.find((e) => e.active) || null;
@@ -117,7 +113,6 @@ export function ApiTestApp() {
   const interp = (s: string) => s.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_, k) => envVars[k] ?? `{{${k}}}`);
 
   const bodyAllowed = draft.method !== "GET" && draft.method !== "DELETE";
-  const isLocal = (u: string) => u.startsWith("/") || u.includes("localhost") || u.includes("127.0.0.1");
 
   function loadSaved(r: ApiSavedRequest) {
     setDraft({
@@ -125,6 +120,7 @@ export function ApiTestApp() {
       collection_id: r.collection_id,
       name: r.name,
       method: (r.method as Method) || "GET",
+      baseUrl: r.base_url || "",
       url: r.url,
       headers: withBlank(parseKV(r.headers)),
       query: withBlank(parseKV(r.query)),
@@ -173,9 +169,15 @@ export function ApiTestApp() {
     { label: "Delete", danger: true, onClick: () => apitestApi.deleteRequest(r.id).then(reload) },
   ];
 
-  // Build the final URL with query params appended + env interpolation.
+  // Build the final URL: base URL + path (unless the path is already absolute),
+  // then query params, then env interpolation.
   function buildURL(): string {
-    let u = interp(draft.url.trim());
+    const path = interp(draft.url.trim());
+    const base = interp(draft.baseUrl.trim());
+    let u = path;
+    if (base && !/^https?:\/\//i.test(path)) {
+      u = base.replace(/\/+$/, "") + (path && !path.startsWith("/") ? "/" : "") + path;
+    }
     const qs = draft.query.filter((q) => q.on && q.key.trim()).map((q) => `${encodeURIComponent(interp(q.key))}=${encodeURIComponent(interp(q.value))}`);
     if (qs.length) u += (u.includes("?") ? "&" : "?") + qs.join("&");
     return u;
@@ -193,10 +195,6 @@ export function ApiTestApp() {
     if (bodyAllowed && draft.body.trim()) {
       if (draft.bodyType === "json" || draft.bodyType === "graphql") h["Content-Type"] ||= "application/json";
       else if (draft.bodyType === "form") h["Content-Type"] ||= "application/x-www-form-urlencoded";
-    }
-    // Auto gateway key for local proxy calls.
-    if (isLocal(draft.url) && apiKey && !Object.keys(h).some((k) => k.toLowerCase() === "authorization")) {
-      h["Authorization"] = `Bearer ${apiKey}`;
     }
     return h;
   }
@@ -279,6 +277,7 @@ export function ApiTestApp() {
       collection_id: cid,
       name: draft.name || "Untitled",
       method: draft.method,
+      base_url: draft.baseUrl,
       url: draft.url,
       headers: JSON.stringify(draft.headers.filter((h) => h.key)),
       query: JSON.stringify(draft.query.filter((q) => q.key)),
@@ -366,18 +365,27 @@ export function ApiTestApp() {
           <button onClick={() => saveRequest()} className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/5 hover:text-white"><Save className="h-3.5 w-3.5" /> Save</button>
         </div>
 
+        {/* Base URL */}
+        <div className="flex items-center gap-2">
+          <span className="w-16 shrink-0 text-right text-[10px] uppercase tracking-wide text-white/35">Base URL</span>
+          <input value={draft.baseUrl} onChange={(e) => setDraft((d) => ({ ...d, baseUrl: e.target.value }))} placeholder="https://api.example.com   (optional; prepended to a relative path)" className="flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 font-mono text-[11px] text-white/80 outline-none focus:border-white/25" />
+        </div>
+
         {/* Method + URL + Send */}
         <div className="flex items-center gap-2">
           <select value={draft.method} onChange={(e) => setDraft((d) => ({ ...d, method: e.target.value as Method }))} className="rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-xs font-semibold text-white outline-none">
             {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-          <input value={draft.url} onChange={(e) => setDraft((d) => ({ ...d, url: e.target.value }))} placeholder="https://api.example.com/…  or  /v1/… (this gateway)" className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white outline-none focus:border-white/25" />
+          <input value={draft.url} onChange={(e) => setDraft((d) => ({ ...d, url: e.target.value }))} placeholder={draft.baseUrl ? "/path/…  (joined to base URL)" : "https://api.example.com/path  or  /path"} className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white outline-none focus:border-white/25" />
           {busy ? (
             <button onClick={() => abortRef.current?.abort()} className="rounded-lg bg-white/10 px-3 py-2 text-xs text-white hover:bg-white/15">Stop</button>
           ) : (
             <button onClick={send} className="flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-xs font-medium text-black hover:opacity-90"><Send className="h-3.5 w-3.5" /> Send</button>
           )}
         </div>
+        {draft.baseUrl.trim() && draft.url.trim() && !/^https?:\/\//i.test(draft.url) && (
+          <div className="truncate px-1 font-mono text-[10px] text-white/30">→ {buildURL()}</div>
+        )}
 
         {/* Request tabs */}
         <div className="flex gap-1 border-b border-white/5 text-xs">

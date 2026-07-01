@@ -238,6 +238,7 @@ export interface ApiSavedRequest {
   collection_id: number;
   name: string;
   method: string;
+  base_url: string;
   url: string;
   headers: string; // JSON [{key,value,on}]
   query: string;   // JSON [{key,value,on}]
