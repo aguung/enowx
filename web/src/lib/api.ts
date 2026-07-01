@@ -65,6 +65,9 @@ export interface ProviderModel {
   owned_by?: string;
   enabled?: boolean;
   sort_order?: number;
+  aliases?: string[];
+  max_input?: number;
+  max_output?: number;
 }
 
 export const accountsApi = {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Trash2, Power, PowerOff, RefreshCw, Zap, Boxes, X } from "lucide-react";
+import { Search, Trash2, Power, PowerOff, RefreshCw, Zap, Boxes, X, Copy, Check } from "lucide-react";
 import { AppShell } from "./shell";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { Tooltip } from "../components/Tooltip";
@@ -230,46 +230,83 @@ export function AccountsApp() {
   );
 }
 
-// AccountModelsPanel is the side popup listing the models an account can access
-// (fetched live for fetchable providers, or from the cloud catalog otherwise).
+// AccountModelsPanel is a centered modal listing the models an account can
+// access (fetched live for fetchable providers, or the cloud catalog otherwise).
 function AccountModelsPanel({ account, onClose }: { account: Account; onClose: () => void }) {
   const [data, setData] = useState<{ source: string; models: ProviderModel[] } | null>(null);
   const [err, setErr] = useState("");
+  const [q, setQ] = useState("");
   useEffect(() => {
     accountsApi
       .models(account.id)
       .then((r) => setData({ source: r.source, models: r.models ?? [] }))
       .catch((e) => setErr(e instanceof Error ? e.message : "failed to load models"));
   }, [account.id]);
+  const shown = (data?.models ?? []).filter(
+    (m) => !q || m.name.toLowerCase().includes(q.toLowerCase()) || m.model_id.toLowerCase().includes(q.toLowerCase()),
+  );
   return (
-    <div className="fixed inset-0 z-[10600] flex justify-end bg-black/50" onClick={onClose}>
-      <div className="h-full w-80 overflow-y-auto border-l border-white/10 bg-[#0e1016] p-4" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-1 flex items-center justify-between">
-          <div className="text-sm font-semibold text-white">Models</div>
-          <button onClick={onClose} className="rounded p-1 text-white/50 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
-        </div>
-        <div className="mb-3 text-[11px] text-white/40">
-          {account.label || account.provider} · <span className="capitalize">{account.provider}</span>
-          {data && <span className="ml-1 rounded bg-white/10 px-1.5 py-0.5">{data.source === "upstream" ? "live" : "catalog"}</span>}
-        </div>
-        {err && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</div>}
-        {!data && !err && <div className="h-16 animate-pulse rounded-lg bg-white/5" />}
-        {data && data.models.length === 0 && <div className="text-[11px] text-white/40">No models found for this account.</div>}
-        <div className="space-y-1">
-          {data?.models.map((m) => (
-            <div key={m.model_id} className="rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-1.5">
-              <div className="flex items-center gap-1.5">
-                <span className="truncate text-sm text-white">{m.name}</span>
-                {m.type === "image" && <span className="rounded bg-fuchsia-500/20 px-1 text-[9px] text-fuchsia-300">IMG</span>}
-              </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-white/35">
-                <span className="font-mono">{m.model_id}</span>
-                {m.owned_by && <span>· {m.owned_by}</span>}
-              </div>
+    <div className="fixed inset-0 z-[10600] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e1016] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <div>
+            <div className="text-sm font-semibold text-white">Models · {account.label || account.provider}</div>
+            <div className="text-[11px] text-white/40">
+              <span className="capitalize">{account.provider}</span>
+              {data && <span className="ml-1 rounded bg-white/10 px-1.5 py-0.5">{data.source === "upstream" ? "live" : "catalog"}</span>}
+              {data && <span className="ml-1">· {data.models.length} models</span>}
             </div>
-          ))}
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1 text-white/50 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        {data && data.models.length > 6 && (
+          <div className="border-b border-white/5 px-4 py-2">
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter models…" className="w-full rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-xs text-white outline-none focus:border-white/25" />
+          </div>
+        )}
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+          {err && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</div>}
+          {!data && !err && <div className="h-16 animate-pulse rounded-lg bg-white/5" />}
+          {data && shown.length === 0 && <div className="text-[11px] text-white/40">No models found.</div>}
+          {shown.map((m) => <ModelRow key={m.model_id} m={m} />)}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ModelRow renders one model with context sizes + a copy-id button.
+function ModelRow({ m }: { m: ProviderModel }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard?.writeText(m.model_id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
+  const ctx = (n?: number) => (n && n > 0 ? (n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`) : null);
+  const inTok = ctx(m.max_input), outTok = ctx(m.max_output);
+  return (
+    <div className="group flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-2">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="truncate text-sm text-white">{m.name}</span>
+          {m.type === "image" && <span className="rounded bg-fuchsia-500/20 px-1 text-[9px] text-fuchsia-300">IMG</span>}
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[10px] text-white/35">
+          <span className="font-mono">{m.model_id}</span>
+          {m.owned_by && <span>· {m.owned_by}</span>}
+          {inTok && <span>· in {inTok}</span>}
+          {outTok && <span>· out {outTok}</span>}
+        </div>
+        {m.aliases && m.aliases.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {m.aliases.map((a) => <span key={a} className="rounded bg-indigo-500/15 px-1.5 py-0.5 font-mono text-[9px] text-indigo-300">{a}</span>)}
+          </div>
+        )}
+      </div>
+      <button onClick={copy} title="Copy model id" className="shrink-0 rounded p-1 text-white/40 opacity-0 transition hover:bg-white/10 hover:text-white group-hover:opacity-100">
+        {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+      </button>
     </div>
   );
 }

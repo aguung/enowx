@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search, MoreHorizontal, Ban, VolumeX, AlertTriangle, Plus, Minus, Boxes, Trash2 } from "lucide-react";
+import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search, MoreHorizontal, Ban, VolumeX, AlertTriangle, Plus, Minus, Boxes, Trash2, Pencil } from "lucide-react";
 import { AppShell } from "./shell";
 import { openProfile } from "../os/profileViewer";
 import { useAdminEvents } from "../os/adminBus";
@@ -285,11 +285,40 @@ function ModelsTab() {
         { name: "model_id", label: "Model ID", placeholder: "gemini-3.1-pro" },
         { name: "name", label: "Display name", placeholder: "Gemini 3.1 Pro" },
         { name: "owned_by", label: "Owned by", placeholder: "google" },
+        { name: "aliases", label: "Aliases (comma-separated)", placeholder: "gemini-pro, gpro" },
+        { name: "max_input", label: "Max input tokens", placeholder: "200000" },
+        { name: "max_output", label: "Max output tokens", placeholder: "64000" },
       ],
       confirmLabel: "Add",
     });
     if (!res || !res.model_id?.trim()) return;
-    await adminApi.upsertModel({ provider, model_id: res.model_id.trim(), name: (res.name || res.model_id).trim(), type: "chat", owned_by: (res.owned_by || "").trim(), enabled: true, sort_order: (models?.length ?? 0) * 10 + 10 });
+    const aliases = (res.aliases || "").split(",").map((s) => s.trim()).filter(Boolean);
+    await adminApi.upsertModel({
+      provider, model_id: res.model_id.trim(), name: (res.name || res.model_id).trim(), type: "chat",
+      owned_by: (res.owned_by || "").trim(), enabled: true, sort_order: (models?.length ?? 0) * 10 + 10,
+      aliases, max_input: parseInt(res.max_input || "0", 10) || 0, max_output: parseInt(res.max_output || "0", 10) || 0,
+    });
+    load();
+  }
+  async function edit(m: ProviderModel) {
+    if (!m.id) return;
+    const res = await dialog.form({
+      title: "Edit model",
+      fields: [
+        { name: "name", label: "Display name", defaultValue: m.name },
+        { name: "owned_by", label: "Owned by", defaultValue: m.owned_by || "" },
+        { name: "aliases", label: "Aliases (comma-separated)", defaultValue: (m.aliases || []).join(", ") },
+        { name: "max_input", label: "Max input tokens", defaultValue: String(m.max_input || 0) },
+        { name: "max_output", label: "Max output tokens", defaultValue: String(m.max_output || 0) },
+      ],
+      confirmLabel: "Save",
+    });
+    if (!res) return;
+    await adminApi.updateModel(m.id, {
+      ...m, name: (res.name || m.model_id).trim(), owned_by: (res.owned_by || "").trim(),
+      aliases: (res.aliases || "").split(",").map((s) => s.trim()).filter(Boolean),
+      max_input: parseInt(res.max_input || "0", 10) || 0, max_output: parseInt(res.max_output || "0", 10) || 0,
+    });
     load();
   }
   async function toggle(m: ProviderModel) {
@@ -314,16 +343,31 @@ function ModelsTab() {
       <p className="text-[10px] text-white/35">Only providers without a live model endpoint are edited here. Fetchable providers (kiro, openai-compat) show their models live per account.</p>
       {!models && <div className="h-10 animate-pulse rounded-lg bg-white/5" />}
       {models?.length === 0 && <div className="text-[11px] text-white/40">No models for this provider.</div>}
-      {models?.map((m) => (
-        <div key={m.id ?? m.model_id} className={`flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-1.5 ${m.enabled ? "" : "opacity-50"}`}>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm text-white">{m.name}</div>
-            <div className="truncate text-[10px] text-white/35"><span className="font-mono">{m.model_id}</span>{m.owned_by && ` · ${m.owned_by}`}</div>
+      {models?.map((m) => {
+        const ctx = (n?: number) => (n && n > 0 ? (n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`) : null);
+        return (
+          <div key={m.id ?? m.model_id} className={`flex items-start gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-1.5 ${m.enabled ? "" : "opacity-50"}`}>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm text-white">{m.name}</div>
+              <div className="flex flex-wrap items-center gap-x-1.5 text-[10px] text-white/35">
+                <span className="font-mono">{m.model_id}</span>
+                {m.owned_by && <span>· {m.owned_by}</span>}
+                {ctx(m.max_input) && <span>· in {ctx(m.max_input)}</span>}
+                {ctx(m.max_output) && <span>· out {ctx(m.max_output)}</span>}
+                <button onClick={() => navigator.clipboard?.writeText(m.model_id)} title="Copy id" className="text-white/30 hover:text-white"><Copy className="h-3 w-3" /></button>
+              </div>
+              {m.aliases && m.aliases.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {m.aliases.map((a) => <span key={a} className="rounded bg-indigo-500/15 px-1.5 py-0.5 font-mono text-[9px] text-indigo-300">{a}</span>)}
+                </div>
+              )}
+            </div>
+            <button onClick={() => edit(m)} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white"><Pencil className="h-3.5 w-3.5" /></button>
+            <button onClick={() => toggle(m)} className={`rounded-lg border px-2 py-1 text-[10px] ${m.enabled ? "border-white/10 text-white/60 hover:bg-white/5" : "border-emerald-400/20 text-emerald-300 hover:bg-emerald-400/10"}`}>{m.enabled ? "Disable" : "Enable"}</button>
+            <button onClick={() => remove(m)} className="rounded p-1 text-red-400/60 hover:bg-red-500/15 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>
           </div>
-          <button onClick={() => toggle(m)} className={`rounded-lg border px-2 py-1 text-[10px] ${m.enabled ? "border-white/10 text-white/60 hover:bg-white/5" : "border-emerald-400/20 text-emerald-300 hover:bg-emerald-400/10"}`}>{m.enabled ? "Disable" : "Enable"}</button>
-          <button onClick={() => remove(m)} className="rounded p-1 text-red-400/60 hover:bg-red-500/15 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
