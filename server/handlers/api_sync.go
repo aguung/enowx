@@ -277,6 +277,34 @@ func (h *Sync) AdminReviewFlag(w http.ResponseWriter, r *http.Request) {
 	writeData(w, out)
 }
 
+// AdminLog proxies the moderation audit log.
+func (h *Sync) AdminLog(w http.ResponseWriter, r *http.Request) {
+	raw, err := h.mgr.AdminLog(r.Context())
+	if err != nil {
+		writeAPIErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	var out any
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &out)
+	}
+	writeData(w, out)
+}
+
+// AdminStats proxies community-wide admin counters.
+func (h *Sync) AdminStats(w http.ResponseWriter, r *http.Request) {
+	raw, err := h.mgr.AdminStats(r.Context())
+	if err != nil {
+		writeAPIErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	var out any
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &out)
+	}
+	writeData(w, out)
+}
+
 // Shop proxies the cosmetics catalog + owned/equipped/balance.
 func (h *Sync) Shop(w http.ResponseWriter, r *http.Request) {
 	raw, err := h.mgr.Shop(r.Context())

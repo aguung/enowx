@@ -383,9 +383,31 @@ export interface FlaggedLink {
   created_at: string;
 }
 
+// ModAction is one entry in the moderation audit log.
+export interface ModAction {
+  id: number;
+  action: string;
+  target: string;
+  detail: string;
+  actor_name: string;
+  actor_display: string;
+  created_at: string;
+}
+
+// AdminStats holds community-wide counters for the admin overview.
+export interface AdminStats {
+  users: number;
+  moderators: number;
+  messages: number;
+  posts: number;
+  open_flags: number;
+}
+
 export const adminApi = {
   flags: () => api.get<{ links: FlaggedLink[] }>("/api/admin/flags"),
   review: (id: number) => api.post<{ reviewed: number }>(`/api/admin/flags/${id}/review`),
+  log: () => api.get<{ actions: ModAction[] }>("/api/admin/log"),
+  stats: () => api.get<AdminStats>("/api/admin/stats"),
 };
 
 export interface PostCategory {
@@ -536,6 +558,7 @@ export interface SearchUserHit {
   display_name: string;
   avatar_url: string;
   top_role_id: string;
+  is_moderator?: boolean;
 }
 
 export const searchApi = {

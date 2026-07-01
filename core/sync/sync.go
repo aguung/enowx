@@ -366,6 +366,24 @@ func (m *Manager) AdminReviewFlag(ctx context.Context, id string) (string, error
 	return string(raw), nil
 }
 
+// AdminLog fetches the moderation audit log.
+func (m *Manager) AdminLog(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/log", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// AdminStats fetches community-wide admin counters.
+func (m *Manager) AdminStats(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/stats", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // Shop fetches the cosmetics catalog + the user's owned/equipped/balance.
 func (m *Manager) Shop(ctx context.Context) (string, error) {
 	var raw json.RawMessage

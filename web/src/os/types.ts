@@ -14,7 +14,8 @@ export type AppId =
   | "profile"
   | "chat"
   | "shop"
-  | "posts";
+  | "posts"
+  | "admin";
 
 export type Side = "left" | "right";
 

@@ -12,6 +12,7 @@ import { AppsDrawer } from "./AppsDrawer";
 import { Tooltip } from "../components/Tooltip";
 import { ProfileViewer } from "../apps/ProfileViewer";
 import { Lightbox } from "../components/Lightbox";
+import { useProfile } from "./useProfile";
 import { DocsApp } from "../apps/DocsApp";
 import { usePanels } from "./usePanels";
 import { usePersisted } from "./usePersisted";
@@ -23,7 +24,8 @@ import type { AppId, Location, Side } from "./types";
 type CenterView = "widget" | "terminal" | "apps" | "docs";
 
 export function Desktop() {
-  const apps = buildApps();
+  const profile = useProfile();
+  const apps = buildApps(profile.has("chat.moderate"));
   const { active, toggle, close } = usePanels();
   const [view, setView] = usePersisted<CenterView>("center-view", "widget");
 

@@ -1,4 +1,4 @@
-import { KeyRound, ScrollText, Boxes, Settings, BarChart3, FolderOpen, Flame, KeySquare, Music, Globe, UserCircle, MessagesSquare, ShoppingBag, Newspaper } from "lucide-react";
+import { KeyRound, ScrollText, Boxes, Settings, BarChart3, FolderOpen, Flame, KeySquare, Music, Globe, UserCircle, MessagesSquare, ShoppingBag, Newspaper, ShieldCheck } from "lucide-react";
 import type { DesktopApp } from "../os/types";
 import { AccountsApp } from "./AccountsApp";
 import { RequestsApp } from "./RequestsApp";
@@ -14,11 +14,13 @@ import { ProfileApp } from "./ProfileApp";
 import { ChatApp } from "./ChatApp";
 import { ShopApp } from "./ShopApp";
 import { PostsApp } from "./PostsApp";
+import { AdminApp } from "./AdminApp";
 
 // `home` is the default location: a dock side or the Apps drawer. The dock
 // starts minimal (core apps); everything else lives in the Apps drawer and the
-// user can drag apps in/out.
-export function buildApps(): DesktopApp[] {
+// user can drag apps in/out. `isMod` gates moderator-only apps (Admin Tools),
+// which are also role-gated server-side.
+export function buildApps(isMod = false): DesktopApp[] {
   return [
     { id: "providers", label: "Providers", icon: <Boxes />, accent: "from-emerald-500 to-teal-600", home: "left", render: () => <ProvidersApp /> },
     { id: "accounts", label: "Accounts", icon: <KeyRound />, accent: "from-violet-500 to-fuchsia-600", home: "left", render: () => <AccountsApp /> },
@@ -34,5 +36,9 @@ export function buildApps(): DesktopApp[] {
     { id: "chat", label: "Community", icon: <MessagesSquare />, accent: "from-fuchsia-500 to-purple-600", home: "drawer", render: () => <ChatApp /> },
     { id: "shop", label: "Shop", icon: <ShoppingBag />, accent: "from-amber-500 to-yellow-600", home: "drawer", render: () => <ShopApp /> },
     { id: "posts", label: "Posts", icon: <Newspaper />, accent: "from-rose-500 to-pink-600", home: "drawer", render: () => <PostsApp /> },
+    // Moderator-only; endpoints are role-gated server-side regardless.
+    ...(isMod
+      ? [{ id: "admin" as const, label: "Admin Tools", icon: <ShieldCheck />, accent: "from-red-500 to-rose-700", home: "drawer" as const, render: () => <AdminApp /> }]
+      : []),
   ];
 }
