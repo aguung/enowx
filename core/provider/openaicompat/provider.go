@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/enowdev/enowx/core/convert"
 	"github.com/enowdev/enowx/core/model"
 	"github.com/enowdev/enowx/core/provider"
 	"github.com/enowdev/enowx/core/provider/oaistream"
@@ -28,7 +29,7 @@ func (p *Provider) Name() string        { return p.name }
 func (p *Provider) Caps() provider.Caps { return provider.Caps{Chat: true} }
 
 func (p *Provider) BuildRequest(req *model.Request, acc provider.Account) (*http.Request, error) {
-	r, err := http.NewRequest(http.MethodPost, p.baseURL+"/chat/completions", bytes.NewReader(req.Raw))
+	r, err := http.NewRequest(http.MethodPost, p.baseURL+"/chat/completions", bytes.NewReader(convert.OpenAIBody(req)))
 	if err != nil {
 		return nil, err
 	}

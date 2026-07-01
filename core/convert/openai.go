@@ -63,6 +63,83 @@ func fromOpenAIChat(body []byte) (*model.Request, error) {
 	return req, nil
 }
 
+// OpenAIBody returns a body suitable for an OpenAI chat/completions upstream:
+// the original raw body when the request already came in as OpenAI chat,
+// otherwise a re-encoded body (so e.g. an Anthropic request reaches an
+// OpenAI-compatible provider in a format it understands).
+func OpenAIBody(req *model.Request) []byte {
+	if req.Source == model.APIOpenAIChat && len(req.Raw) > 0 {
+		return req.Raw
+	}
+	return ToOpenAIChat(req)
+}
+
+// ToOpenAIChat serializes a normalized request into an OpenAI chat/completions
+// body. Used by OpenAI-compatible providers (codebuddy, openaicompat) when the
+// request did not originate as OpenAI (e.g. an Anthropic request), so upstream
+// receives a format it understands instead of the raw inbound body.
+func ToOpenAIChat(req *model.Request) []byte {
+	out := map[string]any{
+		"model":  req.Model,
+		"stream": req.Stream,
+	}
+	if req.MaxTokens > 0 {
+		out["max_tokens"] = req.MaxTokens
+	}
+	if req.Temperature != nil {
+		out["temperature"] = *req.Temperature
+	}
+	msgs := make([]map[string]any, 0, len(req.Messages))
+	for _, m := range req.Messages {
+		msgs = append(msgs, map[string]any{"role": string(m.Role), "content": partsToOpenAIContent(m.Parts)})
+	}
+	out["messages"] = msgs
+	if len(req.Tools) > 0 {
+		tools := make([]map[string]any, 0, len(req.Tools))
+		for _, t := range req.Tools {
+			tools = append(tools, map[string]any{
+				"type": "function",
+				"function": map[string]any{
+					"name":        t.Name,
+					"description": t.Description,
+					"parameters":  t.Parameters,
+				},
+			})
+		}
+		out["tools"] = tools
+	}
+	b, _ := json.Marshal(out)
+	return b
+}
+
+// partsToOpenAIContent returns a plain string when the message is text-only,
+// otherwise the array-of-parts form (needed for images).
+func partsToOpenAIContent(parts []model.Part) any {
+	hasImage := false
+	for _, p := range parts {
+		if p.Type == "image" {
+			hasImage = true
+			break
+		}
+	}
+	if !hasImage {
+		text := ""
+		for _, p := range parts {
+			text += p.Text
+		}
+		return text
+	}
+	arr := make([]map[string]any, 0, len(parts))
+	for _, p := range parts {
+		if p.Type == "image" {
+			arr = append(arr, map[string]any{"type": "image_url", "image_url": map[string]any{"url": p.ImageURL}})
+		} else {
+			arr = append(arr, map[string]any{"type": "text", "text": p.Text})
+		}
+	}
+	return arr
+}
+
 // oaiContentToParts handles both string content and the array-of-parts form.
 func oaiContentToParts(raw json.RawMessage, toolCallID string) []model.Part {
 	if len(raw) == 0 {
