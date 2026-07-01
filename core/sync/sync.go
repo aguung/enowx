@@ -384,6 +384,15 @@ func (m *Manager) AdminStats(ctx context.Context) (string, error) {
 	return string(raw), nil
 }
 
+// AdminUsers fetches the default admin user list (moderators first).
+func (m *Manager) AdminUsers(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/users", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // Shop fetches the cosmetics catalog + the user's owned/equipped/balance.
 func (m *Manager) Shop(ctx context.Context) (string, error) {
 	var raw json.RawMessage

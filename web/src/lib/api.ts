@@ -403,11 +403,24 @@ export interface AdminStats {
   open_flags: number;
 }
 
+// AdminUser is a user row in the admin user list.
+export interface AdminUser {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string;
+  top_role_id: string;
+  is_moderator: boolean;
+  kleos: number;
+  created_at: string;
+}
+
 export const adminApi = {
   flags: () => api.get<{ links: FlaggedLink[] }>("/api/admin/flags"),
   review: (id: number) => api.post<{ reviewed: number }>(`/api/admin/flags/${id}/review`),
   log: () => api.get<{ actions: ModAction[] }>("/api/admin/log"),
   stats: () => api.get<AdminStats>("/api/admin/stats"),
+  users: () => api.get<{ users: AdminUser[] }>("/api/admin/users"),
 };
 
 export interface PostCategory {

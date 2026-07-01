@@ -3,7 +3,7 @@ import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Se
 import { AppShell } from "./shell";
 import { openProfile } from "../os/profileViewer";
 import { useAdminEvents } from "../os/adminBus";
-import { adminApi, modApi, searchApi, type FlaggedLink, type ModAction, type AdminStats, type SearchUserHit } from "../lib/api";
+import { adminApi, modApi, searchApi, type FlaggedLink, type ModAction, type AdminStats } from "../lib/api";
 
 type Tab = "stats" | "flags" | "users" | "log";
 
@@ -117,29 +117,39 @@ function FlagsTab() {
   );
 }
 
+// AdminUserRow is the common shape rendered whether from the default list or a
+// search (search hits lack kleos/created_at, which the row doesn't need).
+type AdminUserRow = { id: string; username: string; display_name: string; avatar_url: string; is_moderator: boolean };
+
 function UsersTab() {
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<SearchUserHit[]>([]);
+  const [users, setUsers] = useState<AdminUserRow[] | null>(null);
   const [busy, setBusy] = useState("");
+
+  // Default list (moderators first), shown when the search box is empty.
+  const loadDefault = useCallback(() => {
+    adminApi.users().then((r) => setUsers(r.users ?? [])).catch(() => setUsers([]));
+  }, []);
+  useEffect(() => {
+    if (q.trim().length < 2) loadDefault();
+  }, [q, loadDefault]);
+  useAdminEvents(loadDefault);
 
   async function run(term: string) {
     setQ(term);
-    if (term.trim().length < 2) {
-      setHits([]);
-      return;
-    }
+    if (term.trim().length < 2) return; // effect reloads the default list
     try {
       const r = await searchApi.query(term.trim());
-      setHits(r.users ?? []);
+      setUsers((r.users ?? []).map((u) => ({ ...u, is_moderator: !!u.is_moderator })));
     } catch {
-      setHits([]);
+      setUsers([]);
     }
   }
-  async function toggleMod(u: SearchUserHit) {
+  async function toggleMod(u: AdminUserRow) {
     setBusy(u.id);
     try {
       const r = await modApi.setModerator(u.id, !u.is_moderator);
-      setHits((hs) => hs.map((x) => (x.id === u.id ? { ...x, is_moderator: r.is_moderator } : x)));
+      setUsers((hs) => (hs ? hs.map((x) => (x.id === u.id ? { ...x, is_moderator: r.is_moderator } : x)) : hs));
     } finally {
       setBusy("");
     }
@@ -150,7 +160,8 @@ function UsersTab() {
         <Search className="h-3.5 w-3.5 text-white/40" />
         <input value={q} onChange={(e) => run(e.target.value)} placeholder="Search users by name…" className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none" />
       </div>
-      {hits.map((u) => (
+      {!users && <div className="h-10 animate-pulse rounded-lg bg-white/5" />}
+      {users?.map((u) => (
         <div key={u.id} className="flex items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.02] p-2">
           <button onClick={() => openProfile(u.id)} className="min-w-0 flex flex-1 items-center gap-2.5 text-left">
             {u.avatar_url ? <img src={u.avatar_url} alt="" className="h-8 w-8 rounded-full" /> : <div className="h-8 w-8 rounded-full bg-white/10" />}
@@ -165,7 +176,7 @@ function UsersTab() {
           </button>
         </div>
       ))}
-      {q.trim().length >= 2 && hits.length === 0 && <div className="text-[11px] text-white/40">No users found.</div>}
+      {users?.length === 0 && <div className="text-[11px] text-white/40">{q.trim().length >= 2 ? "No users found." : "No users."}</div>}
     </div>
   );
 }

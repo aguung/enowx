@@ -305,6 +305,20 @@ func (h *Sync) AdminStats(w http.ResponseWriter, r *http.Request) {
 	writeData(w, out)
 }
 
+// AdminUsers proxies the default admin user list.
+func (h *Sync) AdminUsers(w http.ResponseWriter, r *http.Request) {
+	raw, err := h.mgr.AdminUsers(r.Context())
+	if err != nil {
+		writeAPIErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	var out any
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &out)
+	}
+	writeData(w, out)
+}
+
 // Shop proxies the cosmetics catalog + owned/equipped/balance.
 func (h *Sync) Shop(w http.ResponseWriter, r *http.Request) {
 	raw, err := h.mgr.Shop(r.Context())
