@@ -280,6 +280,7 @@ export function AiChatApp() {
       <div className="flex items-center gap-2 border-b border-white/5 px-3 py-2">
         <Bot className="h-4 w-4 text-white/40" />
         <span className="text-sm font-medium text-white/80">Chat</span>
+        <span className="rounded-full border border-indigo-400/30 bg-indigo-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-indigo-300">Beta</span>
         <div className="flex-1" />
         <button onClick={() => setShowSys(true)} title="System prompt" className="rounded-lg p-1.5 text-white/40 hover:bg-white/10 hover:text-white"><Settings2 className="h-4 w-4" /></button>
         <button onClick={clear} title="Clear chat" className="rounded-lg p-1.5 text-white/40 hover:bg-white/10 hover:text-white"><Trash2 className="h-4 w-4" /></button>
