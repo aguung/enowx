@@ -237,6 +237,15 @@ func (m *Manager) PublicProfile(ctx context.Context, id string) (string, error) 
 	return string(raw), nil
 }
 
+// UserByName resolves a username to a user id (for @mention profile links).
+func (m *Manager) UserByName(ctx context.Context, name string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/users/by-name/"+name, nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // UploadMedia forwards a raw multipart body (avatar/banner) to the cloud with
 // the given content type, returning the JSON response.
 func (m *Manager) UploadMedia(ctx context.Context, path, contentType string, body []byte) (string, error) {

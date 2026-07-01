@@ -11,6 +11,17 @@ export function openProfile(userId: string) {
   listeners.forEach((l) => l());
 }
 
+// openProfileByName resolves an @mention username to an id, then opens it.
+export async function openProfileByName(username: string) {
+  const { profileApi } = await import("../lib/api");
+  try {
+    const { id } = await profileApi.idByName(username);
+    if (id) openProfile(id);
+  } catch {
+    /* unknown user — ignore */
+  }
+}
+
 export function closeProfile() {
   current = null;
   listeners.forEach((l) => l());

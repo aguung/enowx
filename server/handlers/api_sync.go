@@ -120,6 +120,20 @@ func (h *Sync) PublicProfile(w http.ResponseWriter, r *http.Request) {
 	writeData(w, profile)
 }
 
+// UserByName resolves a username to a user id (for @mention profile links).
+func (h *Sync) UserByName(w http.ResponseWriter, r *http.Request) {
+	raw, err := h.mgr.UserByName(r.Context(), chi.URLParam(r, "name"))
+	if err != nil {
+		writeAPIErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	var out any
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &out)
+	}
+	writeData(w, out)
+}
+
 // UploadAvatar / UploadBanner proxy a multipart image upload to the cloud.
 func (h *Sync) UploadAvatar(w http.ResponseWriter, r *http.Request) { h.uploadMedia(w, r, "/me/avatar") }
 func (h *Sync) UploadBanner(w http.ResponseWriter, r *http.Request) { h.uploadMedia(w, r, "/me/banner") }

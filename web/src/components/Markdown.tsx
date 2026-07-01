@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { openProfileByName } from "../os/profileViewer";
 
 // Markdown renders a Discord-flavored subset safely. Because it only ever emits
 // known React elements (never dangerouslySetInnerHTML) and treats all text as
@@ -78,8 +79,9 @@ function renderLines(text: string): ReactNode[] {
 }
 
 // inlineRe matches the inline tokens (order matters: longer markers first).
+// The @mention pattern mirrors the server's mention regex.
 const inlineRe =
-  /(\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*]+\*|_[^_]+_|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)]+\)|https?:\/\/[^\s]+)/g;
+  /(\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*]+\*|_[^_]+_|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^)]+\)|https?:\/\/[^\s]+|@[A-Za-z0-9_.]{2,32})/g;
 
 // renderInline parses bold/italic/underline/strike/code/links within a line.
 function renderInline(text: string): ReactNode[] {
@@ -112,6 +114,17 @@ function renderInline(text: string): ReactNode[] {
       else nodes.push(tok);
     } else if (/^https?:\/\//.test(tok)) {
       nodes.push(<SafeLink key={key} href={tok}>{tok}</SafeLink>);
+    } else if (tok.startsWith("@")) {
+      const name = tok.slice(1);
+      nodes.push(
+        <button
+          key={key}
+          onClick={(e) => { e.stopPropagation(); openProfileByName(name); }}
+          className="rounded bg-indigo-500/15 px-0.5 font-medium text-indigo-300 hover:bg-indigo-500/25"
+        >
+          {tok}
+        </button>,
+      );
     } else {
       nodes.push(tok);
     }

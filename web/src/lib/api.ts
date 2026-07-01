@@ -322,6 +322,7 @@ export interface ProfileEdit {
 export const profileApi = {
   update: (e: ProfileEdit) => api.patch<SyncUser>("/api/profile", e),
   publicById: (id: string) => api.get<PublicProfile>(`/api/users/${encodeURIComponent(id)}/profile`),
+  idByName: (name: string) => api.get<{ id: string }>(`/api/users/by-name/${encodeURIComponent(name)}`),
   posts: (id: string) => api.get<{ posts: Post[] }>(`/api/users/${encodeURIComponent(id)}/posts`),
   uploadAvatar: (file: File) => uploadFile<{ avatar_url: string }>("/api/profile/avatar", file),
   uploadBanner: (file: File) => uploadFile<{ banner_url: string }>("/api/profile/banner", file),

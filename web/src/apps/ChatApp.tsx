@@ -12,6 +12,8 @@ import { openProfile } from "../os/profileViewer";
 import { useImageAttach } from "../os/useImageAttach";
 import { Markdown } from "../components/Markdown";
 import { ImageGrid } from "../components/ImageGrid";
+import { MentionDropdown } from "../components/MentionDropdown";
+import { useMention } from "../os/useMention";
 import { profileApi, modApi, type ChatMessage, type PublicProfile, type TopRole } from "../lib/api";
 
 interface ReplyTarget {
@@ -52,18 +54,24 @@ function ChatRoom() {
   const fileRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const mention = useMention(draft, setDraft, inputRef);
 
   // Auto-scroll to the newest message.
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
+  // Focus the composer whenever a reply target is set, so hitting Reply lands
+  // the cursor in the textbox without a second click.
+  useEffect(() => {
+    if (reply) inputRef.current?.focus();
+  }, [reply]);
+
   const myUsername = profile.user?.username;
   const canModerate = profile.has("chat.moderate");
 
   function startReply(m: ChatMessage) {
     setReply({ id: m.id, author: m.display_name || m.username, content: m.content });
-    inputRef.current?.focus();
   }
 
   async function submit() {
@@ -157,16 +165,22 @@ function ChatRoom() {
         <button onClick={() => fileRef.current?.click()} disabled={img.uploading || img.images.length >= img.max} className="shrink-0 rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white disabled:opacity-50" title="Attach image">
           <ImagePlus className="h-4 w-4" />
         </button>
-        <input
-          ref={inputRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onPaste={img.onPaste}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), submit())}
-          placeholder={reply ? `Reply to ${reply.author}` : `Message #${channel}`}
-          maxLength={1000}
-          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-white/25"
-        />
+        <div className="relative min-w-0 flex-1">
+          <MentionDropdown items={mention.items} active={mention.active} onPick={mention.pick} />
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onPaste={img.onPaste}
+            onKeyDown={(e) => {
+              if (mention.onKeyDown(e)) return;
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); }
+            }}
+            placeholder={reply ? `Reply to ${reply.author}` : `Message #${channel}`}
+            maxLength={1000}
+            className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none focus:border-white/25"
+          />
+        </div>
         <button
           onClick={submit}
           disabled={sending || (!draft.trim() && img.images.length === 0) || img.uploading}
