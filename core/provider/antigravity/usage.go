@@ -69,11 +69,29 @@ func (p *Provider) Usage(acc provider.Account) (*provider.Usage, error) {
 			})
 		}
 	}
-	u := &provider.Usage{Windows: windows}
+	u := &provider.Usage{Windows: windows, Plan: normalizeTier(acc.Cred("plan"))}
 	if len(windows) == 0 {
 		u.Message = "no quota data"
 	}
 	return u, nil
+}
+
+// normalizeTier turns Antigravity's tier id (e.g. "free-tier") into a short plan.
+func normalizeTier(tier string) string {
+	t := strings.ToLower(strings.TrimSpace(tier))
+	switch {
+	case t == "":
+		return ""
+	case strings.Contains(t, "free"), strings.Contains(t, "legacy"):
+		return "free"
+	case strings.Contains(t, "pro"):
+		return "pro"
+	case strings.Contains(t, "ultra"):
+		return "ultra"
+	case strings.Contains(t, "enterprise"), strings.Contains(t, "standard"):
+		return "enterprise"
+	}
+	return strings.TrimSuffix(t, "-tier")
 }
 
 // groupShort turns a group display name into a short tag.

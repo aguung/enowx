@@ -79,13 +79,16 @@ func ExchangeAndOnboard(doer transport.Doer, code string) (map[string]string, er
 	if email := fetchEmail(doer, tok.AccessToken); email != "" {
 		creds["email"] = email
 	}
-	// Project id discovery (best-effort: generate one if it fails so the account
-	// still saves).
-	pid := discoverProject(doer, tok.AccessToken)
+	// Project id + tier discovery (best-effort: generate a project id if it fails
+	// so the account still saves).
+	pid, tier := discoverProject(doer, tok.AccessToken)
 	if pid == "" {
 		pid = generateProjectID()
 	}
 	creds["project_id"] = pid
+	if tier != "" {
+		creds["plan"] = tier
+	}
 	return creds, nil
 }
 
@@ -105,29 +108,33 @@ func fetchEmail(doer transport.Doer, token string) string {
 }
 
 // discoverProject runs loadCodeAssist + onboardUser to obtain the CloudCode
-// project id. Returns "" on any failure.
-func discoverProject(doer transport.Doer, token string) string {
+// project id and the account tier. Returns ("", "") on failure.
+func discoverProject(doer transport.Doer, token string) (projectID, tier string) {
 	meta := map[string]any{"ideType": 9, "platform": platformEnum(), "pluginType": 2}
 
-	// loadCodeAssist → maybe a project + tier list.
+	// loadCodeAssist → project + currentTier + allowedTiers.
 	var load struct {
 		CloudaicompanionProject json.RawMessage `json:"cloudaicompanionProject"`
-		AllowedTiers            []struct {
+		CurrentTier             struct {
+			ID string `json:"id"`
+		} `json:"currentTier"`
+		AllowedTiers []struct {
 			ID        string `json:"id"`
 			IsDefault bool   `json:"isDefault"`
 		} `json:"allowedTiers"`
 	}
 	if !cloudCodePost(doer, token, "loadCodeAssist", map[string]any{"metadata": meta}, &load) {
-		return ""
+		return "", ""
 	}
-	if pid := projectFromRaw(load.CloudaicompanionProject); pid != "" {
-		return pid
-	}
-	tier := "legacy-tier"
+	tier = load.CurrentTier.ID
+	onboardTier := "legacy-tier"
 	for _, t := range load.AllowedTiers {
 		if t.IsDefault && t.ID != "" {
-			tier = t.ID
+			onboardTier = t.ID
 		}
+	}
+	if pid := projectFromRaw(load.CloudaicompanionProject); pid != "" {
+		return pid, tier
 	}
 
 	// onboardUser → long-running op; poll until done.
@@ -138,15 +145,15 @@ func discoverProject(doer transport.Doer, token string) string {
 				CloudaicompanionProject json.RawMessage `json:"cloudaicompanionProject"`
 			} `json:"response"`
 		}
-		if !cloudCodePost(doer, token, "onboardUser", map[string]any{"tierId": tier, "metadata": meta}, &ob) {
-			return ""
+		if !cloudCodePost(doer, token, "onboardUser", map[string]any{"tierId": onboardTier, "metadata": meta}, &ob) {
+			return "", tier
 		}
 		if ob.Done {
-			return projectFromRaw(ob.Response.CloudaicompanionProject)
+			return projectFromRaw(ob.Response.CloudaicompanionProject), tier
 		}
 		time.Sleep(5 * time.Second)
 	}
-	return ""
+	return "", tier
 }
 
 func cloudCodePost(doer transport.Doer, token, method string, body any, out any) bool {

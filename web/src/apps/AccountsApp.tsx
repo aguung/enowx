@@ -363,22 +363,28 @@ function ModelRow({ m, accountId, aliases, onAddAlias, onRemoveAlias }: { m: Pro
 const fmtCredit = (n: number) =>
   n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : `${Math.round(n)}`;
 
+// remainingTone colors a bar by how much is LEFT: green plenty, amber getting
+// low, red almost out.
+function remainingTone(remainPct: number): string {
+  return remainPct <= 10 ? "bg-red-400" : remainPct <= 30 ? "bg-amber-400" : "bg-emerald-400";
+}
+
 function CreditMeter({ u }: { u: Usage }) {
-  // Window-based providers (e.g. Codex 5h + weekly) show a bar per window.
+  // Window-based providers (e.g. Codex/Antigravity) show a bar per window — the
+  // bar length is the REMAINING fraction.
   if (u.windows && u.windows.length > 0) {
     return (
       <div className="mt-2 max-w-[220px] space-y-1.5">
         {u.windows.map((w, i) => {
-          const pct = Math.min(100, Math.round(w.used_percent));
-          const tone = pct >= 90 ? "bg-red-400" : pct >= 70 ? "bg-amber-400" : "bg-emerald-400";
+          const remain = Math.max(0, Math.min(100, Math.round(100 - w.used_percent)));
           return (
             <div key={i}>
               <div className="mb-0.5 flex items-center justify-between text-[10px] text-white/40">
                 <span>{w.label}</span>
-                <span className="tabular-nums">{pct}%{w.reset_in_secs ? ` · ${fmtReset(w.reset_in_secs)}` : ""}</span>
+                <span className="tabular-nums">{remain}% left{w.reset_in_secs ? ` · ${fmtReset(w.reset_in_secs)}` : ""}</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+                <div className={`h-full rounded-full ${remainingTone(remain)}`} style={{ width: `${remain}%` }} />
               </div>
             </div>
           );
@@ -386,18 +392,17 @@ function CreditMeter({ u }: { u: Usage }) {
       </div>
     );
   }
-  const pct = u.limit > 0 ? Math.min(100, Math.round((u.used / u.limit) * 100)) : 0;
-  const tone = pct >= 90 ? "bg-red-400" : pct >= 70 ? "bg-amber-400" : "bg-emerald-400";
+  const remain = u.limit > 0 ? Math.max(0, Math.min(100, Math.round((u.remaining / u.limit) * 100))) : 0;
   return (
     <div className="mt-2 max-w-[220px]">
       <div className="mb-1 flex items-center justify-between text-[10px] text-white/40">
-        <span>credit</span>
+        <span>credit left</span>
         <span className="tabular-nums">
-          {fmtCredit(u.used)} / {fmtCredit(u.limit)}
+          {fmtCredit(u.remaining)} / {fmtCredit(u.limit)}
         </span>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-        <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full ${remainingTone(remain)}`} style={{ width: `${remain}%` }} />
       </div>
     </div>
   );
