@@ -411,7 +411,7 @@ export interface Post {
   upvoted: boolean;
   reactions?: Reaction[];
   comment_count?: number;
-  image_url?: string;
+  images?: string[];
 }
 
 export interface Comment {
@@ -449,7 +449,7 @@ export const postsApi = {
     const s = q.toString();
     return api.get<{ posts: Post[]; categories: PostCategory[] }>(`/api/posts${s ? `?${s}` : ""}`);
   },
-  create: (category: string, title: string, body: string, image_url?: string) => api.post<Post>("/api/posts", { category, title, body, image_url: image_url ?? "" }),
+  create: (category: string, title: string, body: string, images?: string[]) => api.post<Post>("/api/posts", { category, title, body, images: images ?? [] }),
   edit: (id: number, title: string, body: string) => api.patch<{ id: number }>(`/api/posts/${id}`, { title, body }),
   remove: (id: number) => api.del<{ deleted: number }>(`/api/posts/${id}`),
   upvote: (id: number) => api.post<{ id: number; count: number; me: boolean }>(`/api/posts/${id}/upvote`),
@@ -465,7 +465,7 @@ export interface ChatMessage {
   edited_at?: string | null;
   reply_to?: number | null;
   reply_content?: string;
-  image_url?: string;
+  images?: string[];
   reply_author?: string;
   username: string;
   display_name?: string;
@@ -493,8 +493,8 @@ export const chatApi = {
     api.get<{ messages: ChatMessage[]; channel: string; channels: ChatChannel[] }>(
       `/api/chat/messages${channel ? `?channel=${encodeURIComponent(channel)}` : ""}`,
     ),
-  send: (content: string, channel: string, reply_to?: number, image_url?: string) =>
-    api.post<ChatMessage>("/api/chat/messages", { content, channel, reply_to: reply_to ?? null, image_url: image_url ?? "" }),
+  send: (content: string, channel: string, reply_to?: number, images?: string[]) =>
+    api.post<ChatMessage>("/api/chat/messages", { content, channel, reply_to: reply_to ?? null, images: images ?? [] }),
   edit: (id: number, content: string) => api.patch<{ id: number; content: string }>(`/api/chat/messages/${id}`, { content }),
   remove: (id: number) => api.del<{ deleted: number }>(`/api/chat/messages/${id}`),
   react: (id: number, emoji: string) => api.post<{ message_id: number; reactions: Reaction[] }>(`/api/chat/messages/${id}/reactions`, { emoji }),

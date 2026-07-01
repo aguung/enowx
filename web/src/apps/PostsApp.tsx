@@ -10,6 +10,7 @@ import { useFeed, loadFeed, createPost, upvotePost, reactPost, editPost, deleteP
 import { openProfile } from "../os/profileViewer";
 import { useImageAttach } from "../os/useImageAttach";
 import { Markdown } from "../components/Markdown";
+import { ImageGrid } from "../components/ImageGrid";
 import { profileApi, commentsApi, searchApi, type Post, type PublicProfile, type Comment, type SearchPostHit, type SearchUserHit } from "../lib/api";
 
 export function PostsApp() {
@@ -187,7 +188,7 @@ function Composer({ categories, onClose }: { categories: { key: string; label: s
     setBusy(true);
     setError("");
     try {
-      await createPost(category, title.trim(), body.trim(), img.imageUrl || undefined);
+      await createPost(category, title.trim(), body.trim(), img.images.length ? img.images : undefined);
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "couldn't post");
@@ -200,7 +201,7 @@ function Composer({ categories, onClose }: { categories: { key: string; label: s
     <div
       className="space-y-2 rounded-xl border border-white/10 bg-white/[0.03] p-3"
       onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => { e.preventDefault(); img.upload(e.dataTransfer.files?.[0]); }}
+      onDrop={(e) => { e.preventDefault(); img.upload(e.dataTransfer.files); }}
     >
       {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
       <div className="flex items-center gap-2">
@@ -211,23 +212,22 @@ function Composer({ categories, onClose }: { categories: { key: string; label: s
       </div>
       <textarea value={body} onChange={(e) => setBody(e.target.value)} onPaste={img.onPaste} maxLength={4000} rows={3} placeholder="Write something… (optional)" className="w-full resize-none rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 text-sm text-white outline-none focus:border-white/25" />
 
-      {(img.imageUrl || img.uploading) && (
-        <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 p-2">
-          {img.uploading ? (
-            <div className="flex items-center gap-1.5 text-[11px] text-white/50"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</div>
-          ) : (
-            <>
-              <img src={img.imageUrl} alt="" className="h-12 w-12 rounded object-cover" />
-              <button onClick={img.clear} className="ml-auto rounded p-0.5 text-white/40 hover:bg-white/10 hover:text-white"><X className="h-3.5 w-3.5" /></button>
-            </>
-          )}
+      {(img.images.length > 0 || img.uploading) && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-black/20 p-2">
+          {img.images.map((url, i) => (
+            <div key={i} className="group relative">
+              <img src={url} alt="" className="h-12 w-12 rounded object-cover" />
+              <button onClick={() => img.removeAt(i)} className="absolute -right-1 -top-1 rounded-full bg-black/70 p-0.5 text-white/70 hover:text-white"><X className="h-3 w-3" /></button>
+            </div>
+          ))}
+          {img.uploading && <div className="flex items-center gap-1.5 text-[11px] text-white/50"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</div>}
         </div>
       )}
       {img.error && <p className="text-[11px] text-red-300">{img.error}</p>}
 
-      <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => img.upload(e.target.files?.[0])} />
+      <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => img.upload(e.target.files)} />
       <div className="flex items-center gap-2">
-        <button onClick={() => fileRef.current?.click()} disabled={img.uploading} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-white/60 hover:bg-white/5 disabled:opacity-50">
+        <button onClick={() => fileRef.current?.click()} disabled={img.uploading || img.images.length >= img.max} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-white/60 hover:bg-white/5 disabled:opacity-50">
           <ImagePlus className="h-3.5 w-3.5" />
         </button>
         <div className="ml-auto flex items-center gap-2">
@@ -295,11 +295,7 @@ function PostCard({ p, myUsername }: { p: Post; myUsername?: string }) {
 
         <h3 className="text-sm font-semibold text-white">{p.title}</h3>
         {p.body && <Markdown text={p.body} className="mt-1 break-words text-sm leading-relaxed text-white/75" />}
-        {p.image_url && (
-          <a href={p.image_url} target="_blank" rel="noreferrer" className="mt-2 block w-fit">
-            <img src={p.image_url} alt="" className="max-h-96 max-w-full rounded-lg border border-white/10" />
-          </a>
-        )}
+        {p.images && p.images.length > 0 && <ImageGrid images={p.images} size="md" />}
 
         {/* Reactions + actions */}
         <div className="mt-2 flex flex-wrap items-center gap-1">

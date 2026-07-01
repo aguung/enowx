@@ -11,6 +11,7 @@ import { useDialog } from "../os/dialog";
 import { openProfile } from "../os/profileViewer";
 import { useImageAttach } from "../os/useImageAttach";
 import { Markdown } from "../components/Markdown";
+import { ImageGrid } from "../components/ImageGrid";
 import { profileApi, modApi, type ChatMessage, type PublicProfile, type TopRole } from "../lib/api";
 
 interface ReplyTarget {
@@ -67,10 +68,10 @@ function ChatRoom() {
 
   async function submit() {
     const text = draft.trim();
-    if ((!text && !img.imageUrl) || sending || img.uploading) return;
+    if ((!text && img.images.length === 0) || sending || img.uploading) return;
     setSending(true);
     try {
-      await sendChat(text, reply?.id, img.imageUrl || undefined);
+      await sendChat(text, reply?.id, img.images.length ? img.images : undefined);
       setDraft("");
       setReply(null);
       img.clear();
@@ -134,28 +135,26 @@ function ChatRoom() {
           </button>
         </div>
       )}
-      {/* Pending image attachment preview */}
-      {(img.imageUrl || img.uploading) && (
-        <div className="mx-4 flex items-center gap-2 border-x border-t border-white/10 bg-white/[0.03] px-3 py-2">
-          {img.uploading ? (
-            <div className="flex items-center gap-1.5 text-[11px] text-white/50"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</div>
-          ) : (
-            <>
-              <img src={img.imageUrl} alt="" className="h-12 w-12 rounded object-cover" />
-              <span className="text-[11px] text-white/50">Image attached</span>
-              <button onClick={img.clear} className="ml-auto rounded p-0.5 text-white/40 hover:bg-white/10 hover:text-white"><X className="h-3.5 w-3.5" /></button>
-            </>
-          )}
+      {/* Pending image attachments preview */}
+      {(img.images.length > 0 || img.uploading) && (
+        <div className="mx-4 flex flex-wrap items-center gap-2 border-x border-t border-white/10 bg-white/[0.03] px-3 py-2">
+          {img.images.map((url, i) => (
+            <div key={i} className="group relative">
+              <img src={url} alt="" className="h-12 w-12 rounded object-cover" />
+              <button onClick={() => img.removeAt(i)} className="absolute -right-1 -top-1 rounded-full bg-black/70 p-0.5 text-white/70 hover:text-white"><X className="h-3 w-3" /></button>
+            </div>
+          ))}
+          {img.uploading && <div className="flex items-center gap-1.5 text-[11px] text-white/50"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</div>}
         </div>
       )}
       {img.error && <div className="mx-4 border-x border-t border-red-500/20 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-300">{img.error}</div>}
       <div
         className="flex items-center gap-2 border-t border-white/5 px-4 py-3"
         onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => { e.preventDefault(); img.upload(e.dataTransfer.files?.[0]); }}
+        onDrop={(e) => { e.preventDefault(); img.upload(e.dataTransfer.files); }}
       >
-        <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => img.upload(e.target.files?.[0])} />
-        <button onClick={() => fileRef.current?.click()} disabled={img.uploading} className="shrink-0 rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white disabled:opacity-50" title="Attach image">
+        <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={(e) => img.upload(e.target.files)} />
+        <button onClick={() => fileRef.current?.click()} disabled={img.uploading || img.images.length >= img.max} className="shrink-0 rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white disabled:opacity-50" title="Attach image">
           <ImagePlus className="h-4 w-4" />
         </button>
         <input
@@ -170,7 +169,7 @@ function ChatRoom() {
         />
         <button
           onClick={submit}
-          disabled={sending || (!draft.trim() && !img.imageUrl) || img.uploading}
+          disabled={sending || (!draft.trim() && img.images.length === 0) || img.uploading}
           className="flex items-center gap-1.5 rounded-lg bg-indigo-500/90 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
         >
           {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
@@ -317,11 +316,7 @@ function MessageRow({
                 {m.edited_at && <span className="ml-1 text-[10px] text-white/25">(edited)</span>}
               </div>
             )}
-            {m.image_url && (
-              <a href={m.image_url} target="_blank" rel="noreferrer" className="mt-1 block w-fit">
-                <img src={m.image_url} alt="" className="max-h-72 max-w-full rounded-lg border border-white/10" />
-              </a>
-            )}
+            {m.images && m.images.length > 0 && <ImageGrid images={m.images} />}
           </>
         )}
         {m.reactions && m.reactions.length > 0 && (

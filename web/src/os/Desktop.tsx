@@ -11,6 +11,7 @@ import { TerminalLayer } from "./TerminalLayer";
 import { AppsDrawer } from "./AppsDrawer";
 import { Tooltip } from "../components/Tooltip";
 import { ProfileViewer } from "../apps/ProfileViewer";
+import { Lightbox } from "../components/Lightbox";
 import { DocsApp } from "../apps/DocsApp";
 import { usePanels } from "./usePanels";
 import { usePersisted } from "./usePersisted";
@@ -130,6 +131,8 @@ export function Desktop() {
 
       {/* Full-page profile overlay (opened via openProfile from anywhere). */}
       <ProfileViewer />
+      {/* Image lightbox overlay (opened from any thumbnail). */}
+      <Lightbox />
 
       {leaderActive && (
         <div className="pointer-events-none fixed left-1/2 top-9 z-[10000] -translate-x-1/2 rounded-lg border border-emerald-500/30 bg-black/80 px-3 py-1.5 font-mono text-[11px] text-emerald-300 shadow-lg">
