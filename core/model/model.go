@@ -72,6 +72,7 @@ const (
 type Event struct {
 	Type         EventType       `json:"type"`
 	Text         string          `json:"text,omitempty"`
+	Reasoning    string          `json:"reasoning,omitempty"` // model "thinking" delta (client may show/hide)
 	Model        string          `json:"model,omitempty"`
 	Usage        *Usage          `json:"usage,omitempty"`
 	Err          string          `json:"error,omitempty"`

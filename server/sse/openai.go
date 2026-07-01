@@ -48,6 +48,9 @@ func emit(w io.Writer, fl http.Flusher, v any) {
 
 func chunk(ev model.Event) map[string]any {
 	delta := map[string]any{"content": ev.Text}
+	if ev.Reasoning != "" {
+		delta["reasoning_content"] = ev.Reasoning
+	}
 	if len(ev.ToolCalls) > 0 {
 		calls := make([]map[string]any, 0, len(ev.ToolCalls))
 		for _, t := range ev.ToolCalls {

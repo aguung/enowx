@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Trash2, Loader2, Bot, ChevronDown, ChevronRight, FolderOpen, Shield, Check, X, Terminal, FileEdit, FileText, FilePlus, Globe, Wrench, Folder, CornerLeftUp, Settings2, Plus } from "lucide-react";
+import { Send, Trash2, Loader2, Bot, ChevronDown, ChevronRight, FolderOpen, Shield, Check, X, Terminal, FileEdit, FileText, FilePlus, Globe, Wrench, Folder, CornerLeftUp, Settings2, Plus, Brain } from "lucide-react";
 import { accountsApi, keysApi, filesApi, type ProviderModel, type DirListing } from "../lib/api";
 import { AiMarkdown } from "../components/AiMarkdown";
 import { TOOL_SCHEMAS, TOOL_META, GROUPABLE_TOOLS, GROUP_VERB, lineDiff, runTool, needsApproval, type PermLevel, type ToolName, type ToolResult } from "./agent/tools";
@@ -18,6 +18,7 @@ interface ToolCall {
 interface ChatMsg {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
+  reasoning?: string; // assistant "thinking" (collapsible, not sent back)
   images?: string[]; // user attachments as data URLs (vision)
   tool_calls?: ToolCall[]; // assistant turn requesting tools
   tool_call_id?: string; // tool result → which call
@@ -192,6 +193,10 @@ export function AiChatApp() {
           if (!delta) continue;
           if (delta.content) {
             assistant.content += delta.content;
+            schedule();
+          }
+          if (delta.reasoning_content) {
+            assistant.reasoning = (assistant.reasoning ?? "") + delta.reasoning_content;
             schedule();
           }
           for (const tc of delta.tool_calls ?? []) {
@@ -408,6 +413,7 @@ function ModelPicker({ current, open, setOpen, filter, setFilter, models, model,
 // message), avoiding a spam of "Read N files" blocks.
 type RenderItem =
   | { kind: "user"; content: string; images?: string[]; key: string }
+  | { kind: "reasoning"; content: string; key: string }
   | { kind: "text"; content: string; key: string }
   | { kind: "spinner"; key: string }
   | { kind: "tool"; call: ToolCall; result?: ToolResult; key: string }
@@ -430,8 +436,9 @@ function buildItems(msgs: ChatMsg[]): RenderItem[] {
     if (m.role === "tool") return;
     if (m.role === "user") { flushRun(); items.push({ kind: "user", content: m.content, images: m.images, key: `u_${i}` }); return; }
     // assistant
+    if (m.reasoning) { flushRun(); items.push({ kind: "reasoning", content: m.reasoning, key: `r_${i}` }); }
     if (m.content) { flushRun(); items.push({ kind: "text", content: m.content, key: `a_${i}` }); }
-    else if (!m.tool_calls?.length) { flushRun(); items.push({ kind: "spinner", key: `s_${i}` }); }
+    else if (!m.reasoning && !m.tool_calls?.length) { flushRun(); items.push({ kind: "spinner", key: `s_${i}` }); }
     for (const c of m.tool_calls ?? []) {
       const result = m.results?.[c.id];
       if (GROUPABLE_TOOLS.has(c.name as ToolName)) run.push({ call: c, result });
@@ -447,6 +454,20 @@ function buildItems(msgs: ChatMsg[]): RenderItem[] {
 // re-renders. This is the main guard against the "Aw, Snap" crash on long chats.
 const TextBlock = memo(function TextBlock({ content }: { content: string }) {
   return <div className="min-w-0"><AiMarkdown text={content} /></div>;
+});
+
+// ReasoningBlock renders the model's "thinking" as a collapsible dimmed block.
+const ReasoningBlock = memo(function ReasoningBlock({ content }: { content: string }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="rounded-lg border border-white/5 bg-white/[0.02]">
+      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-white/40 hover:text-white/60">
+        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        <Brain className="h-3.5 w-3.5" /> Thinking
+      </button>
+      {open && <div className="whitespace-pre-wrap px-3 pb-2 text-[11px] italic leading-relaxed text-white/40">{content}</div>}
+    </div>
+  );
 });
 
 function Conversation({ msgs }: { msgs: ChatMsg[] }) {
@@ -468,6 +489,8 @@ function Conversation({ msgs }: { msgs: ChatMsg[] }) {
                 </div>
               </div>
             );
+          case "reasoning":
+            return <ReasoningBlock key={it.key} content={it.content} />;
           case "text":
             return <TextBlock key={it.key} content={it.content} />;
           case "spinner":

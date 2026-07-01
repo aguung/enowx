@@ -58,6 +58,7 @@ func New(addr string, d Deps) *Server {
 	dbg := handlers.NewDebug(d.Settings.Version, d.Settings.Started)
 	docs := handlers.NewDocs(d.Settings.Version)
 	kiro := handlers.NewKiro(d.Doer, d.Accounts)
+	codex := handlers.NewCodex(d.Doer, d.Accounts)
 	local := handlers.NewLocal(d.Accounts)
 	usage := handlers.NewUsage(d.Registry, d.Accounts)
 	models := handlers.NewModels(d.Registry, d.Accounts, d.Sync)
@@ -67,6 +68,7 @@ func New(addr string, d Deps) *Server {
 	// Auto-warm newly-added accounts (credit check + test request) before pool.
 	accounts.SetWarmer(warmup)
 	kiro.SetWarmer(warmup)
+	codex.SetWarmer(warmup)
 	local.SetWarmer(warmup)
 	dash := middleware.NewDashboard(d.SettingsKV)
 	term := handlers.NewTerminal(dash)
@@ -135,6 +137,10 @@ func New(addr string, d Deps) *Server {
 		r.Get("/accounts/kiro/aws/poll", kiro.AWSPoll)
 		r.Post("/accounts/kiro/oauth/start", kiro.OAuthStart)
 		r.Post("/accounts/kiro/oauth/exchange", kiro.OAuthExchange)
+
+		r.Post("/accounts/codex/oauth/start", codex.OAuthStart)
+		r.Post("/accounts/codex/oauth/exchange", codex.OAuthExchange)
+		r.Post("/accounts/codex/manual", codex.Manual)
 
 		r.Get("/local-sources", local.Scan)
 		r.Post("/local-sources/import", local.Import)

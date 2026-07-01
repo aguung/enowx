@@ -4,6 +4,7 @@ import { AppShell } from "./shell";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { AddAccountModal } from "../components/AddAccountModal";
 import { KiroAddModal } from "../components/KiroAddModal";
+import { CodexAddModal } from "../components/CodexAddModal";
 import { providersApi, accountsApi, type Provider, type Account } from "../lib/api";
 
 export function ProvidersApp() {
@@ -96,7 +97,17 @@ export function ProvidersApp() {
           }}
         />
       )}
-      {adding && adding.name !== "kiro" && (
+      {adding && adding.name === "codex" && (
+        <CodexAddModal
+          provider={adding}
+          onClose={() => setAdding(null)}
+          onSaved={() => {
+            setAdding(null);
+            load();
+          }}
+        />
+      )}
+      {adding && adding.name !== "kiro" && adding.name !== "codex" && (
         <AddAccountModal
           provider={adding}
           onClose={() => setAdding(null)}
