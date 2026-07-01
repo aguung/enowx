@@ -94,6 +94,7 @@ func New(addr string, d Deps) *Server {
 		r.Patch("/accounts/{id}/disabled", accounts.SetDisabled)
 		r.Get("/accounts/{id}/usage", usage.Get)
 		r.Get("/accounts/{id}/models", models.Get)
+		r.Get("/models", models.All)
 		r.Get("/model-aliases", aliases.List)
 		r.Post("/model-aliases", aliases.Set)
 		r.Delete("/model-aliases/{alias}", aliases.Delete)

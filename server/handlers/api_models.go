@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -37,35 +38,64 @@ func (h *Models) Get(w http.ResponseWriter, r *http.Request) {
 		writeAPIErr(w, http.StatusNotFound, "account not found")
 		return
 	}
+	out, source := h.modelsFor(r.Context(), acc)
+	writeData(w, map[string]any{"provider": acc.Provider, "source": source, "models": out})
+}
+
+// modelsFor resolves the models an account can access: live from upstream for
+// fetchable providers, otherwise the cloud DB catalog. Ids carry the provider
+// prefix (e.g. "kr/…"). Returns the list and its source ("upstream"|"catalog").
+func (h *Models) modelsFor(ctx context.Context, acc store.Account) ([]modelDTO, string) {
 	prov, err := h.reg.Get(acc.Provider)
 	if err != nil {
-		writeAPIErr(w, http.StatusBadRequest, err.Error())
-		return
+		return nil, "catalog"
 	}
-
 	prefix := proxy.ProviderPrefix(acc.Provider)
 
-	// Fetchable provider → live from upstream using this account's creds.
 	if fetcher, ok := prov.(provider.ModelFetcher); ok {
-		models, err := fetcher.Models(provider.Account{ID: acc.ID, Secret: acc.Secret, Creds: acc.Creds})
-		if err == nil {
+		if models, err := fetcher.Models(provider.Account{ID: acc.ID, Secret: acc.Secret, Creds: acc.Creds}); err == nil {
 			out := make([]modelDTO, 0, len(models))
 			for _, m := range models {
 				out = append(out, modelDTO{ID: prefixed(prefix, m.ID), ModelID: prefixed(prefix, m.ID), Name: m.Name, Type: m.Type, OwnedBy: m.OwnedBy})
 			}
-			writeData(w, map[string]any{"provider": acc.Provider, "source": "upstream", "models": out})
-			return
+			return out, "upstream"
 		}
-		// If the live fetch fails, fall through to the DB catalog as a backup.
+		// Live fetch failed → fall through to the catalog.
 	}
-
-	// Non-fetchable (or fetch failed) → cloud DB catalog.
-	cat := h.mgr.ProviderModels(r.Context(), acc.Provider)
+	cat := h.mgr.ProviderModels(ctx, acc.Provider)
 	out := make([]modelDTO, 0, len(cat))
 	for _, m := range cat {
 		out = append(out, modelDTO{ID: prefixed(prefix, m.ModelID), ModelID: prefixed(prefix, m.ModelID), Name: m.Name, Type: m.Type, OwnedBy: m.OwnedBy, MaxInput: m.MaxInput, MaxOutput: m.MaxOutput})
 	}
-	writeData(w, map[string]any{"provider": acc.Provider, "source": "catalog", "models": out})
+	return out, "catalog"
+}
+
+// All aggregates the models across every enabled account, deduped by model id —
+// the unified picker list for the Chat view (no account selection).
+func (h *Models) All(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.store.List(r.Context(), "")
+	if err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	seen := map[string]bool{}
+	out := []modelDTO{}
+	seenProvider := map[string]bool{} // one account per provider is enough
+	for _, acc := range rows {
+		if acc.Disabled || seenProvider[acc.Provider] {
+			continue
+		}
+		seenProvider[acc.Provider] = true
+		models, _ := h.modelsFor(r.Context(), acc)
+		for _, m := range models {
+			if m.ModelID == "" || seen[m.ModelID] {
+				continue
+			}
+			seen[m.ModelID] = true
+			out = append(out, m)
+		}
+	}
+	writeData(w, map[string]any{"models": out})
 }
 
 // modelDTO is the per-account model list item (model_id carries the provider

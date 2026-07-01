@@ -92,6 +92,7 @@ export const accountsApi = {
   remove: (id: number) => api.del<{ ok: boolean }>(`/api/accounts/${id}`),
   usage: (id: number) => api.get<{ supported: boolean; usage?: Usage }>(`/api/accounts/${id}/usage`),
   models: (id: number) => api.get<{ provider: string; source: string; models: ProviderModel[] }>(`/api/accounts/${id}/models`),
+  allModels: () => api.get<{ models: ProviderModel[] }>("/api/models"),
   warmup: (id: number) =>
     api.post<{ ok: boolean; status: string; error?: string; usage_supported?: boolean; usage?: Usage }>(
       `/api/accounts/${id}/warmup`,

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { LayoutGrid, SquareTerminal, BookOpen, Grid3x3 } from "lucide-react";
+import { LayoutGrid, SquareTerminal, BookOpen, Grid3x3, Bot, FlaskConical } from "lucide-react";
 import { buildApps } from "../apps";
 import { SideDock } from "./SideDock";
 import { SidePanel } from "./SidePanel";
@@ -14,6 +14,8 @@ import { ProfileViewer } from "../apps/ProfileViewer";
 import { Lightbox } from "../components/Lightbox";
 import { useProfile } from "./useProfile";
 import { DocsApp } from "../apps/DocsApp";
+import { AiChatApp } from "../apps/AiChatApp";
+import { ApiTestApp } from "../apps/ApiTestApp";
 import { usePanels } from "./usePanels";
 import { usePersisted } from "./usePersisted";
 import { useAppLocations } from "./useSides";
@@ -21,7 +23,7 @@ import { useShortcuts } from "./useShortcuts";
 import { useTerminals, type TermLocation } from "./useTerminals";
 import type { AppId, Location, Side } from "./types";
 
-type CenterView = "widget" | "terminal" | "apps" | "docs";
+type CenterView = "widget" | "terminal" | "chat" | "apitest" | "apps" | "docs";
 
 export function Desktop() {
   const profile = useProfile();
@@ -76,7 +78,7 @@ export function Desktop() {
     c: "profile",
   };
   const leaderActive = useShortcuts((k) => {
-    const v: Record<string, CenterView> = { "1": "widget", "2": "terminal", "3": "apps", "4": "docs" };
+    const v: Record<string, CenterView> = { "1": "widget", "2": "terminal", "3": "chat", "4": "apitest", "5": "apps", "6": "docs" };
     if (v[k]) {
       setView(v[k]);
       return;
@@ -119,6 +121,12 @@ export function Desktop() {
             <div className={`absolute inset-0 ${view === "terminal" ? "" : "hidden"}`}>
               <CenterTerminal term={term} setHost={setCenterHost} />
             </div>
+            <div className={`absolute inset-0 ${view === "chat" ? "" : "hidden"}`}>
+              <AiChatApp />
+            </div>
+            <div className={`absolute inset-0 ${view === "apitest" ? "" : "hidden"}`}>
+              <ApiTestApp />
+            </div>
             <div className={`absolute inset-0 ${view === "apps" ? "" : "hidden"}`}>
               <AppsDrawer apps={drawerApps} onOpen={openApp} onDropToDrawer={(id) => move(id, "drawer")} />
             </div>
@@ -138,7 +146,7 @@ export function Desktop() {
 
       {leaderActive && (
         <div className="pointer-events-none fixed left-1/2 top-9 z-[10000] -translate-x-1/2 rounded-lg border border-emerald-500/30 bg-black/80 px-3 py-1.5 font-mono text-[11px] text-emerald-300 shadow-lg">
-          hold + press: 1 widget · 2 terminal · 3 apps · 4 docs · p a s g f r w k m t c apps
+          hold + press: 1 widget · 2 terminal · 3 chat · 4 api · 5 apps · 6 docs · p a s g f r w k m t c apps
         </div>
       )}
 
@@ -181,8 +189,10 @@ function CenterNav({ view, onView }: { view: CenterView; onView: (v: CenterView)
   const tabs: { id: CenterView; label: string; icon: typeof LayoutGrid; key: string }[] = [
     { id: "widget", label: "Widget", icon: LayoutGrid, key: "1" },
     { id: "terminal", label: "Terminal", icon: SquareTerminal, key: "2" },
-    { id: "apps", label: "Apps", icon: Grid3x3, key: "3" },
-    { id: "docs", label: "Docs", icon: BookOpen, key: "4" },
+    { id: "chat", label: "Chat", icon: Bot, key: "3" },
+    { id: "apitest", label: "API Test", icon: FlaskConical, key: "4" },
+    { id: "apps", label: "Apps", icon: Grid3x3, key: "5" },
+    { id: "docs", label: "Docs", icon: BookOpen, key: "6" },
   ];
   return (
     <div className="flex items-center gap-0.5">
