@@ -82,17 +82,23 @@ func (am *authManager) refresh() error {
 		region = "us-east-1"
 	}
 
-	payload := map[string]string{
-		"grantType":    "refresh_token",
-		"refreshToken": refreshTok,
-	}
+	// AWS accounts (builder-id / idc) carry a client id/secret and refresh via
+	// the AWS SSO OIDC endpoint; social (Kiro OAuth) accounts refresh via the
+	// Kiro desktop endpoint with just the refresh token.
+	url := kiroDesktopRefreshURL
+	payload := map[string]string{"refreshToken": refreshTok}
 	if clientID != "" {
-		payload["clientId"] = clientID
-		payload["clientSecret"] = clientSecret
+		url = fmt.Sprintf(ssoOIDCURLTemplate, region)
+		payload = map[string]string{
+			"grantType":    "refresh_token",
+			"refreshToken": refreshTok,
+			"clientId":     clientID,
+			"clientSecret": clientSecret,
+		}
 	}
 	body, _ := json.Marshal(payload)
 
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf(ssoOIDCURLTemplate, region), bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -111,7 +117,8 @@ func (am *authManager) refresh() error {
 	var out struct {
 		AccessToken  string `json:"accessToken"`
 		RefreshToken string `json:"refreshToken"`
-		ExpiresIn    int    `json:"expiresIn"`
+		ExpiresIn    int    `json:"expiresIn"` // AWS OIDC: seconds
+		ExpiresAt    string `json:"expiresAt"` // Kiro desktop: RFC3339 timestamp
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return fmt.Errorf("kiro refresh decode: %w", err)
@@ -120,16 +127,26 @@ func (am *authManager) refresh() error {
 		return fmt.Errorf("kiro refresh: empty accessToken")
 	}
 
-	expiresIn := out.ExpiresIn
-	if expiresIn <= 0 {
-		expiresIn = 3600
+	// Kiro desktop returns an absolute expiresAt; AWS OIDC returns expiresIn.
+	var newExpiry time.Time
+	if out.ExpiresAt != "" {
+		if t, e := time.Parse(time.RFC3339, out.ExpiresAt); e == nil {
+			newExpiry = t.Add(-60 * time.Second)
+		}
+	}
+	if newExpiry.IsZero() {
+		expiresIn := out.ExpiresIn
+		if expiresIn <= 0 {
+			expiresIn = 3600
+		}
+		newExpiry = time.Now().Add(time.Duration(expiresIn-60) * time.Second)
 	}
 	am.mu.Lock()
 	am.creds["access_token"] = out.AccessToken
 	if out.RefreshToken != "" {
 		am.creds["refresh_token"] = out.RefreshToken
 	}
-	am.expires = time.Now().Add(time.Duration(expiresIn-60) * time.Second)
+	am.expires = newExpiry
 	am.creds["expires_at"] = am.expires.Format(time.RFC3339)
 	snapshot := make(map[string]string, len(am.creds))
 	maps.Copy(snapshot, am.creds)

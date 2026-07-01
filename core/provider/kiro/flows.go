@@ -25,6 +25,10 @@ const (
 	oauthAuthorizeURL = "https://prod.us-east-1.auth.desktop.kiro.dev/login"
 	oauthTokenURL     = "https://prod.us-east-1.auth.desktop.kiro.dev/oauth/token"
 	oauthRedirectURI  = "kiro://kiro.kiroAgent/authenticate-success"
+
+	// kiroDesktopRefreshURL refreshes social (Kiro OAuth) tokens — a different
+	// endpoint from the AWS SSO OIDC one used for builder-id / idc accounts.
+	kiroDesktopRefreshURL = "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken"
 )
 
 var (
