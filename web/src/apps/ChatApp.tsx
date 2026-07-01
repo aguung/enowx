@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Send, Wifi, WifiOff, Pencil, Trash2, Copy, Reply, X, SmilePlus, ShieldCheck } from "lucide-react";
+import { Loader2, Send, Wifi, WifiOff, Pencil, Trash2, Copy, Reply, X, SmilePlus, ShieldCheck, ImagePlus } from "lucide-react";
 import { AppShell } from "./shell";
 import { Popover } from "../components/Popover";
 import { ProfileCard } from "../components/ProfileCard";
@@ -9,6 +9,8 @@ import { useProfile } from "../os/useProfile";
 import { useChat, sendChat, editChat, deleteChat, reactChat, loadChannel } from "../os/chatBus";
 import { useDialog } from "../os/dialog";
 import { openProfile } from "../os/profileViewer";
+import { useImageAttach } from "../os/useImageAttach";
+import { Markdown } from "../components/Markdown";
 import { profileApi, modApi, type ChatMessage, type PublicProfile, type TopRole } from "../lib/api";
 
 interface ReplyTarget {
@@ -45,6 +47,8 @@ function ChatRoom() {
   const [sending, setSending] = useState(false);
   const [openUser, setOpenUser] = useState<string | null>(null);
   const [reply, setReply] = useState<ReplyTarget | null>(null);
+  const img = useImageAttach();
+  const fileRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -63,12 +67,13 @@ function ChatRoom() {
 
   async function submit() {
     const text = draft.trim();
-    if (!text || sending) return;
+    if ((!text && !img.imageUrl) || sending || img.uploading) return;
     setSending(true);
     try {
-      await sendChat(text, reply?.id);
+      await sendChat(text, reply?.id, img.imageUrl || undefined);
       setDraft("");
       setReply(null);
+      img.clear();
     } catch {
       /* keep the draft so the user can retry */
     } finally {
@@ -129,11 +134,35 @@ function ChatRoom() {
           </button>
         </div>
       )}
-      <div className="flex items-center gap-2 border-t border-white/5 px-4 py-3">
+      {/* Pending image attachment preview */}
+      {(img.imageUrl || img.uploading) && (
+        <div className="mx-4 flex items-center gap-2 border-x border-t border-white/10 bg-white/[0.03] px-3 py-2">
+          {img.uploading ? (
+            <div className="flex items-center gap-1.5 text-[11px] text-white/50"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading…</div>
+          ) : (
+            <>
+              <img src={img.imageUrl} alt="" className="h-12 w-12 rounded object-cover" />
+              <span className="text-[11px] text-white/50">Image attached</span>
+              <button onClick={img.clear} className="ml-auto rounded p-0.5 text-white/40 hover:bg-white/10 hover:text-white"><X className="h-3.5 w-3.5" /></button>
+            </>
+          )}
+        </div>
+      )}
+      {img.error && <div className="mx-4 border-x border-t border-red-500/20 bg-red-500/10 px-3 py-1.5 text-[11px] text-red-300">{img.error}</div>}
+      <div
+        className="flex items-center gap-2 border-t border-white/5 px-4 py-3"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); img.upload(e.dataTransfer.files?.[0]); }}
+      >
+        <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => img.upload(e.target.files?.[0])} />
+        <button onClick={() => fileRef.current?.click()} disabled={img.uploading} className="shrink-0 rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white disabled:opacity-50" title="Attach image">
+          <ImagePlus className="h-4 w-4" />
+        </button>
         <input
           ref={inputRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onPaste={img.onPaste}
           onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), submit())}
           placeholder={reply ? `Reply to ${reply.author}` : `Message #${channel}`}
           maxLength={1000}
@@ -141,7 +170,7 @@ function ChatRoom() {
         />
         <button
           onClick={submit}
-          disabled={sending || !draft.trim()}
+          disabled={sending || (!draft.trim() && !img.imageUrl) || img.uploading}
           className="flex items-center gap-1.5 rounded-lg bg-indigo-500/90 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
         >
           {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
@@ -281,10 +310,19 @@ function MessageRow({
             <span className="text-[10px] text-white/30">enter to save · esc to cancel</span>
           </div>
         ) : (
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-white/80">
-            {m.content}
-            {m.edited_at && <span className="ml-1 text-[10px] text-white/25">(edited)</span>}
-          </p>
+          <>
+            {m.content && (
+              <div className="break-words text-sm leading-relaxed text-white/80">
+                <Markdown text={m.content} />
+                {m.edited_at && <span className="ml-1 text-[10px] text-white/25">(edited)</span>}
+              </div>
+            )}
+            {m.image_url && (
+              <a href={m.image_url} target="_blank" rel="noreferrer" className="mt-1 block w-fit">
+                <img src={m.image_url} alt="" className="max-h-72 max-w-full rounded-lg border border-white/10" />
+              </a>
+            )}
+          </>
         )}
         {m.reactions && m.reactions.length > 0 && (
           <div className="mt-1 flex flex-wrap items-center gap-1">

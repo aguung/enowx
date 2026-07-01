@@ -77,8 +77,8 @@ function ensureStream() {
   };
 }
 
-export async function createPost(cat: string, title: string, body: string) {
-  const p = await postsApi.create(cat, title, body);
+export async function createPost(cat: string, title: string, body: string, imageUrl?: string) {
+  const p = await postsApi.create(cat, title, body, imageUrl);
   if (p && !posts.some((x) => x.id === p.id)) {
     posts = [p, ...posts];
     emit();

@@ -336,6 +336,11 @@ async function uploadFile<T>(path: string, file: File): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// imageApi uploads a chat/post image and returns its CDN URL.
+export const imageApi = {
+  upload: (file: File) => uploadFile<{ url: string }>("/api/upload/image", file),
+};
+
 export interface Equipped {
   title: string;
   badge: string;
@@ -404,6 +409,7 @@ export interface Post {
   upvoted: boolean;
   reactions?: Reaction[];
   comment_count?: number;
+  image_url?: string;
 }
 
 export interface Comment {
@@ -441,7 +447,7 @@ export const postsApi = {
     const s = q.toString();
     return api.get<{ posts: Post[]; categories: PostCategory[] }>(`/api/posts${s ? `?${s}` : ""}`);
   },
-  create: (category: string, title: string, body: string) => api.post<Post>("/api/posts", { category, title, body }),
+  create: (category: string, title: string, body: string, image_url?: string) => api.post<Post>("/api/posts", { category, title, body, image_url: image_url ?? "" }),
   edit: (id: number, title: string, body: string) => api.patch<{ id: number }>(`/api/posts/${id}`, { title, body }),
   remove: (id: number) => api.del<{ deleted: number }>(`/api/posts/${id}`),
   upvote: (id: number) => api.post<{ id: number; count: number; me: boolean }>(`/api/posts/${id}/upvote`),
@@ -457,6 +463,7 @@ export interface ChatMessage {
   edited_at?: string | null;
   reply_to?: number | null;
   reply_content?: string;
+  image_url?: string;
   reply_author?: string;
   username: string;
   display_name?: string;
@@ -484,8 +491,8 @@ export const chatApi = {
     api.get<{ messages: ChatMessage[]; channel: string; channels: ChatChannel[] }>(
       `/api/chat/messages${channel ? `?channel=${encodeURIComponent(channel)}` : ""}`,
     ),
-  send: (content: string, channel: string, reply_to?: number) =>
-    api.post<ChatMessage>("/api/chat/messages", { content, channel, reply_to: reply_to ?? null }),
+  send: (content: string, channel: string, reply_to?: number, image_url?: string) =>
+    api.post<ChatMessage>("/api/chat/messages", { content, channel, reply_to: reply_to ?? null, image_url: image_url ?? "" }),
   edit: (id: number, content: string) => api.patch<{ id: number; content: string }>(`/api/chat/messages/${id}`, { content }),
   remove: (id: number) => api.del<{ deleted: number }>(`/api/chat/messages/${id}`),
   react: (id: number, emoji: string) => api.post<{ message_id: number; reactions: Reaction[] }>(`/api/chat/messages/${id}/reactions`, { emoji }),

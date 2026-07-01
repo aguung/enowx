@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { Loader2, Check, Plus, X, Pencil, ImagePlus, Lock } from "lucide-react";
 import { useProfile, refreshProfile } from "../os/useProfile";
-import { ProfileCard } from "../components/ProfileCard";
 import { profileApi, type ProfileLink } from "../lib/api";
 
 // Field limits mirror the server (it re-validates; this is just nicer UX).
@@ -10,9 +9,9 @@ const MAX_PRONOUNS = 40;
 const MAX_BIO = 190;
 const MAX_LINKS = 5;
 
-// ProfileEditor: a Discord-style two-column editor in a wide modal — the left
-// column edits fields, the right column shows a live <ProfileCard> preview that
-// updates as you type. The server validates + sanitizes on save.
+// ProfileEditor: a single-column edit form in a modal (avatar/banner upload,
+// display name, pronouns, theme, bio, links). The server validates + sanitizes
+// on save; changes show on the profile card after saving.
 export function ProfileEditor() {
   const profile = useProfile();
   const u = profile.user;
@@ -25,8 +24,6 @@ export function ProfileEditor() {
   const [primary, setPrimary] = useState(u?.primary_color || "#2b2d36");
   const [accent, setAccent] = useState(u?.accent_color || "#2b2d36");
   const [links, setLinks] = useState<ProfileLink[]>(u?.links ?? []);
-  const [avatarUrl, setAvatarUrl] = useState(u?.avatar_url ?? "");
-  const [bannerUrl, setBannerUrl] = useState(u?.banner_url ?? "");
   const [uploading, setUploading] = useState("");
   const avatarInput = useRef<HTMLInputElement>(null);
   const bannerInput = useRef<HTMLInputElement>(null);
@@ -40,8 +37,7 @@ export function ProfileEditor() {
     setError("");
     setUploading("avatar");
     try {
-      const r = await profileApi.uploadAvatar(file);
-      setAvatarUrl(r.avatar_url);
+      await profileApi.uploadAvatar(file);
       refreshProfile();
     } catch (e) {
       setError(e instanceof Error ? e.message : "avatar upload failed");
@@ -54,8 +50,7 @@ export function ProfileEditor() {
     setError("");
     setUploading("banner");
     try {
-      const r = await profileApi.uploadBanner(file);
-      setBannerUrl(r.banner_url);
+      await profileApi.uploadBanner(file);
       refreshProfile();
     } catch (e) {
       setError(e instanceof Error ? e.message : "banner upload failed");
@@ -78,17 +73,6 @@ export function ProfileEditor() {
   }
 
   // Live preview merges the saved identity with the in-progress edits.
-  const preview = {
-    ...u!,
-    display_name: displayName,
-    pronouns,
-    bio,
-    primary_color: primary,
-    accent_color: accent,
-    avatar_url: avatarUrl,
-    banner_url: bannerUrl,
-    links: links.filter((l) => l.url.trim()),
-  };
 
   async function save() {
     setError("");
@@ -127,7 +111,7 @@ export function ProfileEditor() {
           onClick={() => !busy && setOpen(false)}
         >
           <div
-            className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e1016] shadow-2xl"
+            className="flex max-h-[88vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e1016] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
@@ -137,9 +121,9 @@ export function ProfileEditor() {
               </button>
             </div>
 
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[1fr_300px]">
-              {/* Left: the form */}
-              <div className="space-y-4 overflow-auto px-4 py-4">
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+              {/* Form */}
+              <div className="w-full space-y-4 overflow-auto px-4 py-4">
                 {error && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</div>}
 
                 <Field label="Avatar & banner">
@@ -235,12 +219,6 @@ export function ProfileEditor() {
                     )}
                   </div>
                 </Field>
-              </div>
-
-              {/* Right: live preview */}
-              <div className="hidden flex-col border-l border-white/5 bg-black/20 px-4 py-4 md:flex">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/40">Preview</p>
-                <ProfileCard p={preview} />
               </div>
             </div>
 

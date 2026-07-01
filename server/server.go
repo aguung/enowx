@@ -125,6 +125,7 @@ func New(addr string, d Deps) *Server {
 		r.Patch("/profile", syncH.UpdateProfile)
 		r.Post("/profile/avatar", syncH.UploadAvatar)
 		r.Post("/profile/banner", syncH.UploadBanner)
+		r.Post("/upload/image", syncH.UploadImage)
 		r.Get("/users/{id}/profile", syncH.PublicProfile)
 		r.Get("/users/{id}/posts", syncH.UserPosts)
 		r.Get("/posts", syncH.PostsList)

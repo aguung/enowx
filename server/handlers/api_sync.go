@@ -123,6 +123,7 @@ func (h *Sync) PublicProfile(w http.ResponseWriter, r *http.Request) {
 // UploadAvatar / UploadBanner proxy a multipart image upload to the cloud.
 func (h *Sync) UploadAvatar(w http.ResponseWriter, r *http.Request) { h.uploadMedia(w, r, "/me/avatar") }
 func (h *Sync) UploadBanner(w http.ResponseWriter, r *http.Request) { h.uploadMedia(w, r, "/me/banner") }
+func (h *Sync) UploadImage(w http.ResponseWriter, r *http.Request)  { h.uploadMedia(w, r, "/upload/image") }
 
 func (h *Sync) uploadMedia(w http.ResponseWriter, r *http.Request, path string) {
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 20<<20))

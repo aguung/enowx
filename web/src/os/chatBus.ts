@@ -79,8 +79,8 @@ function ensureStream() {
   };
 }
 
-export async function sendChat(content: string, replyTo?: number) {
-  const msg = await chatApi.send(content, channel, replyTo);
+export async function sendChat(content: string, replyTo?: number, imageUrl?: string) {
+  const msg = await chatApi.send(content, channel, replyTo, imageUrl);
   // Optimistically append (broadcast de-dupes by id).
   if (msg && !messages.some((m) => m.id === msg.id)) {
     messages = [...messages, msg];
