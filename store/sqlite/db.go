@@ -64,7 +64,7 @@ func seedApiTest(db *sql.DB) {
 	cid, _ := res.LastInsertId()
 	chatBody := `{
   "model": "cb/gemini-3.1-pro",
-  "stream": false,
+  "stream": true,
   "messages": [
     { "role": "system", "content": "You are a helpful assistant." },
     { "role": "user", "content": "hi" }
@@ -73,6 +73,7 @@ func seedApiTest(db *sql.DB) {
 	anthBody := `{
   "model": "cb/claude-sonnet-4.5",
   "max_tokens": 64,
+  "stream": true,
   "system": "You are a helpful assistant.",
   "messages": [{ "role": "user", "content": "hi" }]
 }`
