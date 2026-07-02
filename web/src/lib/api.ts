@@ -837,9 +837,55 @@ export interface Order {
 }
 
 export const orderApi = {
-  create: (listing_id: number) => api.post<{ order_id: number; order_ref: string; pay_url: string; amount: number; reused?: boolean }>("/api/marketplace/orders", { listing_id }),
+  create: (service_code: string, data_no: string, data_zone = "") => api.post<{ order_id: number; order_ref: string; pay_url: string; amount: number; reused?: boolean }>("/api/marketplace/orders", { service_code, data_no, data_zone }),
   list: () => api.get<{ orders: Order[] }>("/api/marketplace/orders"),
   get: (id: number) => api.get<Order>(`/api/marketplace/orders/${id}`),
+};
+
+// Official Store (curated VIPayment products).
+export interface OfficialProduct {
+  id: number;
+  kind: "prepaid" | "game";
+  service_code: string;
+  name: string;
+  category: string;
+  brand: string;
+  needs_zone: boolean;
+  sell_price: number;
+}
+export interface VIPService {
+  code: string;
+  name: string;
+  price: number;
+  status: string;
+  brand: string;
+  type: string;
+  note?: string;
+}
+export interface VIPProduct extends OfficialProduct {
+  cost_price: number;
+  markup_percent: number;
+  markup_flat: number;
+  enabled: boolean;
+  sort_order: number;
+}
+
+export const officialApi = {
+  list: () => api.get<{ products: OfficialProduct[] }>("/api/marketplace/official"),
+};
+
+export const adminVipApi = {
+  balance: () => api.get<{ balance: number }>("/api/marketplace/admin/vip/balance"),
+  catalog: (kind: "prepaid" | "game", filterType = "", filterValue = "") => {
+    const p = new URLSearchParams({ kind });
+    if (filterType) p.set("filter_type", filterType);
+    if (filterValue) p.set("filter_value", filterValue);
+    return api.get<{ kind: string; services: VIPService[] }>(`/api/marketplace/admin/vip/catalog?${p}`);
+  },
+  products: () => api.get<{ products: VIPProduct[] }>("/api/marketplace/admin/vip/products"),
+  upsert: (p: Partial<VIPProduct> & { service_code: string; name: string; kind: string }) => api.post<{ id: number }>("/api/marketplace/admin/vip/products", p),
+  toggle: (id: number, enabled: boolean) => api.patch<{ ok: boolean }>(`/api/marketplace/admin/vip/products/${id}`, { enabled }),
+  remove: (id: number) => api.del<{ ok: boolean }>(`/api/marketplace/admin/vip/products/${id}`),
 };
 
 // ChatMessage carries the message + a snapshot of the author's identity.

@@ -612,6 +612,33 @@ func (m *Manager) OrderGet(ctx context.Context, id string) (string, error) {
 	return string(raw), nil
 }
 
+// OfficialList lists the curated Official-Store products.
+func (m *Manager) OfficialList(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/marketplace/official", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// VIPAdminGet proxies a GET under /admin/vip (e.g. "/balance", "/catalog?kind=..", "/products").
+func (m *Manager) VIPAdminGet(ctx context.Context, path string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/vip"+path, nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// VIPAdminSend proxies a mutation under /admin/vip.
+func (m *Manager) VIPAdminSend(ctx context.Context, method, path string, body json.RawMessage) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, method, "/admin/vip"+path, body, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // PostComments fetches a post's comments.
 func (m *Manager) PostComments(ctx context.Context, postID string) (string, error) {
 	var raw json.RawMessage

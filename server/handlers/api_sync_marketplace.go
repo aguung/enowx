@@ -102,3 +102,46 @@ func (h *Sync) OrderGet(w http.ResponseWriter, r *http.Request) {
 	out, err := h.mgr.OrderGet(r.Context(), chi.URLParam(r, "id"))
 	proxyJSON(w, out, err)
 }
+
+// --- official store (VIP) + admin ---
+
+func (h *Sync) OfficialList(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.OfficialList(r.Context())
+	proxyJSON(w, out, err)
+}
+
+func (h *Sync) VIPBalance(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.VIPAdminGet(r.Context(), "/balance")
+	proxyJSON(w, out, err)
+}
+
+func (h *Sync) VIPCatalog(w http.ResponseWriter, r *http.Request) {
+	q := ""
+	if raw := r.URL.RawQuery; raw != "" {
+		q = "?" + raw
+	}
+	out, err := h.mgr.VIPAdminGet(r.Context(), "/catalog"+q)
+	proxyJSON(w, out, err)
+}
+
+func (h *Sync) VIPProducts(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.VIPAdminGet(r.Context(), "/products")
+	proxyJSON(w, out, err)
+}
+
+func (h *Sync) VIPProductUpsert(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
+	out, err := h.mgr.VIPAdminSend(r.Context(), http.MethodPost, "/products", body)
+	proxyJSON(w, out, err)
+}
+
+func (h *Sync) VIPProductToggle(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 1024))
+	out, err := h.mgr.VIPAdminSend(r.Context(), http.MethodPatch, "/products/"+chi.URLParam(r, "id"), body)
+	proxyJSON(w, out, err)
+}
+
+func (h *Sync) VIPProductDelete(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.VIPAdminSend(r.Context(), http.MethodDelete, "/products/"+chi.URLParam(r, "id"), nil)
+	proxyJSON(w, out, err)
+}

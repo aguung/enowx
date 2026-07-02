@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign, ShoppingCart, ExternalLink, Copy } from "lucide-react";
-import { marketplaceApi, rekberApi, orderApi, type Listing, type ListingCategory, type RekberThread, type RekberMessage, type Order } from "../lib/api";
+import { marketplaceApi, rekberApi, orderApi, officialApi, type Listing, type ListingCategory, type RekberThread, type RekberMessage, type Order, type OfficialProduct } from "../lib/api";
 import { useProfile } from "../os/useProfile";
 import { useImageAttach } from "../os/useImageAttach";
 import { useDialog } from "../os/dialog";
@@ -38,13 +38,15 @@ export function MarketplaceApp() {
           <OrdersView />
         ) : view === "deals" ? (
           <DealsView openThread={openThread} setOpenThread={setOpenThread} />
+        ) : kind === "official" ? (
+          <OfficialStore onBought={() => setView("orders")} />
         ) : detail ? (
           <ListingDetail listing={detail} onBack={() => setDetail(null)} onDeleted={() => setDetail(null)} onDeal={openDeal} />
         ) : (
           <Feed kind={kind} onOpen={setDetail} />
         )}
       </div>
-      {creating && <SellModal initialKind={kind} onClose={() => setCreating(false)} onCreated={() => setCreating(false)} />}
+      {creating && <SellModal onClose={() => setCreating(false)} onCreated={() => setCreating(false)} />}
     </div>
   );
 }
@@ -139,19 +141,6 @@ function ListingDetail({ listing, onBack, onDeleted, onDeal }: { listing: Listin
     }
   };
 
-  const buy = async () => {
-    setDealing(true);
-    try {
-      const o = await orderApi.create(listing.id);
-      if (o.pay_url) window.open(o.pay_url, "_blank", "noopener");
-      await dialog.alert({ title: "Payment opened", message: "Complete the payment in the new tab. Your order will be delivered automatically — check My Orders." });
-    } catch (e) {
-      await dialog.alert({ title: "Couldn't start order", message: e instanceof Error ? e.message : "failed" });
-    } finally {
-      setDealing(false);
-    }
-  };
-
   const remove = async () => {
     const ok = await dialog.confirm({ title: "Delete listing?", message: `"${listing.title}" will be removed.`, confirmLabel: "Delete", danger: true });
     if (!ok) return;
@@ -186,11 +175,7 @@ function ListingDetail({ listing, onBack, onDeleted, onDeal }: { listing: Listin
         {listing.warranty && <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2 text-[11px] text-emerald-200/90">Warranty: {listing.warranty}</div>}
         {listing.description && <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/70">{listing.description}</p>}
         <div className="mt-4 flex gap-2">
-          {listing.kind === "official" ? (
-            <button onClick={buy} disabled={dealing} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-400 disabled:opacity-50">
-              {dealing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />} Buy now
-            </button>
-          ) : mine ? (
+          {mine ? (
             <button disabled className="flex-1 cursor-not-allowed rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white/40">This is your listing</button>
           ) : (
             <button onClick={startDeal} disabled={dealing} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50">
@@ -203,17 +188,13 @@ function ListingDetail({ listing, onBack, onDeleted, onDeal }: { listing: Listin
   );
 }
 
-function SellModal({ initialKind, onClose, onCreated }: { initialKind: Kind; onClose: () => void; onCreated: () => void }) {
-  const profile = useProfile();
-  const canOfficial = profile.has("chat.moderate");
-  const [kind, setKind] = useState<Kind>(canOfficial ? initialKind : "community");
+function SellModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("other");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [warranty, setWarranty] = useState("");
   const [stock, setStock] = useState("1");
-  const [payload, setPayload] = useState("");
   const [cats, setCats] = useState<ListingCategory[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -226,10 +207,9 @@ function SellModal({ initialKind, onClose, onCreated }: { initialKind: Kind; onC
     setSaving(true); setErr("");
     try {
       await marketplaceApi.create({
-        kind, category, title: title.trim(), description: description.trim(),
+        kind: "community", category, title: title.trim(), description: description.trim(),
         images: img.images, price_amount: Math.max(0, parseInt(price || "0", 10) || 0),
         currency: "IDR", stock: Math.max(0, parseInt(stock || "1", 10) || 0), warranty: warranty.trim(),
-        ...(kind === "official" ? { delivery_payload: payload } : {}),
       });
       onCreated();
     } catch (e) {
@@ -247,12 +227,6 @@ function SellModal({ initialKind, onClose, onCreated }: { initialKind: Kind; onC
           <button onClick={onClose} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
-          {canOfficial && (
-            <div className="flex gap-1">
-              <button onClick={() => setKind("community")} className={`rounded-lg px-2.5 py-1 text-xs ${kind === "community" ? "bg-white/12 text-white" : "text-white/45"}`}>Community</button>
-              <button onClick={() => setKind("official")} className={`rounded-lg px-2.5 py-1 text-xs ${kind === "official" ? "bg-white/12 text-white" : "text-white/45"}`}>Official</button>
-            </div>
-          )}
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
           <div className="flex gap-2">
             <select value={category} onChange={(e) => setCategory(e.target.value)} className="flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-2 text-sm text-white/80 outline-none">
@@ -268,12 +242,6 @@ function SellModal({ initialKind, onClose, onCreated }: { initialKind: Kind; onC
             <input value={warranty} onChange={(e) => setWarranty(e.target.value)} placeholder="Warranty (optional)" className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
             <input value={stock} onChange={(e) => setStock(e.target.value.replace(/\D/g, ""))} placeholder="Stock" inputMode="numeric" className="w-20 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
           </div>
-          {kind === "official" && (
-            <div>
-              <label className="mb-1 block text-[11px] text-white/50">Delivery payload (given to the buyer after payment — e.g. credentials)</label>
-              <textarea value={payload} onChange={(e) => setPayload(e.target.value)} placeholder="secret@example.com:password&#10;..." rows={3} className="w-full resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white outline-none focus:border-white/25" />
-            </div>
-          )}
           {img.images.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {img.images.map((src, i) => (
@@ -521,6 +489,108 @@ function OrdersView() {
       <p className="mt-3 text-[10px] text-white/30">Payments are handled by the gateway; orders deliver automatically once paid.</p>
       {/* dialog kept for future confirm flows */}
       <span className="hidden">{typeof dialog}</span>
+    </div>
+  );
+}
+
+// OfficialStore renders curated VIP products grouped by brand + a dynamic buy form.
+function OfficialStore({ onBought }: { onBought: () => void }) {
+  const [products, setProducts] = useState<OfficialProduct[] | null>(null);
+  const [buying, setBuying] = useState<OfficialProduct | null>(null);
+  const [err, setErr] = useState("");
+  const load = useCallback(() => { officialApi.list().then((r) => { setProducts(r?.products ?? []); setErr(""); }).catch((e) => { setErr(e instanceof Error ? e.message : "failed"); setProducts([]); }); }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const groups = (() => {
+    const g: Record<string, OfficialProduct[]> = {};
+    for (const p of products ?? []) { (g[p.brand || p.category || "Other"] ??= []).push(p); }
+    return g;
+  })();
+
+  return (
+    <div className="p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white">Official Store</h2>
+        <button onClick={load} className="rounded-lg border border-white/10 p-1.5 text-white/50 hover:bg-white/5 hover:text-white"><RefreshCw className="h-3.5 w-3.5" /></button>
+      </div>
+      {err && <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</div>}
+      {!products ? (
+        <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-white/40" /></div>
+      ) : products.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center text-xs text-white/40">No products yet. (Admins curate these from the VIP catalog.)</div>
+      ) : (
+        <div className="space-y-4">
+          {Object.entries(groups).map(([brand, items]) => (
+            <div key={brand}>
+              <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/40">{brand}</div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {items.map((p) => (
+                  <button key={p.id} onClick={() => setBuying(p)} className="rounded-xl border border-white/10 bg-white/[0.02] p-2.5 text-left hover:border-white/20">
+                    <div className="truncate text-xs font-medium text-white">{p.name}</div>
+                    <div className="mt-0.5 text-sm font-semibold text-emerald-300">{idr(p.sell_price, "IDR")}</div>
+                    <div className="mt-1 text-[9px] uppercase text-white/30">{p.category}{p.needs_zone ? " · needs zone" : ""}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {buying && <BuyModal product={buying} onClose={() => setBuying(null)} onBought={onBought} />}
+    </div>
+  );
+}
+
+function BuyModal({ product, onClose, onBought }: { product: OfficialProduct; onClose: () => void; onBought: () => void }) {
+  const [dataNo, setDataNo] = useState("");
+  const [dataZone, setDataZone] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const submit = async () => {
+    if (!dataNo.trim()) { setErr("Target (number / user ID) is required"); return; }
+    if (product.needs_zone && !dataZone.trim()) { setErr("Zone / server is required"); return; }
+    setBusy(true); setErr("");
+    try {
+      const o = await orderApi.create(product.service_code, dataNo.trim(), dataZone.trim());
+      if (o.pay_url) window.open(o.pay_url, "_blank", "noopener");
+      onBought();
+      onClose();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-sm overflow-hidden rounded-2xl border border-white/10 bg-[#11131a] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-white">{product.name}</div>
+            <div className="text-sm font-bold text-emerald-300">{idr(product.sell_price, "IDR")}</div>
+          </div>
+          <button onClick={onClose} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="space-y-3 p-4">
+          <div>
+            <label className="mb-1 block text-[11px] text-white/50">{product.kind === "game" ? "User ID" : "Target number (HP / ID pelanggan)"}</label>
+            <input value={dataNo} onChange={(e) => setDataNo(e.target.value)} placeholder={product.kind === "game" ? "12345678" : "08xxxxxxxxxx"} className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
+          </div>
+          {product.needs_zone && (
+            <div>
+              <label className="mb-1 block text-[11px] text-white/50">Zone / Server</label>
+              <input value={dataZone} onChange={(e) => setDataZone(e.target.value)} placeholder="e.g. 2001" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
+            </div>
+          )}
+          {err && <div className="text-xs text-red-300">{err}</div>}
+          <button onClick={submit} disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-400 disabled:opacity-50">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />} Pay {idr(product.sell_price, "IDR")}
+          </button>
+          <p className="text-center text-[10px] text-white/30">You'll be redirected to the payment gateway. Delivery is automatic.</p>
+        </div>
+      </div>
     </div>
   );
 }

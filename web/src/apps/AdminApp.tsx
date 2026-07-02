@@ -3,11 +3,11 @@ import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Se
 import { openProfile } from "../os/profileViewer";
 import { useAdminEvents } from "../os/adminBus";
 import { useDialog } from "../os/dialog";
-import { FileSearch, X, Store, Check, Puzzle } from "lucide-react";
+import { FileSearch, X, Store, Check, Puzzle, ShoppingBag } from "lucide-react";
 import { Tooltip } from "../components/Tooltip";
-import { adminApi, modApi, searchApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin } from "../lib/api";
+import { adminApi, modApi, searchApi, adminVipApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService } from "../lib/api";
 
-type Tab = "stats" | "flags" | "users" | "models" | "market" | "scan" | "reviews" | "log";
+type Tab = "stats" | "flags" | "users" | "models" | "market" | "store" | "scan" | "reviews" | "log";
 
 // AdminApp is the moderator-only Admin Tools app. It only appears in the dock
 // for moderators (see apps registry), and every endpoint it calls is role-gated
@@ -20,7 +20,8 @@ export function AdminApp() {
     { id: "flags", label: "Duplicates", icon: Copy },
     { id: "users", label: "Users", icon: Users },
     { id: "models", label: "Models", icon: Boxes },
-    { id: "market", label: "Marketplace", icon: Store },
+    { id: "market", label: "Plugins", icon: Store },
+    { id: "store", label: "Official Store", icon: ShoppingBag },
     { id: "scan", label: "Plugin scan", icon: ShieldCheck },
     { id: "reviews", label: "Review log", icon: FileSearch },
     { id: "log", label: "Mod log", icon: ScrollText },
@@ -58,6 +59,7 @@ export function AdminApp() {
         {tab === "users" && <UsersTab />}
         {tab === "models" && <ModelsTab />}
         {tab === "market" && <MarketplaceTab />}
+        {tab === "store" && <OfficialStoreTab />}
         {tab === "scan" && <PluginScanTab />}
         {tab === "reviews" && <ReviewLogTab />}
         {tab === "log" && <LogTab />}
@@ -713,6 +715,141 @@ function SourceModal({ name, sources, onClose }: { name: string; sources: { path
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// OfficialStoreTab curates VIP products: shows balance, browses the live catalog,
+// and manages the sellable list with markup.
+function OfficialStoreTab() {
+  const [balance, setBalance] = useState<number | null>(null);
+  const [products, setProducts] = useState<VIPProduct[] | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [err, setErr] = useState("");
+  const dialog = useDialog();
+
+  const load = useCallback(() => {
+    adminVipApi.balance().then((r) => setBalance(r.balance)).catch(() => setBalance(null));
+    adminVipApi.products().then((r) => setProducts(r.products ?? [])).catch((e) => { setErr(e instanceof Error ? e.message : "failed"); setProducts([]); });
+  }, []);
+  useEffect(() => load(), [load]);
+
+  const toggle = async (p: VIPProduct) => { try { await adminVipApi.toggle(p.id, !p.enabled); load(); } catch { /* ignore */ } };
+  const remove = async (p: VIPProduct) => {
+    const ok = await dialog.confirm({ title: `Remove ${p.name}?`, message: "It will disappear from the store.", confirmLabel: "Remove", danger: true });
+    if (ok) { try { await adminVipApi.remove(p.id); load(); } catch { /* ignore */ } }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-white/60">VIP balance: <span className="font-semibold text-emerald-300">{balance === null ? "—" : "Rp " + balance.toLocaleString("id-ID")}</span></div>
+        <div className="flex gap-1.5">
+          <button onClick={() => setAdding(true)} className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90"><Plus className="h-3.5 w-3.5" /> Add product</button>
+          <button onClick={load} className="rounded-lg border border-white/10 p-1.5 text-white/40 hover:bg-white/5 hover:text-white"><RefreshCw className="h-3.5 w-3.5" /></button>
+        </div>
+      </div>
+      {err && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</div>}
+      {!products ? (
+        <div className="h-10 animate-pulse rounded-lg bg-white/5" />
+      ) : products.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs text-white/40">No products curated yet. Add one from the VIP catalog.</div>
+      ) : (
+        <div className="space-y-1.5">
+          {products.map((p) => {
+            const sell = Math.ceil(p.cost_price * (1 + p.markup_percent / 100)) + p.markup_flat;
+            return (
+              <div key={p.id} className="flex items-center gap-2.5 rounded-xl border border-white/10 bg-white/[0.02] p-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-sm font-medium text-white">{p.name}</span>
+                    <span className="rounded bg-white/10 px-1 text-[9px] uppercase text-white/50">{p.kind}</span>
+                    {p.needs_zone && <span className="rounded bg-amber-500/20 px-1 text-[9px] text-amber-300">zone</span>}
+                  </div>
+                  <div className="mt-0.5 font-mono text-[10px] text-white/35">{p.service_code} · cost {p.cost_price.toLocaleString("id-ID")} → sell {sell.toLocaleString("id-ID")} (+{p.markup_percent}%{p.markup_flat ? ` +${p.markup_flat}` : ""})</div>
+                </div>
+                <button onClick={() => toggle(p)} className={`rounded-lg border px-2 py-1 text-[10px] ${p.enabled ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-white/10 text-white/40"}`}>{p.enabled ? "Enabled" : "Off"}</button>
+                <button onClick={() => remove(p)} className="rounded-lg border border-white/10 bg-white/[0.03] p-1.5 text-white/55 hover:bg-red-500/30 hover:text-red-200"><Trash2 className="h-3.5 w-3.5" /></button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {adding && <AddProductModal onClose={() => setAdding(false)} onAdded={() => { setAdding(false); load(); }} />}
+    </div>
+  );
+}
+
+function AddProductModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const [kind, setKind] = useState<"prepaid" | "game">("prepaid");
+  const [services, setServices] = useState<VIPService[] | null>(null);
+  const [q, setQ] = useState("");
+  const [picked, setPicked] = useState<VIPService | null>(null);
+  const [markupPct, setMarkupPct] = useState("5");
+  const [markupFlat, setMarkupFlat] = useState("0");
+  const [needsZone, setNeedsZone] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+
+  const load = useCallback(() => { setServices(null); adminVipApi.catalog(kind).then((r) => setServices(r.services ?? [])).catch((e) => { setErr(e instanceof Error ? e.message : "failed"); setServices([]); }); }, [kind]);
+  useEffect(() => load(), [load]);
+
+  const filtered = (services ?? []).filter((s) => !q || s.name.toLowerCase().includes(q.toLowerCase()) || s.code.toLowerCase().includes(q.toLowerCase()) || (s.brand || "").toLowerCase().includes(q.toLowerCase())).slice(0, 100);
+
+  const add = async () => {
+    if (!picked) return;
+    setSaving(true); setErr("");
+    try {
+      await adminVipApi.upsert({
+        kind, service_code: picked.code, name: picked.name, brand: picked.brand || "", category: picked.type || "other",
+        cost_price: picked.price, markup_percent: parseFloat(markupPct) || 0, markup_flat: parseInt(markupFlat || "0", 10) || 0,
+        needs_zone: kind === "game" ? needsZone : false, enabled: true, sort_order: 0,
+      });
+      onAdded();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="flex h-[85%] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#11131a] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3">
+          <div className="flex-1 text-sm font-semibold text-white">Add product from VIP catalog</div>
+          <button onClick={onClose} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="border-b border-white/5 p-3">
+          <div className="mb-2 flex gap-1">
+            <button onClick={() => setKind("prepaid")} className={`rounded-lg px-2.5 py-1 text-xs ${kind === "prepaid" ? "bg-white/12 text-white" : "text-white/45"}`}>Prepaid</button>
+            <button onClick={() => setKind("game")} className={`rounded-lg px-2.5 py-1 text-xs ${kind === "game" ? "bg-white/12 text-white" : "text-white/45"}`}>Game/Streaming</button>
+          </div>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search catalog…" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto p-2">
+          {!services ? <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-white/40" /></div> : filtered.map((s) => (
+            <button key={s.code} onClick={() => setPicked(s)} className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs ${picked?.code === s.code ? "bg-indigo-500/20 text-white" : "text-white/70 hover:bg-white/5"}`}>
+              <div className="min-w-0 flex-1"><div className="truncate">{s.name}</div><div className="font-mono text-[9px] text-white/35">{s.code} · {s.brand}</div></div>
+              <span className="shrink-0 text-emerald-300">Rp {s.price.toLocaleString("id-ID")}</span>
+              {s.status && s.status !== "available" && <span className="shrink-0 rounded bg-red-500/20 px-1 text-[9px] text-red-300">{s.status}</span>}
+            </button>
+          ))}
+        </div>
+        {picked && (
+          <div className="border-t border-white/5 p-3">
+            <div className="mb-2 text-xs text-white/60">Selected: <span className="text-white">{picked.name}</span> (cost Rp {picked.price.toLocaleString("id-ID")})</div>
+            <div className="flex items-end gap-2">
+              <label className="flex-1 text-[11px] text-white/50">Markup %<input value={markupPct} onChange={(e) => setMarkupPct(e.target.value.replace(/[^\d.]/g, ""))} className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white outline-none" /></label>
+              <label className="flex-1 text-[11px] text-white/50">Markup flat (Rp)<input value={markupFlat} onChange={(e) => setMarkupFlat(e.target.value.replace(/\D/g, ""))} className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-sm text-white outline-none" /></label>
+              {kind === "game" && <label className="flex items-center gap-1 text-[11px] text-white/50"><input type="checkbox" checked={needsZone} onChange={(e) => setNeedsZone(e.target.checked)} className="accent-indigo-500" /> needs zone</label>}
+            </div>
+            <div className="mt-1 text-[11px] text-white/40">Sell: Rp {(Math.ceil(picked.price * (1 + (parseFloat(markupPct) || 0) / 100)) + (parseInt(markupFlat || "0", 10) || 0)).toLocaleString("id-ID")}</div>
+            {err && <div className="mt-1 text-xs text-red-300">{err}</div>}
+            <button onClick={add} disabled={saving} className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg bg-white px-4 py-2 text-sm font-medium text-black hover:opacity-90 disabled:opacity-50">{saving && <Loader2 className="h-4 w-4 animate-spin" />} Add to store</button>
+          </div>
+        )}
       </div>
     </div>
   );
