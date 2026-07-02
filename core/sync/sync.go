@@ -1041,9 +1041,15 @@ func (m *Manager) reportUsage(ctx context.Context) {
 	if err != nil {
 		return
 	}
+	// Also report the lifetime usage summary (requests + tokens) for the cloud
+	// per-user stats. Ungated — sent by every logged-in user, not just premium.
+	reqs, inTok, outTok, _ := m.logs.Totals(ctx)
 	_ = m.call(ctx, http.MethodPost, "/usage/report", map[string]any{
-		"out_tokens": total,
-		"device_id":  m.deviceID(ctx),
+		"out_tokens":      total,
+		"device_id":       m.deviceID(ctx),
+		"stat_requests":   reqs,
+		"stat_in_tokens":  inTok,
+		"stat_out_tokens": outTok,
 	}, nil)
 }
 
