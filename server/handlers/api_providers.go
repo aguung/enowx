@@ -18,6 +18,7 @@ var providerCatalog = map[string]providerMeta{
 	"kiro":      {Label: "Kiro", Icon: "kiro"},
 	"codex":       {Label: "Codex", Icon: "codex"},
 	"antigravity": {Label: "Antigravity", Icon: "antigravity"},
+	"suno":        {Label: "Suno", Icon: "suno"},
 }
 
 type providerDTO struct {
@@ -26,6 +27,7 @@ type providerDTO struct {
 	Icon   string `json:"icon"`
 	Chat   bool   `json:"chat"`
 	Images bool   `json:"images"`
+	Music  bool   `json:"music"`
 }
 
 // Providers lists the registered upstream providers with display metadata.
@@ -54,6 +56,7 @@ func (h *Providers) List(w http.ResponseWriter, _ *http.Request) {
 			Icon:   meta.Icon,
 			Chat:   caps.Chat,
 			Images: caps.Images,
+			Music:  caps.Music,
 		})
 	}
 	writeData(w, out)

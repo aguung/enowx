@@ -227,6 +227,14 @@ func (h *Warmup) testImage(w http.ResponseWriter, r *http.Request, acc *store.Ac
 // warmup performed when an account is added.
 func (h *Warmup) WarmAccount(ctx context.Context, acc *store.Account) (string, map[string]any) {
 	pacc := provider.Account{ID: acc.ID, Secret: acc.Secret, Creds: acc.Creds}
+
+	// Non-chat providers (e.g. Suno music) can't be probed with a chat request —
+	// accept them as active without a warmup call.
+	if prov, err := h.reg.Get(acc.Provider); err == nil && !prov.Caps().Chat {
+		_ = h.store.SetStatus(ctx, acc.ID, "active")
+		return "active", map[string]any{"ok": true, "status": "active"}
+	}
+
 	req := warmupRequest(acc.Provider)
 
 	// Label the account by email when the provider can resolve one and the label

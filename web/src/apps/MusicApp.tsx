@@ -24,7 +24,7 @@ import { Tooltip } from "../components/Tooltip";
 import { Popover } from "../components/Popover";
 import { useDialog } from "../os/dialog";
 import { usePersisted } from "../os/usePersisted";
-import { musicApi, chatApi, sunoApi, type Track, type Playlist, type MusicShare } from "../lib/api";
+import { musicApi, chatApi, type Track, type Playlist, type MusicShare } from "../lib/api";
 import { useMusic, playInContext, playList, playFromQueue, enqueue, toggle, currentTrack, removeFromQueue, clearQueue } from "../os/musicBus";
 import { usedPlaylists } from "../os/musicPlaylists";
 import { useDiscover } from "../os/musicDiscover";
@@ -76,31 +76,9 @@ export function MusicApp() {
     { id: "queue", label: "Queue", icon: ListVideo, badge: m.queue.length },
   ];
 
-  const dialog = useDialog();
-  const setSunoKey = async () => {
-    let configured = false;
-    try {
-      configured = (await sunoApi.keyStatus()).configured;
-    } catch { /* ignore */ }
-    const v = await dialog.form({
-      title: "AI music (Suno)",
-      message: configured ? "A key is already set. Enter a new one to replace it." : "Paste your Suno API key to enable AI song generation (used in AI Chat via the generate_music tool).",
-      fields: [{ name: "key", label: "Suno API key", placeholder: "sk-..." }],
-      confirmLabel: "Save key",
-    });
-    if (v?.key) {
-      try {
-        await sunoApi.setKey(v.key.trim());
-        await dialog.alert({ title: "Saved", message: "Suno API key stored locally." });
-      } catch (e) {
-        await dialog.alert({ title: "Failed", message: e instanceof Error ? e.message : "" });
-      }
-    }
-  };
-
   return (
     <AppShell title="Music" subtitle="Search, discover, and build playlists">
-      <div className="mb-3 flex items-center gap-1">
+      <div className="mb-3 flex gap-1">
         {tabs.map((t) => {
           const Icon = t.icon;
           return (
@@ -120,11 +98,6 @@ export function MusicApp() {
             </Tooltip>
           );
         })}
-        <Tooltip label="AI music key (Suno)" place="bottom">
-          <button onClick={setSunoKey} className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-white/50 transition-colors hover:bg-white/5 hover:text-white/80">
-            <Sparkles className="h-3.5 w-3.5" /> AI key
-          </button>
-        </Tooltip>
       </div>
 
       {tab === "home" && <HomeTab />}

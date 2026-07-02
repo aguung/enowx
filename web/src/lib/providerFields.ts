@@ -32,10 +32,19 @@ const kiroForm: ProviderForm = {
   ],
 };
 
+// Suno stores its key as an api_key credential (not the generic `secret`), so the
+// music handlers can read creds["api_key"].
+const sunoForm: ProviderForm = {
+  single: false,
+  fields: [{ key: "api_key", label: "Suno API Key", placeholder: "Get one at sunoapi.org", required: true, secret: true }],
+};
+
 export function formFor(provider: string): ProviderForm {
   switch (provider) {
     case "kiro":
       return kiroForm;
+    case "suno":
+      return sunoForm;
     default:
       return apiKeyForm;
   }

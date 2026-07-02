@@ -34,6 +34,7 @@ func (a Account) Cred(key string) string {
 type Caps struct {
 	Chat   bool
 	Images bool
+	Music  bool
 }
 
 // Outcome classifies an upstream failure so the pool can react.

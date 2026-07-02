@@ -11,22 +11,32 @@ import (
 	"github.com/enowdev/enowx/store"
 )
 
-const sunoKeySetting = "suno_api_key"
-
-// Suno exposes AI music generation (create task + poll) backed by a Suno API key
-// held in the local settings store.
+// Suno exposes AI music generation (create task + poll). The API key comes from a
+// pooled Suno account's api_key credential.
 type Suno struct {
-	settings store.SettingsStore
-	client   *suno.Client
+	store  store.AccountStore
+	client *suno.Client
 }
 
-func NewSuno(settings store.SettingsStore, doer transport.Doer) *Suno {
-	return &Suno{settings: settings, client: suno.New(doer)}
+func NewSuno(s store.AccountStore, doer transport.Doer) *Suno {
+	return &Suno{store: s, client: suno.New(doer)}
 }
 
+// key returns the api_key of the first enabled Suno account, or "".
 func (h *Suno) key(r *http.Request) string {
-	v, _ := h.settings.Get(r.Context(), sunoKeySetting)
-	return strings.TrimSpace(v)
+	rows, err := h.store.List(r.Context(), "suno")
+	if err != nil {
+		return ""
+	}
+	for _, a := range rows {
+		if a.Disabled {
+			continue
+		}
+		if k := strings.TrimSpace(a.Creds["api_key"]); k != "" {
+			return k
+		}
+	}
+	return ""
 }
 
 // GET /api/music/suno/key -> { configured }
@@ -34,25 +44,11 @@ func (h *Suno) GetKey(w http.ResponseWriter, r *http.Request) {
 	writeData(w, map[string]any{"configured": h.key(r) != ""})
 }
 
-// PUT /api/music/suno/key { key }
-func (h *Suno) SetKey(w http.ResponseWriter, r *http.Request) {
-	var in struct {
-		Key string `json:"key"`
-	}
-	body, _ := io.ReadAll(r.Body)
-	_ = json.Unmarshal(body, &in)
-	if err := h.settings.Set(r.Context(), sunoKeySetting, strings.TrimSpace(in.Key)); err != nil {
-		writeAPIErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	writeData(w, map[string]any{"configured": strings.TrimSpace(in.Key) != ""})
-}
-
 // POST /api/music/generate { prompt, style?, title?, model?, instrumental?, custom_mode? }
 func (h *Suno) Generate(w http.ResponseWriter, r *http.Request) {
 	key := h.key(r)
 	if key == "" {
-		writeAPIErr(w, http.StatusBadRequest, "Suno API key is not set")
+		writeAPIErr(w, http.StatusBadRequest, "no Suno account configured (add one in Providers)")
 		return
 	}
 	var in struct {
@@ -90,7 +86,7 @@ func (h *Suno) Generate(w http.ResponseWriter, r *http.Request) {
 func (h *Suno) Status(w http.ResponseWriter, r *http.Request) {
 	key := h.key(r)
 	if key == "" {
-		writeAPIErr(w, http.StatusBadRequest, "Suno API key is not set")
+		writeAPIErr(w, http.StatusBadRequest, "no Suno account configured (add one in Providers)")
 		return
 	}
 	taskID := strings.TrimSpace(r.URL.Query().Get("task_id"))

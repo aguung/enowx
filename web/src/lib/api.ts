@@ -824,7 +824,6 @@ export interface SunoStatus { status: string; done: boolean; failed: boolean; tr
 
 export const sunoApi = {
   keyStatus: () => api.get<{ configured: boolean }>("/api/music/suno/key"),
-  setKey: (key: string) => api.put<{ configured: boolean }>("/api/music/suno/key", { key }),
   generate: (body: { prompt: string; style?: string; title?: string; model?: string; instrumental?: boolean; custom_mode?: boolean }) =>
     api.post<{ task_id: string }>("/api/music/generate", body),
   status: (taskId: string) => api.get<SunoStatus>(`/api/music/generate/status?task_id=${encodeURIComponent(taskId)}`),
