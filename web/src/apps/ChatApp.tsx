@@ -6,7 +6,9 @@ import { ProfileCard } from "../components/ProfileCard";
 import { EmojiPicker } from "../components/EmojiPicker";
 import { Tooltip } from "../components/Tooltip";
 import { useProfile } from "../os/useProfile";
-import { useChat, sendChat, editChat, deleteChat, reactChat, loadChannel } from "../os/chatBus";
+import { useChat, sendChat, editChat, deleteChat, reactChat, loadChannel, loadOlderMessages } from "../os/chatBus";
+import { useReverseScroll } from "../os/useReverseScroll";
+import { MessageSkeleton } from "../components/Skeleton";
 import { useDialog } from "../os/dialog";
 import { openProfile } from "../os/profileViewer";
 import { useImageAttach } from "../os/useImageAttach";
@@ -78,7 +80,7 @@ export function ChatApp() {
 }
 
 function ChatRoom() {
-  const { messages, channels, channel, loading, connected } = useChat();
+  const { messages, channels, channel, loading, loadingOlder, hasMore, connected } = useChat();
   const readOnly = channels.find((c) => c.key === channel)?.read_only ?? false;
   const profile = useProfile();
   const [draft, setDraft] = useState("");
@@ -87,14 +89,23 @@ function ChatRoom() {
   const [reply, setReply] = useState<ReplyTarget | null>(null);
   const img = useImageAttach();
   const fileRef = useRef<HTMLInputElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const mention = useMention(draft, setDraft, inputRef);
 
-  // Auto-scroll to the newest message.
+  // Discord-style: open at the newest message, lazy-load older on scroll-up,
+  // preserve position across prepends, and only follow new messages when at bottom.
+  const { reset, scrollToBottom } = useReverseScroll({
+    ref: scrollRef,
+    count: messages.length,
+    hasMore,
+    loading: loadingOlder,
+    loadOlder: loadOlderMessages,
+  });
+  // Reset pagination state when switching channels.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+    reset();
+  }, [channel, reset]);
 
   // Focus the composer whenever a reply target is set, so hitting Reply lands
   // the cursor in the textbox without a second click.
@@ -119,6 +130,7 @@ function ChatRoom() {
       setDraft("");
       setReply(null);
       img.clear();
+      setTimeout(scrollToBottom, 50); // jump to my just-sent message
     } catch {
       /* keep the draft so the user can retry */
     } finally {
@@ -145,15 +157,18 @@ function ChatRoom() {
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-0.5 overflow-auto px-2 py-3">
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-0.5 overflow-auto px-2 py-3">
         {loading && messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-white/30" />
-          </div>
+          <>
+            {Array.from({ length: 8 }).map((_, i) => <MessageSkeleton key={i} />)}
+          </>
         ) : messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-xs text-white/40">No messages yet — say hi 👋</div>
         ) : (
-          messages.map((m) => (
+          <>
+            {/* Top skeleton while older history loads. */}
+            {loadingOlder && <MessageSkeleton />}
+            {messages.map((m) => (
             <MessageRow
               key={m.id}
               m={m}
@@ -165,9 +180,9 @@ function ChatRoom() {
               onClose={() => setOpenUser(null)}
               onReply={() => startReply(m)}
             />
-          ))
+            ))}
+          </>
         )}
-        <div ref={endRef} />
       </div>
 
       {readOnly ? (

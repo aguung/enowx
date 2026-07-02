@@ -8,8 +8,11 @@ let messages: ChatMessage[] = [];
 let channels: ChatChannel[] = [];
 let channel = "indonesia";
 let loading = false;
+let loadingOlder = false;
+let hasMore = true;
 let es: EventSource | null = null;
 let connected = false;
+const PAGE = 50; // matches the server's chatPageSize
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -17,18 +20,49 @@ function emit() {
 }
 
 export async function loadChannel(ch?: string) {
-  if (ch !== undefined) channel = ch;
+  if (ch !== undefined && ch !== channel) {
+    channel = ch;
+    messages = []; // reset pagination on channel switch
+    hasMore = true;
+  }
   loading = true;
   emit();
   try {
     const r = await chatApi.list(channel);
-    // Server returns newest-first; show oldest-first.
-    messages = (r.messages ?? []).slice().reverse();
+    // Server returns newest-first; show oldest-first (newest at the bottom).
+    const page = (r.messages ?? []).slice().reverse();
+    messages = page;
+    hasMore = (r.messages?.length ?? 0) >= PAGE;
     if (r.channels) channels = r.channels;
   } catch {
     /* leave as-is */
   } finally {
     loading = false;
+    emit();
+  }
+}
+
+// loadOlder fetches the page before the oldest loaded message and prepends it.
+export async function loadOlderMessages() {
+  if (loadingOlder || !hasMore || messages.length === 0) return;
+  loadingOlder = true;
+  emit();
+  try {
+    const oldest = messages[0].id;
+    const r = await chatApi.list(channel, oldest);
+    const older = (r.messages ?? []).slice().reverse();
+    if (older.length === 0) {
+      hasMore = false;
+    } else {
+      // De-dupe defensively, then prepend.
+      const seen = new Set(messages.map((m) => m.id));
+      messages = [...older.filter((m) => !seen.has(m.id)), ...messages];
+      hasMore = (r.messages?.length ?? 0) >= PAGE;
+    }
+  } catch {
+    /* ignore */
+  } finally {
+    loadingOlder = false;
     emit();
   }
 }
@@ -114,6 +148,8 @@ export interface ChatState {
   channels: ChatChannel[];
   channel: string;
   loading: boolean;
+  loadingOlder: boolean;
+  hasMore: boolean;
   connected: boolean;
 }
 
@@ -133,5 +169,5 @@ export function useChat(): ChatState {
       listeners.delete(l);
     };
   }, []);
-  return { messages, channels, channel, loading, connected };
+  return { messages, channels, channel, loading, loadingOlder, hasMore, connected };
 }

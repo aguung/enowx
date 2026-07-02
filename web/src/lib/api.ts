@@ -987,10 +987,15 @@ export interface ChatChannel {
 }
 
 export const chatApi = {
-  list: (channel?: string) =>
-    api.get<{ messages: ChatMessage[]; channel: string; channels: ChatChannel[] }>(
-      `/api/chat/messages${channel ? `?channel=${encodeURIComponent(channel)}` : ""}`,
-    ),
+  list: (channel?: string, before?: number) => {
+    const q = new URLSearchParams();
+    if (channel) q.set("channel", channel);
+    if (before) q.set("before", String(before));
+    const s = q.toString();
+    return api.get<{ messages: ChatMessage[]; channel: string; channels: ChatChannel[] }>(
+      `/api/chat/messages${s ? `?${s}` : ""}`,
+    );
+  },
   send: (content: string, channel: string, reply_to?: number, images?: string[]) =>
     api.post<ChatMessage>("/api/chat/messages", { content, channel, reply_to: reply_to ?? null, images: images ?? [] }),
   edit: (id: number, content: string) => api.patch<{ id: number; content: string }>(`/api/chat/messages/${id}`, { content }),
