@@ -188,7 +188,12 @@ export interface ToolResult {
 
 // runTool executes a tool call against the local agent endpoints and returns a
 // result string for the model plus meta for the UI.
-export async function runTool(cwd: string, tool: ToolName, args: Record<string, unknown>): Promise<ToolResult> {
+export async function runTool(
+  cwd: string,
+  tool: ToolName,
+  args: Record<string, unknown>,
+  onProgress?: (text: string) => void,
+): Promise<ToolResult> {
   try {
     switch (tool) {
       case "read_file": {
@@ -218,17 +223,20 @@ export async function runTool(cwd: string, tool: ToolName, args: Record<string, 
         return { ok: r.status < 400, output: `HTTP ${r.status}\n${r.body}`, meta: { http: r } };
       }
       case "generate_music": {
+        onProgress?.("Starting…");
         const { task_id } = await sunoApi.generate({
           prompt: String(args.prompt ?? ""),
           style: args.style ? String(args.style) : undefined,
           title: args.title ? String(args.title) : undefined,
           instrumental: Boolean(args.instrumental),
         });
+        onProgress?.("Queued — composing…");
         // Poll until done (or failed), ~5s apart, capped ~3 min.
         const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
         for (let i = 0; i < 36; i++) {
           await sleep(5000);
           const s = await sunoApi.status(task_id);
+          onProgress?.(sunoProgress(s.status, s.tracks));
           if (s.failed) return { ok: false, output: `music generation failed (${s.status})`, meta: { suno: s } };
           if (s.done && s.tracks.length > 0) {
             const lines = s.tracks.map((t) => `- ${t.title} (${Math.round(t.duration)}s): ${t.audio_url}`).join("\n");
@@ -242,5 +250,21 @@ export async function runTool(cwd: string, tool: ToolName, args: Record<string, 
     }
   } catch (e) {
     return { ok: false, output: `error: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+// sunoProgress maps a Suno task status into a short human progress line.
+function sunoProgress(status: string, tracks: { title: string }[]): string {
+  switch (status) {
+    case "PENDING":
+      return "Composing…";
+    case "TEXT_SUCCESS":
+      return `Lyrics ready${tracks[0]?.title ? ` — "${tracks[0].title}"` : ""}, rendering audio…`;
+    case "FIRST_SUCCESS":
+      return "First track ready, finishing…";
+    case "SUCCESS":
+      return "Done";
+    default:
+      return status ? `Working (${status})…` : "Working…";
   }
 }

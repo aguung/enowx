@@ -51,6 +51,7 @@ const clip = (s: string, max: number) => (s.length > max ? s.slice(0, max) + `\n
 export function AiChatApp() {
   const [models, setModels] = useState<ProviderModel[]>([]);
   const [model, setModel] = useState(() => load<string>(LS.model, ""));
+  const [progress, setProgress] = useState<Record<string, string>>({}); // live tool progress by call id
   const [pickerOpen, setPickerOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [msgs, setMsgs] = useState<ChatMsg[]>(() => load<ChatMsg[]>(LS.chat, []));
@@ -289,8 +290,9 @@ export function AiChatApp() {
           } else {
             let args: Record<string, unknown> = {};
             try { args = JSON.parse(call.args || "{}"); } catch { /* bad args */ }
-            result = await runTool(cwd, toolName, args);
+            result = await runTool(cwd, toolName, args, (text) => setProgress((p) => ({ ...p, [call.id]: text })));
           }
+          setProgress((p) => { const n = { ...p }; delete n[call.id]; return n; });
           // Store a display-capped copy in the UI/persisted state (the full
           // output only ever needs to reach the model, capped just below).
           assistant.results![call.id] = { ...result, output: clip(result.output, 8000) };
@@ -337,7 +339,7 @@ export function AiChatApp() {
             <p className="text-[11px]">Enable <span className="text-emerald-300/70">Agent</span> to give it tools (read/write files, run commands).</p>
           </div>
         )}
-        <Conversation msgs={msgs} />
+        <Conversation msgs={msgs} progress={progress} />
         {pending && <ApprovalCard call={pending.call} onDecide={pending.resolve} />}
         {err && <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</div>}
       </div>
@@ -506,7 +508,7 @@ const ReasoningBlock = memo(function ReasoningBlock({ content }: { content: stri
   );
 });
 
-function Conversation({ msgs }: { msgs: ChatMsg[] }) {
+function Conversation({ msgs, progress }: { msgs: ChatMsg[]; progress: Record<string, string> }) {
   const items = useMemo(() => buildItems(msgs), [msgs]);
   return (
     <>
@@ -542,7 +544,7 @@ function Conversation({ msgs }: { msgs: ChatMsg[] }) {
           case "spinner":
             return <Loader2 key={it.key} className="h-4 w-4 animate-spin text-white/40" />;
           case "tool":
-            return <ToolCard key={it.key} call={it.call} result={it.result} />;
+            return <ToolCard key={it.key} call={it.call} result={it.result} progress={progress[it.call.id]} />;
           case "group":
             return <ToolGroup key={it.key} calls={it.calls} results={it.results} />;
         }
@@ -601,7 +603,7 @@ function GroupRow({ call, result }: { call: ToolCall; result?: ToolResult }) {
 // ToolCard is a compact, robloxkit-style tool row: one line with an
 // icon/chevron + filename (parent path beneath) + a right-side +N/-N (for
 // edits) or status; expands to an LCS line diff or the raw output.
-const ToolCard = memo(function ToolCard({ call, result }: { call: ToolCall; result?: ToolResult }) {
+const ToolCard = memo(function ToolCard({ call, result, progress }: { call: ToolCall; result?: ToolResult; progress?: string }) {
   const [userToggled, setUserToggled] = useState<boolean | null>(null);
   let args: Record<string, unknown> = {};
   try { args = JSON.parse(call.args || "{}"); } catch { /* streaming/partial */ }
@@ -646,7 +648,10 @@ const ToolCard = memo(function ToolCard({ call, result }: { call: ToolCall; resu
         </span>
         <span className="mt-[1px] flex shrink-0 items-center gap-1.5 text-[10px] font-semibold">
           {running ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
+            <>
+              {progress && <span className="font-normal text-white/50">{progress}</span>}
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400" />
+            </>
           ) : isEdit && diff ? (
             <>
               {diff.added > 0 && <span className="text-emerald-400">+{diff.added}</span>}
