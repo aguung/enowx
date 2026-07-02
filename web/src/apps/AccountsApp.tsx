@@ -6,6 +6,7 @@ import { Tooltip } from "../components/Tooltip";
 import { accountsApi, providersApi, aliasesApi, type Account, type Provider, type Usage, type ProviderModel, type ModelAlias } from "../lib/api";
 import { useDialog } from "../os/dialog";
 import { startWarmup, finishWarmup } from "../os/warmupBus";
+import { onUsageStale } from "../os/usageBus";
 
 const STATUS_TONE: Record<string, string> = {
   active: "text-emerald-300 bg-emerald-500/10 ring-emerald-500/30",
@@ -53,8 +54,24 @@ export function AccountsApp() {
     }
   }
 
+  const accountsRef = useRef<Account[]>([]);
+  useEffect(() => { accountsRef.current = accounts ?? []; }, [accounts]);
+
   useEffect(() => {
     load();
+  }, []);
+
+  // Refetch a provider's usage/credit when something elsewhere (e.g. a Suno
+  // generation in the Chat app) consumes quota.
+  useEffect(() => {
+    return onUsageStale((provider) => {
+      for (const acc of accountsRef.current) {
+        if (acc.provider !== provider) continue;
+        accountsApi.usage(acc.id).then((r) => {
+          if (r.supported && r.usage) setUsage((m) => ({ ...m, [acc.id]: r.usage! }));
+        }).catch(() => {});
+      }
+    });
   }, []);
 
   const iconFor = (name: string) => providers.find((p) => p.name === name)?.icon ?? name;

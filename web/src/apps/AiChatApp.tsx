@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Send, Trash2, Loader2, Bot, ChevronDown, ChevronRight, FolderOpen, Shield, Check, X, Terminal, FileEdit, FileText, FilePlus, Globe, Wrench, Folder, CornerLeftUp, Settings2, Plus, Brain, Music } from "lucide-react";
 import { accountsApi, keysApi, filesApi, sunoApi, type ProviderModel, type DirListing } from "../lib/api";
+import { markUsageStale } from "../os/usageBus";
 import { AiMarkdown } from "../components/AiMarkdown";
 import { ALWAYS_ON_TOOLS, AGENT_TOOLS, TOOL_META, GROUPABLE_TOOLS, GROUP_VERB, lineDiff, runTool, needsApproval, type PermLevel, type ToolName, type ToolResult } from "./agent/tools";
 
@@ -285,6 +286,7 @@ export function AiChatApp() {
           if (s.failed) { patch({ content: `Music generation failed (${s.status}).` }); break; }
           if (s.done && s.tracks.length > 0) {
             patch({ content: "", suno: s.tracks });
+            markUsageStale("suno"); // credits were consumed — refresh the bar
             done = true;
           } else {
             patch({ content: musicStatusText(s.status, s.tracks) });
