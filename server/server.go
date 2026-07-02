@@ -81,6 +81,7 @@ func New(addr string, d Deps) *Server {
 	leonardoAcc.SetWarmer(warmup)
 	local.SetWarmer(warmup)
 	dash := middleware.NewDashboard(d.SettingsKV)
+	versionH := handlers.NewVersion(d.Settings.Version, d.Doer, dash)
 	term := handlers.NewTerminal(dash)
 	files := handlers.NewFiles(dash)
 	agent := handlers.NewAgent(dash, d.Doer)
@@ -150,6 +151,7 @@ func New(addr string, d Deps) *Server {
 		r.Post("/keys", keys.Add)
 		r.Delete("/keys/{id}", keys.Delete)
 		r.Get("/settings", settings.Get)
+		r.Get("/version", versionH.Get)
 		r.Get("/debug", dbg.Get)
 		r.Get("/docs", docs.Get)
 

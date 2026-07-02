@@ -437,6 +437,19 @@ export const settingsApi = {
   get: () => api.get<Settings>("/api/settings"),
 };
 
+export interface VersionInfo {
+  current: string;
+  latest?: string;
+  update_available: boolean;
+  notes?: string;
+  published_at?: string;
+  asset_url?: string;
+}
+export const versionApi = {
+  get: () => api.get<VersionInfo>("/api/version"),
+  update: () => api.post<{ started: boolean }>("/api/update"),
+};
+
 export interface DocParam {
   name: string;
   in: string;
