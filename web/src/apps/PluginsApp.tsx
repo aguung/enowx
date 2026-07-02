@@ -159,7 +159,7 @@ export function PluginsApp() {
 
 function CreateModal({ runtimes, onClose, onCreated }: { runtimes: PluginRuntime[]; onClose: () => void; onCreated: () => void }) {
   const [name, setName] = useState("");
-  const [runtime, setRuntime] = useState("python");
+  const [runtime, setRuntime] = useState("static");
   const [starter, setStarter] = useState(true);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);

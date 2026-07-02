@@ -9,16 +9,30 @@
 </head>
 <body class="ex">
   <div class="ex-card">
-    <h1 class="ex-title">Hello 👋</h1>
-    <p class="ex-muted">This is a static plugin — just HTML/CSS/JS. Edit <code>public/index.html</code>.</p>
-    <button id="go" class="ex-btn">Click me</button>
+    <h1 class="ex-title">Your plugin is live 🎉</h1>
+    <p class="ex-muted">
+      This is your plugin's UI (<code>public/index.html</code>). Start by reading the
+      docs — they list every enowx API you can call from here via
+      <code>enowx.api(...)</code>.
+    </p>
+    <button id="docs" class="ex-btn">Read the plugin docs</button>
     <pre id="out" class="ex-out"></pre>
   </div>
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      let n = 0;
-      document.getElementById("go").onclick = () => {
-        document.getElementById("out").textContent = "Clicked " + (++n) + " times";
+      const out = document.getElementById("out");
+      document.getElementById("docs").onclick = async () => {
+        out.textContent = "Loading the API catalog…";
+        try {
+          // /api/docs is the stable plugin contract; show a quick summary here.
+          const docs = await enowx.api("/api/docs");
+          const groups = (docs.groups || []).map((g) => "• " + g.name).join("\n");
+          out.textContent =
+            "enowx API groups you can call from a plugin:\n\n" + groups +
+            "\n\nFull reference: open the Docs app in enowx (or GET /api/docs).";
+        } catch (e) {
+          out.textContent = "Open the Docs app in enowx for the full plugin API reference.";
+        }
       };
     });
   </script>

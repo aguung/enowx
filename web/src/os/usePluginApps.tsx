@@ -64,13 +64,30 @@ function PluginFrame({ plugin }: { plugin: PluginManifest }) {
 export function usePluginApps(): DesktopApp[] {
   const [plugins, setPlugins] = useState<PluginManifest[]>([]);
   useEffect(() => {
-    const load = () => pluginsApi.list().then((r) => setPlugins(r.plugins ?? [])).catch(() => {});
+    let last = "";
+    const load = () =>
+      pluginsApi
+        .list()
+        .then((r) => {
+          const plugins = r.plugins ?? [];
+          // Only re-render when the set actually changed (avoid churn from polling).
+          const sig = plugins.map((p) => `${p.id}:${p.running}:${p.has_icon}`).join("|");
+          if (sig !== last) {
+            last = sig;
+            setPlugins(plugins);
+          }
+        })
+        .catch(() => {});
     load();
     window.addEventListener("focus", load);
-    const off = onPluginsChanged(load); // realtime refresh on create/delete
+    const off = onPluginsChanged(load); // instant refresh on create/delete/install
+    // Safety net: a light poll so plugin apps stay in sync even if a mutation
+    // happened elsewhere (another tab, the file system, a missed signal).
+    const iv = setInterval(load, 3000);
     return () => {
       window.removeEventListener("focus", load);
       off();
+      clearInterval(iv);
     };
   }, []);
 
