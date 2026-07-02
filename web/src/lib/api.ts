@@ -811,13 +811,28 @@ export interface RekberMessage {
   avatar_url: string;
 }
 
+export interface RekberOrder {
+  id: number;
+  title: string;
+  amount: number;
+  currency: string;
+  status: string;
+  content: string;
+  images: string[];
+  counterpart: string;
+  role: "buyer" | "seller";
+  created_at: string;
+}
+
 export const rekberApi = {
   fee: (amount: number) => api.get<{ amount: number; fee: number }>(`/api/marketplace/rekber/fee?amount=${amount}`),
   threads: () => api.get<{ threads: RekberThread[] }>("/api/marketplace/rekber/threads"),
   create: (listing_id: number, note = "") => api.post<RekberThread>("/api/marketplace/rekber/threads", { listing_id, note }),
   get: (id: number, after = 0) => api.get<{ thread: RekberThread; messages: RekberMessage[]; role: string; next_action: string }>(`/api/marketplace/rekber/threads/${id}?after=${after}`),
   send: (id: number, content: string, images: string[] = []) => api.post<RekberMessage>(`/api/marketplace/rekber/threads/${id}/messages`, { content, images }),
-  action: (id: number, action: string, proof: string[] = []) => api.post<RekberThread>(`/api/marketplace/rekber/threads/${id}/${action}`, proof.length ? { proof } : {}),
+  action: (id: number, action: string, body: Record<string, unknown> = {}) => api.post<RekberThread>(`/api/marketplace/rekber/threads/${id}/${action}`, body),
+  delivery: (id: number) => api.get<{ thread_id: number; content: string; images: string[] }>(`/api/marketplace/rekber/threads/${id}/delivery`),
+  orders: () => api.get<{ orders: RekberOrder[] }>("/api/marketplace/rekber/orders"),
   cancel: (id: number) => api.post<RekberThread>(`/api/marketplace/rekber/threads/${id}/cancel`),
   account: {
     get: () => api.get<{ account: string; images: string[] }>("/api/marketplace/admin/rekber/account"),

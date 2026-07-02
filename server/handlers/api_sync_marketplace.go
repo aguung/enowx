@@ -86,6 +86,16 @@ func (h *Sync) RekberAction(w http.ResponseWriter, r *http.Request) {
 	proxyJSON(w, out, err)
 }
 
+func (h *Sync) RekberDelivery(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.RekberDelivery(r.Context(), chi.URLParam(r, "id"))
+	proxyJSON(w, out, err)
+}
+
+func (h *Sync) RekberOrders(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.RekberOrders(r.Context())
+	proxyJSON(w, out, err)
+}
+
 // RekberAccount (admin) get/set the global rekber account.
 func (h *Sync) RekberAccountGet(w http.ResponseWriter, r *http.Request) {
 	out, err := h.mgr.RekberAccountGet(r.Context())

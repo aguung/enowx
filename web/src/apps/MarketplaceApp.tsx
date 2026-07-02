@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign, ShoppingCart, ExternalLink, Copy } from "lucide-react";
-import { marketplaceApi, rekberApi, orderApi, officialApi, type Listing, type ListingCategory, type RekberThread, type RekberMessage, type Order, type OfficialProduct } from "../lib/api";
+import { marketplaceApi, rekberApi, orderApi, officialApi, type Listing, type ListingCategory, type RekberThread, type RekberMessage, type Order, type OfficialProduct, type RekberOrder } from "../lib/api";
 import { useProfile } from "../os/useProfile";
 import { useImageAttach } from "../os/useImageAttach";
 import { useDialog } from "../os/dialog";
@@ -333,6 +333,7 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
   const [messages, setMessages] = useState<RekberMessage[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [shipping, setShipping] = useState(false);
   const dialog = useDialog();
   const proof = useImageAttach();
   const lastId = useRef(0);
@@ -361,10 +362,15 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
     try { await rekberApi.send(threadId, c); await refresh(false); } catch { /* ignore */ }
   };
 
-  const runAction = async (action: string) => {
+  const runAction = async (action: string, extra: Record<string, unknown> = {}) => {
     // "mark-paid" requires a transfer proof image.
     if (action === "mark-paid" && proof.images.length === 0) {
       await dialog.alert({ title: "Lampirkan bukti transfer", message: "Upload bukti transfer dulu sebelum menekan \"Sudah bayar\"." });
+      return;
+    }
+    // "mark-shipped" opens the ship modal (fills the private goods).
+    if (action === "mark-shipped" && !extra.content && !(extra.images as string[])?.length) {
+      setShipping(true);
       return;
     }
     const confirmMsg: Record<string, string> = {
@@ -379,7 +385,8 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
     }
     setBusy(true);
     try {
-      const t = await rekberApi.action(threadId, action, action === "mark-paid" ? proof.images : []);
+      const body = action === "mark-paid" ? { proof: proof.images } : extra;
+      const t = await rekberApi.action(threadId, action, body);
       setThread(t);
       proof.clear();
       await refresh(false);
@@ -465,15 +472,58 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
           <button onClick={send} className="rounded-lg bg-white/10 p-2 text-white/70 hover:bg-white/20"><Send className="h-4 w-4" /></button>
         </div>
       )}
+      {shipping && <ShipModal onClose={() => setShipping(false)} onShip={(content, images) => { setShipping(false); runAction("mark-shipped", { content, images }); }} />}
     </div>
   );
 }
 
-// OrdersView lists the user's official-store orders + their delivered payload.
+// ShipModal: the seller fills in the private goods (content + images) when shipping.
+function ShipModal({ onClose, onShip }: { onClose: () => void; onShip: (content: string, images: string[]) => void }) {
+  const [content, setContent] = useState("");
+  const img = useImageAttach();
+  const [err, setErr] = useState("");
+  const submit = () => {
+    if (!content.trim() && img.images.length === 0) { setErr("Isi detail barang atau lampirkan file."); return; }
+    onShip(content.trim(), img.images);
+  };
+  return (
+    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#11131a] shadow-2xl" onClick={(e) => e.stopPropagation()} onPaste={img.onPaste}>
+        <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3">
+          <div className="min-w-0 flex-1 text-sm font-semibold text-white">Kirim barang</div>
+          <button onClick={onClose} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="space-y-3 p-4">
+          <p className="text-[11px] text-white/40">Barang ini hanya terlihat oleh buyer & seller — middleman/admin tidak bisa melihatnya.</p>
+          <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={5} placeholder="akun@email:password&#10;resi JNE 1234567&#10;link download…" className="w-full resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white outline-none focus:border-white/25" />
+          {img.images.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {img.images.map((src, i) => (
+                <div key={i} className="relative"><img src={src} alt="" className="h-14 w-14 rounded object-cover" /><button onClick={() => img.removeAt(i)} className="absolute -right-1 -top-1 rounded-full bg-black/80 p-0.5 text-white/70"><X className="h-3 w-3" /></button></div>
+              ))}
+            </div>
+          )}
+          <label className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-white/60 hover:bg-white/10">
+            <ImagePlus className="h-3.5 w-3.5" /> {img.uploading ? "…" : "Lampirkan gambar"}
+            <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => img.upload(e.target.files)} />
+          </label>
+          {err && <div className="text-xs text-red-300">{err}</div>}
+          <button onClick={submit} className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-400"><Send className="h-4 w-4" /> Kirim barang</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// OrdersView lists the user's official-store orders + private rekber deliveries.
 function OrdersView() {
   const [orders, setOrders] = useState<Order[] | null>(null);
+  const [rekber, setRekber] = useState<RekberOrder[]>([]);
   const dialog = useDialog();
-  const load = useCallback(() => { orderApi.list().then((r) => setOrders(r.orders ?? [])).catch(() => setOrders([])); }, []);
+  const load = useCallback(() => {
+    orderApi.list().then((r) => setOrders(r.orders ?? [])).catch(() => setOrders([]));
+    rekberApi.orders().then((r) => setRekber(r.orders ?? [])).catch(() => setRekber([]));
+  }, []);
   useEffect(() => { load(); }, [load]);
   // Poll while any order is still pending (waiting for the gateway callback).
   useEffect(() => {
@@ -494,12 +544,12 @@ function OrdersView() {
       </div>
       {!orders ? (
         <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-white/40" /></div>
-      ) : orders.length === 0 ? (
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center text-xs text-white/40">No orders yet. Buy something from the Official Store.</div>
+      ) : orders.length === 0 && rekber.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center text-xs text-white/40">Belum ada pesanan.</div>
       ) : (
         <div className="space-y-2">
           {orders.map((o) => (
-            <div key={o.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+            <div key={"vip" + o.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-white">{o.title}</div>
@@ -510,21 +560,38 @@ function OrdersView() {
               {o.status === "delivered" && o.delivered_payload && (
                 <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] p-2">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="text-[10px] font-semibold uppercase text-emerald-300/80">Delivered</span>
-                    <button onClick={() => copy(o.delivered_payload!)} className="flex items-center gap-1 text-[10px] text-white/50 hover:text-white"><Copy className="h-3 w-3" /> Copy</button>
+                    <span className="text-[10px] font-semibold uppercase text-emerald-300/80">Terkirim</span>
+                    <button onClick={() => copy(o.delivered_payload!)} className="flex items-center gap-1 text-[10px] text-white/50 hover:text-white"><Copy className="h-3 w-3" /> Salin</button>
                   </div>
                   <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-white/80">{o.delivered_payload}</pre>
                 </div>
               )}
               {o.status === "pending" && o.pay_url && (
-                <button onClick={() => window.open(o.pay_url!, "_blank", "noopener")} className="mt-2 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/70 hover:bg-white/10"><ExternalLink className="h-3.5 w-3.5" /> Continue payment</button>
+                <button onClick={() => window.open(o.pay_url!, "_blank", "noopener")} className="mt-2 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/70 hover:bg-white/10"><ExternalLink className="h-3.5 w-3.5" /> Lanjutkan pembayaran</button>
               )}
+            </div>
+          ))}
+          {rekber.map((o) => (
+            <div key={"rk" + o.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-white">{o.title} — {o.counterpart}</div>
+                  <div className="mt-0.5 text-[11px] text-white/45">{idr(o.amount, o.currency)} · rekber ({o.role === "buyer" ? "beli dari" : "jual ke"} {o.counterpart})</div>
+                </div>
+                <span className="shrink-0 rounded bg-indigo-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-indigo-300">{STATUS_LABEL[o.status] ?? o.status}</span>
+              </div>
+              <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] p-2">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase text-emerald-300/80">Barang</span>
+                  {o.content && <button onClick={() => copy(o.content)} className="flex items-center gap-1 text-[10px] text-white/50 hover:text-white"><Copy className="h-3 w-3" /> Salin</button>}
+                </div>
+                {o.content && <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-white/80">{o.content}</pre>}
+                {o.images?.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1.5">{o.images.map((src, i) => <img key={i} src={src} alt="" onClick={() => openLightbox(o.images, i)} className="h-16 w-16 cursor-zoom-in rounded object-cover" />)}</div>}
+              </div>
             </div>
           ))}
         </div>
       )}
-      <p className="mt-3 text-[10px] text-white/30">Payments are handled by the gateway; orders deliver automatically once paid.</p>
-      {/* dialog kept for future confirm flows */}
       <span className="hidden">{typeof dialog}</span>
     </div>
   );

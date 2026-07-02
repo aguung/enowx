@@ -488,6 +488,24 @@ func (m *Manager) TakedownPlugin(ctx context.Context, id string) (string, error)
 	return string(raw), nil
 }
 
+// RekberDelivery fetches the private delivered goods for a thread (buyer/seller).
+func (m *Manager) RekberDelivery(ctx context.Context, id string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/marketplace/rekber/threads/"+id+"/delivery", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// RekberOrders lists the caller's delivered rekber deals (My Orders).
+func (m *Manager) RekberOrders(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/marketplace/rekber/orders", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // AdminSettings gets the admin settings (endpoint + has_key, never the key).
 func (m *Manager) AdminSettings(ctx context.Context) (string, error) {
 	var raw json.RawMessage
