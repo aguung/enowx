@@ -84,3 +84,21 @@ func (h *Sync) RekberAction(w http.ResponseWriter, r *http.Request) {
 	out, err := h.mgr.RekberPost(r.Context(), "/threads/"+chi.URLParam(r, "id")+"/"+chi.URLParam(r, "action"), nil)
 	proxyJSON(w, out, err)
 }
+
+// --- orders ---
+
+func (h *Sync) OrderCreate(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
+	out, err := h.mgr.OrderCreate(r.Context(), body)
+	proxyJSON(w, out, err)
+}
+
+func (h *Sync) OrdersList(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.OrdersList(r.Context())
+	proxyJSON(w, out, err)
+}
+
+func (h *Sync) OrderGet(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.OrderGet(r.Context(), chi.URLParam(r, "id"))
+	proxyJSON(w, out, err)
+}

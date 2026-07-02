@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign } from "lucide-react";
-import { marketplaceApi, rekberApi, type Listing, type ListingCategory, type RekberThread, type RekberMessage } from "../lib/api";
+import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign, ShoppingCart, ExternalLink, Copy } from "lucide-react";
+import { marketplaceApi, rekberApi, orderApi, type Listing, type ListingCategory, type RekberThread, type RekberMessage, type Order } from "../lib/api";
 import { useProfile } from "../os/useProfile";
 import { useImageAttach } from "../os/useImageAttach";
 import { useDialog } from "../os/dialog";
@@ -8,7 +8,7 @@ import { openLightbox } from "../os/lightbox";
 import { openProfile } from "../os/profileViewer";
 
 type Kind = "community" | "official";
-type View = "browse" | "deals";
+type View = "browse" | "deals" | "orders";
 
 function idr(amount: number, currency: string) {
   if (currency === "IDR") return "Rp " + amount.toLocaleString("id-ID");
@@ -30,10 +30,13 @@ export function MarketplaceApp() {
         <button onClick={() => { setView("browse"); setKind("official"); }} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "browse" && kind === "official" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><ShieldCheck className="h-3.5 w-3.5" /> Official Store</button>
         <button onClick={() => { setView("browse"); setKind("community"); }} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "browse" && kind === "community" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><Store className="h-3.5 w-3.5" /> Community</button>
         <button onClick={() => { setView("deals"); setOpenThread(null); }} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "deals" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><Handshake className="h-3.5 w-3.5" /> My Deals</button>
+        <button onClick={() => setView("orders")} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "orders" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><ShoppingCart className="h-3.5 w-3.5" /> My Orders</button>
         <button onClick={() => setCreating(true)} className="ml-auto flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90"><Plus className="h-3.5 w-3.5" /> Sell</button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        {view === "deals" ? (
+        {view === "orders" ? (
+          <OrdersView />
+        ) : view === "deals" ? (
           <DealsView openThread={openThread} setOpenThread={setOpenThread} />
         ) : detail ? (
           <ListingDetail listing={detail} onBack={() => setDetail(null)} onDeleted={() => setDetail(null)} onDeal={openDeal} />
@@ -136,6 +139,19 @@ function ListingDetail({ listing, onBack, onDeleted, onDeal }: { listing: Listin
     }
   };
 
+  const buy = async () => {
+    setDealing(true);
+    try {
+      const o = await orderApi.create(listing.id);
+      if (o.pay_url) window.open(o.pay_url, "_blank", "noopener");
+      await dialog.alert({ title: "Payment opened", message: "Complete the payment in the new tab. Your order will be delivered automatically — check My Orders." });
+    } catch (e) {
+      await dialog.alert({ title: "Couldn't start order", message: e instanceof Error ? e.message : "failed" });
+    } finally {
+      setDealing(false);
+    }
+  };
+
   const remove = async () => {
     const ok = await dialog.confirm({ title: "Delete listing?", message: `"${listing.title}" will be removed.`, confirmLabel: "Delete", danger: true });
     if (!ok) return;
@@ -171,7 +187,9 @@ function ListingDetail({ listing, onBack, onDeleted, onDeal }: { listing: Listin
         {listing.description && <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/70">{listing.description}</p>}
         <div className="mt-4 flex gap-2">
           {listing.kind === "official" ? (
-            <button disabled className="flex-1 cursor-not-allowed rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white/40">Buy (payment coming soon)</button>
+            <button onClick={buy} disabled={dealing} className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-400 disabled:opacity-50">
+              {dealing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />} Buy now
+            </button>
           ) : mine ? (
             <button disabled className="flex-1 cursor-not-allowed rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white/40">This is your listing</button>
           ) : (
@@ -195,6 +213,7 @@ function SellModal({ initialKind, onClose, onCreated }: { initialKind: Kind; onC
   const [description, setDescription] = useState("");
   const [warranty, setWarranty] = useState("");
   const [stock, setStock] = useState("1");
+  const [payload, setPayload] = useState("");
   const [cats, setCats] = useState<ListingCategory[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -210,6 +229,7 @@ function SellModal({ initialKind, onClose, onCreated }: { initialKind: Kind; onC
         kind, category, title: title.trim(), description: description.trim(),
         images: img.images, price_amount: Math.max(0, parseInt(price || "0", 10) || 0),
         currency: "IDR", stock: Math.max(0, parseInt(stock || "1", 10) || 0), warranty: warranty.trim(),
+        ...(kind === "official" ? { delivery_payload: payload } : {}),
       });
       onCreated();
     } catch (e) {
@@ -248,6 +268,12 @@ function SellModal({ initialKind, onClose, onCreated }: { initialKind: Kind; onC
             <input value={warranty} onChange={(e) => setWarranty(e.target.value)} placeholder="Warranty (optional)" className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
             <input value={stock} onChange={(e) => setStock(e.target.value.replace(/\D/g, ""))} placeholder="Stock" inputMode="numeric" className="w-20 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
           </div>
+          {kind === "official" && (
+            <div>
+              <label className="mb-1 block text-[11px] text-white/50">Delivery payload (given to the buyer after payment — e.g. credentials)</label>
+              <textarea value={payload} onChange={(e) => setPayload(e.target.value)} placeholder="secret@example.com:password&#10;..." rows={3} className="w-full resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white outline-none focus:border-white/25" />
+            </div>
+          )}
           {img.images.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {img.images.map((src, i) => (
@@ -434,6 +460,67 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
           <button onClick={send} className="rounded-lg bg-white/10 p-2 text-white/70 hover:bg-white/20"><Send className="h-4 w-4" /></button>
         </div>
       )}
+    </div>
+  );
+}
+
+// OrdersView lists the user's official-store orders + their delivered payload.
+function OrdersView() {
+  const [orders, setOrders] = useState<Order[] | null>(null);
+  const dialog = useDialog();
+  const load = useCallback(() => { orderApi.list().then((r) => setOrders(r.orders ?? [])).catch(() => setOrders([])); }, []);
+  useEffect(() => { load(); }, [load]);
+  // Poll while any order is still pending (waiting for the gateway callback).
+  useEffect(() => {
+    if (!orders?.some((o) => o.status === "pending")) return;
+    const iv = setInterval(load, 5000);
+    return () => clearInterval(iv);
+  }, [orders, load]);
+
+  const copy = (s: string) => { navigator.clipboard?.writeText(s); };
+
+  const badge = (s: string) => s === "delivered" ? "bg-emerald-500/20 text-emerald-300" : s === "pending" ? "bg-amber-500/20 text-amber-300" : "bg-red-500/20 text-red-300";
+
+  return (
+    <div className="p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white">My orders</h2>
+        <button onClick={load} className="rounded-lg border border-white/10 p-1.5 text-white/50 hover:bg-white/5 hover:text-white"><RefreshCw className="h-3.5 w-3.5" /></button>
+      </div>
+      {!orders ? (
+        <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-white/40" /></div>
+      ) : orders.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center text-xs text-white/40">No orders yet. Buy something from the Official Store.</div>
+      ) : (
+        <div className="space-y-2">
+          {orders.map((o) => (
+            <div key={o.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-white">{o.title}</div>
+                  <div className="mt-0.5 text-[11px] text-white/45">{idr(o.amount, o.currency)} · {o.order_ref}</div>
+                </div>
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${badge(o.status)}`}>{o.status}</span>
+              </div>
+              {o.status === "delivered" && o.delivered_payload && (
+                <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] p-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-[10px] font-semibold uppercase text-emerald-300/80">Delivered</span>
+                    <button onClick={() => copy(o.delivered_payload!)} className="flex items-center gap-1 text-[10px] text-white/50 hover:text-white"><Copy className="h-3 w-3" /> Copy</button>
+                  </div>
+                  <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-white/80">{o.delivered_payload}</pre>
+                </div>
+              )}
+              {o.status === "pending" && o.pay_url && (
+                <button onClick={() => window.open(o.pay_url!, "_blank", "noopener")} className="mt-2 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/70 hover:bg-white/10"><ExternalLink className="h-3.5 w-3.5" /> Continue payment</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="mt-3 text-[10px] text-white/30">Payments are handled by the gateway; orders deliver automatically once paid.</p>
+      {/* dialog kept for future confirm flows */}
+      <span className="hidden">{typeof dialog}</span>
     </div>
   );
 }

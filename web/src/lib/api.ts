@@ -759,6 +759,7 @@ export interface ListingInput {
   status?: string;
   stock: number;
   warranty?: string;
+  delivery_payload?: string;
 }
 
 export const marketplaceApi = {
@@ -819,6 +820,26 @@ export const rekberApi = {
   advance: (id: number) => api.post<RekberThread>(`/api/marketplace/rekber/threads/${id}/advance`),
   cancel: (id: number) => api.post<RekberThread>(`/api/marketplace/rekber/threads/${id}/cancel`),
   dispute: (id: number) => api.post<RekberThread>(`/api/marketplace/rekber/threads/${id}/dispute`),
+};
+
+// Official-store order.
+export interface Order {
+  id: number;
+  order_ref: string;
+  listing_id?: number;
+  title: string;
+  amount: number;
+  currency: string;
+  status: string; // pending | paid | delivered | expired | failed
+  pay_url?: string;
+  delivered_payload?: string;
+  created_at: string;
+}
+
+export const orderApi = {
+  create: (listing_id: number) => api.post<{ order_id: number; order_ref: string; pay_url: string; amount: number; reused?: boolean }>("/api/marketplace/orders", { listing_id }),
+  list: () => api.get<{ orders: Order[] }>("/api/marketplace/orders"),
+  get: (id: number) => api.get<Order>(`/api/marketplace/orders/${id}`),
 };
 
 // ChatMessage carries the message + a snapshot of the author's identity.

@@ -583,6 +583,35 @@ func (m *Manager) RekberPost(ctx context.Context, path string, body json.RawMess
 	return string(raw), nil
 }
 
+// --- marketplace orders ---
+
+// OrderCreate starts an official-store order; returns the pay URL.
+func (m *Manager) OrderCreate(ctx context.Context, body json.RawMessage) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPost, "/marketplace/orders", body, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// OrdersList lists the caller's orders.
+func (m *Manager) OrdersList(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/marketplace/orders", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// OrderGet fetches one order (for status polling).
+func (m *Manager) OrderGet(ctx context.Context, id string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/marketplace/orders/"+id, nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // PostComments fetches a post's comments.
 func (m *Manager) PostComments(ctx context.Context, postID string) (string, error) {
 	var raw json.RawMessage
