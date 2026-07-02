@@ -25,7 +25,7 @@ export const NOTIF_VERB: Record<string, string> = {
   deal: "wants to deal",
   middleman: "needs you as middleman",
   shipped: "shipped your item",
-  purchase: "bought your item",
+  purchase: "— your order is ready",
   released: "released the funds",
 };
 
