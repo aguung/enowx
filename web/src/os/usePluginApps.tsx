@@ -51,7 +51,7 @@ function PluginFrame({ plugin }: { plugin: PluginManifest }) {
     <iframe
       title={plugin.name}
       src={`/plugins/${plugin.id}/`}
-      className="h-full w-full rounded-lg border border-white/10 bg-white"
+      className="h-full w-full bg-[#0b0d12]"
       sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
     />
   );

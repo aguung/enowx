@@ -274,7 +274,7 @@ function PluginWindow({ plugin, onClose }: { plugin: PluginManifest; onClose: ()
       <iframe
         title={plugin.name}
         src={`/plugins/${plugin.id}/`}
-        className="min-h-0 flex-1 bg-white"
+        className="min-h-0 flex-1 bg-[#0b0d12]"
         sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
       />
     </div>
