@@ -12,6 +12,8 @@ export const api = {
   get: <T>(p: string) => req<T>(p),
   post: <T>(p: string, payload?: unknown) =>
     req<T>(p, { method: "POST", body: JSON.stringify(payload ?? {}) }),
+  put: <T>(p: string, payload?: unknown) =>
+    req<T>(p, { method: "PUT", body: JSON.stringify(payload ?? {}) }),
   patch: <T>(p: string, payload?: unknown) =>
     req<T>(p, { method: "PATCH", body: JSON.stringify(payload ?? {}) }),
   del: <T>(p: string) => req<T>(p, { method: "DELETE" }),
@@ -816,6 +818,17 @@ export interface PlaylistExport {
   share_code: string;
   tracks: Track[];
 }
+
+export interface SunoTrack { id: string; audio_url: string; stream_url: string; image_url: string; title: string; duration: number }
+export interface SunoStatus { status: string; done: boolean; failed: boolean; tracks: SunoTrack[] }
+
+export const sunoApi = {
+  keyStatus: () => api.get<{ configured: boolean }>("/api/music/suno/key"),
+  setKey: (key: string) => api.put<{ configured: boolean }>("/api/music/suno/key", { key }),
+  generate: (body: { prompt: string; style?: string; title?: string; model?: string; instrumental?: boolean; custom_mode?: boolean }) =>
+    api.post<{ task_id: string }>("/api/music/generate", body),
+  status: (taskId: string) => api.get<SunoStatus>(`/api/music/generate/status?task_id=${encodeURIComponent(taskId)}`),
+};
 
 export const musicApi = {
   search: (q: string) => api.get<Track[]>(`/api/music/search?q=${encodeURIComponent(q)}`),

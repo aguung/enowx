@@ -78,6 +78,7 @@ func New(addr string, d Deps) *Server {
 	files := handlers.NewFiles(dash)
 	agent := handlers.NewAgent(dash, d.Doer)
 	music := handlers.NewMusic(d.Music)
+	sunoMusic := handlers.NewSuno(d.SettingsKV, d.Doer)
 	tun := handlers.NewTunnel(d.Tunnel, d.Keys)
 	syncH := handlers.NewSync(d.Sync)
 	authH := handlers.NewAuth(dash)
@@ -230,6 +231,10 @@ func New(addr string, d Deps) *Server {
 
 		r.Get("/music/search", music.Search)
 		r.Get("/music/stream", music.Stream)
+		r.Get("/music/suno/key", sunoMusic.GetKey)
+		r.Put("/music/suno/key", sunoMusic.SetKey)
+		r.Post("/music/generate", sunoMusic.Generate)
+		r.Get("/music/generate/status", sunoMusic.Status)
 		r.Get("/music/discover", music.Discover)
 		r.Get("/music/history", music.RecentPlays)
 		r.Post("/music/history", music.RecordPlay)

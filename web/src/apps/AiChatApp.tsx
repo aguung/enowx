@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { Send, Trash2, Loader2, Bot, ChevronDown, ChevronRight, FolderOpen, Shield, Check, X, Terminal, FileEdit, FileText, FilePlus, Globe, Wrench, Folder, CornerLeftUp, Settings2, Plus, Brain } from "lucide-react";
+import { Send, Trash2, Loader2, Bot, ChevronDown, ChevronRight, FolderOpen, Shield, Check, X, Terminal, FileEdit, FileText, FilePlus, Globe, Wrench, Folder, CornerLeftUp, Settings2, Plus, Brain, Music } from "lucide-react";
 import { accountsApi, keysApi, filesApi, type ProviderModel, type DirListing } from "../lib/api";
 import { AiMarkdown } from "../components/AiMarkdown";
 import { TOOL_SCHEMAS, TOOL_META, GROUPABLE_TOOLS, GROUP_VERB, lineDiff, runTool, needsApproval, type PermLevel, type ToolName, type ToolResult } from "./agent/tools";
@@ -543,7 +543,7 @@ function Conversation({ msgs }: { msgs: ChatMsg[] }) {
 }
 
 const TOOL_ICONS: Record<string, typeof Terminal> = {
-  read_file: FileText, list_dir: Folder, write_file: FilePlus, edit_file: FileEdit, run_command: Terminal, http_request: Globe,
+  read_file: FileText, list_dir: Folder, write_file: FilePlus, edit_file: FileEdit, run_command: Terminal, http_request: Globe, generate_music: Music,
 };
 
 // ToolGroup collapses a run of groupable tool calls into one dropdown:
@@ -614,6 +614,9 @@ const ToolCard = memo(function ToolCard({ call, result }: { call: ToolCall; resu
   const fileName = path ? path.split("/").pop() : (args.command ? String(args.command) : args.url ? String(args.url) : call.name);
   const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
 
+  // Generated songs get inline audio players below the row.
+  const sunoTracks = (result?.meta?.suno as { tracks?: { title: string; audio_url: string; image_url: string; duration: number }[] } | undefined)?.tracks;
+
   const hasDiff = isEdit && diff && diff.rows.length > 0;
   const hasOutput = !isEdit && result;
   const canExpand = !!(hasDiff || hasOutput);
@@ -648,6 +651,19 @@ const ToolCard = memo(function ToolCard({ call, result }: { call: ToolCall; resu
           )}
         </span>
       </button>
+      {sunoTracks && sunoTracks.length > 0 && (
+        <div className="space-y-2 border-t border-white/10 bg-black/20 p-2.5">
+          {sunoTracks.map((t, ti) => (
+            <div key={ti} className="flex items-center gap-2.5">
+              {t.image_url && <img src={t.image_url} alt="" className="h-10 w-10 shrink-0 rounded object-cover" />}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[11px] font-medium text-white/85">{t.title || "Untitled"}</div>
+                <audio controls src={t.audio_url} className="mt-1 h-8 w-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {open && canExpand && (
         <div className="border-t border-white/10 bg-black/25">
           {hasDiff ? (

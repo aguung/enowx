@@ -1,4 +1,4 @@
-import { agentApi } from "../../lib/api";
+import { agentApi, sunoApi } from "../../lib/api";
 
 // OpenAI-style tool (function) schemas sent to the model in the request body.
 export const TOOL_SCHEMAS = [
@@ -86,9 +86,27 @@ export const TOOL_SCHEMAS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "generate_music",
+      description:
+        "Generate an original song with AI from a text prompt (Suno). Returns the finished track's title and audio URL. Generation takes ~1-2 minutes.",
+      parameters: {
+        type: "object",
+        properties: {
+          prompt: { type: "string", description: "What the song should be about / its lyrics or vibe." },
+          style: { type: "string", description: "Musical style/genre, e.g. 'lofi hip hop', 'epic orchestral'." },
+          title: { type: "string", description: "Optional song title." },
+          instrumental: { type: "boolean", description: "If true, no vocals." },
+        },
+        required: ["prompt"],
+      },
+    },
+  },
 ];
 
-export type ToolName = "read_file" | "list_dir" | "write_file" | "edit_file" | "run_command" | "http_request";
+export type ToolName = "read_file" | "list_dir" | "write_file" | "edit_file" | "run_command" | "http_request" | "generate_music";
 
 // Per-tool display metadata (verb label + which lucide icon name to use).
 export const TOOL_META: Record<string, { label: string; icon: string }> = {
@@ -98,6 +116,7 @@ export const TOOL_META: Record<string, { label: string; icon: string }> = {
   edit_file: { label: "edit", icon: "edit" },
   run_command: { label: "run", icon: "terminal" },
   http_request: { label: "http", icon: "globe" },
+  generate_music: { label: "music", icon: "music" },
 };
 
 export interface DiffRow {
@@ -130,7 +149,7 @@ export function lineDiff(oldText: string, newText: string): { rows: DiffRow[]; a
 }
 
 // Which tools mutate/side-effect (need approval at the "Confirm writes" level).
-export const WRITE_TOOLS = new Set<ToolName>(["write_file", "edit_file", "run_command", "http_request"]);
+export const WRITE_TOOLS = new Set<ToolName>(["write_file", "edit_file", "run_command", "http_request", "generate_music"]);
 
 // Tools whose individual rows aren't worth their own card — collapsed into a
 // single dropdown when several run in a row. write/edit/run keep their own block
@@ -191,6 +210,26 @@ export async function runTool(cwd: string, tool: ToolName, args: Record<string, 
       case "http_request": {
         const r = await agentApi.http(String(args.method ?? "GET"), String(args.url ?? ""), (args.headers as Record<string, string>) ?? undefined, args.body ? String(args.body) : undefined);
         return { ok: r.status < 400, output: `HTTP ${r.status}\n${r.body}`, meta: { http: r } };
+      }
+      case "generate_music": {
+        const { task_id } = await sunoApi.generate({
+          prompt: String(args.prompt ?? ""),
+          style: args.style ? String(args.style) : undefined,
+          title: args.title ? String(args.title) : undefined,
+          instrumental: Boolean(args.instrumental),
+        });
+        // Poll until done (or failed), ~5s apart, capped ~3 min.
+        const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+        for (let i = 0; i < 36; i++) {
+          await sleep(5000);
+          const s = await sunoApi.status(task_id);
+          if (s.failed) return { ok: false, output: `music generation failed (${s.status})`, meta: { suno: s } };
+          if (s.done && s.tracks.length > 0) {
+            const lines = s.tracks.map((t) => `- ${t.title} (${Math.round(t.duration)}s): ${t.audio_url}`).join("\n");
+            return { ok: true, output: `Generated ${s.tracks.length} track(s):\n${lines}`, meta: { suno: s } };
+          }
+        }
+        return { ok: false, output: "music generation timed out (still processing)", meta: { task_id } };
       }
       default:
         return { ok: false, output: `unknown tool: ${tool}` };
