@@ -121,3 +121,71 @@ func (h *Filters) Delete(w http.ResponseWriter, r *http.Request) {
 	h.reload()
 	writeData(w, map[string]any{"ok": true})
 }
+
+// ListTemplates returns the saved named filter sets.
+func (h *Filters) ListTemplates(w http.ResponseWriter, r *http.Request) {
+	if !h.guard(w, r) {
+		return
+	}
+	list, err := h.store.ListTemplates(r.Context())
+	if err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeData(w, map[string]any{"templates": list})
+}
+
+// SaveTemplate snapshots the current active filters under a name.
+func (h *Filters) SaveTemplate(w http.ResponseWriter, r *http.Request) {
+	if !h.guard(w, r) {
+		return
+	}
+	var b struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&b); err != nil || strings.TrimSpace(b.Name) == "" {
+		writeAPIErr(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	cur, err := h.store.List(r.Context())
+	if err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := h.store.SaveTemplate(r.Context(), strings.TrimSpace(b.Name), cur); err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeData(w, map[string]any{"ok": true})
+}
+
+// LoadTemplate replaces the active filters with a template's set.
+func (h *Filters) LoadTemplate(w http.ResponseWriter, r *http.Request) {
+	if !h.guard(w, r) {
+		return
+	}
+	name := chi.URLParam(r, "name")
+	rules, err := h.store.LoadTemplate(r.Context(), name)
+	if err != nil {
+		writeAPIErr(w, http.StatusNotFound, "template not found")
+		return
+	}
+	if err := h.store.ReplaceAll(r.Context(), rules); err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.reload()
+	writeData(w, map[string]any{"ok": true})
+}
+
+// DeleteTemplate removes a saved template.
+func (h *Filters) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
+	if !h.guard(w, r) {
+		return
+	}
+	if err := h.store.DeleteTemplate(r.Context(), chi.URLParam(r, "name")); err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeData(w, map[string]any{"ok": true})
+}

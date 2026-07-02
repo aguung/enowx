@@ -180,12 +180,25 @@ type ContentFilter struct {
 	IsActive    bool   `json:"is_active"`
 }
 
-// FilterStore persists content-filter rules (local only).
+// FilterTemplate is a named saved set of content-filter rules.
+type FilterTemplate struct {
+	Name  string          `json:"name"`
+	Rules []ContentFilter `json:"rules"`
+}
+
+// FilterStore persists content-filter rules + named templates (local only).
 type FilterStore interface {
 	List(ctx context.Context) ([]ContentFilter, error)
 	Add(ctx context.Context, f ContentFilter) (int64, error)
 	Update(ctx context.Context, f ContentFilter) error
 	Delete(ctx context.Context, id int64) error
+	// Templates: save the active set under a name, load one back, list, remove.
+	ListTemplates(ctx context.Context) ([]FilterTemplate, error)
+	SaveTemplate(ctx context.Context, name string, rules []ContentFilter) error
+	LoadTemplate(ctx context.Context, name string) ([]ContentFilter, error)
+	DeleteTemplate(ctx context.Context, name string) error
+	// ReplaceAll swaps the active filter set (used when loading a template).
+	ReplaceAll(ctx context.Context, rules []ContentFilter) error
 }
 
 // CustomProviderStore persists user-defined providers (local only).

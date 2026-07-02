@@ -68,11 +68,19 @@ export interface ContentFilter {
   is_regex: boolean;
   is_active: boolean;
 }
+export interface FilterTemplate {
+  name: string;
+  rules: ContentFilter[];
+}
 export const filterApi = {
   list: () => api.get<{ filters: ContentFilter[] }>("/api/filters"),
   add: (f: Omit<ContentFilter, "id">) => api.post<{ id: number }>("/api/filters", f),
   update: (id: number, f: Omit<ContentFilter, "id">) => api.patch<{ ok: boolean }>(`/api/filters/${id}`, f),
   remove: (id: number) => api.del<{ ok: boolean }>(`/api/filters/${id}`),
+  templates: () => api.get<{ templates: FilterTemplate[] }>("/api/filter-templates"),
+  saveTemplate: (name: string) => api.post<{ ok: boolean }>("/api/filter-templates", { name }),
+  loadTemplate: (name: string) => api.post<{ ok: boolean }>(`/api/filter-templates/${encodeURIComponent(name)}/load`, {}),
+  removeTemplate: (name: string) => api.del<{ ok: boolean }>(`/api/filter-templates/${encodeURIComponent(name)}`),
 };
 
 export const customProviderApi = {
