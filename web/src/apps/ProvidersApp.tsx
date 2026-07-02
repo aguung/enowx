@@ -170,9 +170,9 @@ function ProviderCard({
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 transition-colors hover:bg-white/[0.06]">
       <div className="flex items-start gap-3">
-        <div className="relative shrink-0">
+        <div className="relative shrink-0 overflow-hidden rounded-xl">
           <ProviderIcon icon={provider.icon} label={provider.label} size={44} />
-          {provider.custom && <span className="absolute -bottom-1 -right-1 rounded bg-indigo-500 px-1 text-[7px] font-bold uppercase leading-tight text-white shadow" title="Custom provider">custom</span>}
+          {provider.custom && <span className="absolute inset-x-0 bottom-0 bg-indigo-500/90 py-px text-center text-[7px] font-bold uppercase leading-none text-white" title="Custom provider">custom</span>}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold text-white">{provider.label}</p>
