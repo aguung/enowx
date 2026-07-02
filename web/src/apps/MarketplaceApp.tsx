@@ -65,12 +65,12 @@ export function MarketplaceApp() {
           <DealsView openThread={openThread} setOpenThread={setOpenThread} />
         ) : kind === "official" ? (
           <OfficialStore onBought={() => setView("orders")} />
-        ) : detail ? (
-          <ListingDetail listing={detail} onBack={() => setDetail(null)} onDeleted={() => setDetail(null)} onDeal={openDeal} />
         ) : (
-          <Feed kind={kind} onOpen={setDetail} />
+          <Feed kind={kind} onOpen={setDetail} onDeal={openDeal} />
         )}
       </div>
+      {/* Details is a modal popup, not a page. */}
+      {detail && <ListingDetail listing={detail} onClose={() => setDetail(null)} onDeleted={() => setDetail(null)} onDeal={openDeal} />}
       {creating && <SellModal onClose={() => setCreating(false)} onCreated={() => setCreating(false)} />}
     </div>
   );
@@ -166,12 +166,29 @@ function PayoutView() {
   );
 }
 
-function Feed({ kind, onOpen }: { kind: Kind; onOpen: (l: Listing) => void }) {
+function Feed({ kind, onOpen, onDeal }: { kind: Kind; onOpen: (l: Listing) => void; onDeal: (threadId: number) => void }) {
   const [items, setItems] = useState<Listing[] | null>(null);
   const [cats, setCats] = useState<ListingCategory[]>([]);
   const [category, setCategory] = useState("");
   const [q, setQ] = useState("");
   const [err, setErr] = useState("");
+  const [buyingId, setBuyingId] = useState<number | null>(null);
+  const dialog = useDialog();
+
+  // Buy = start a rekber deal directly from the card (no detail page first).
+  const buy = async (l: Listing) => {
+    const ok = await dialog.confirm({ title: `Buy "${l.title}"?`, message: "A private rekber chat with the seller and a middleman opens. The middleman holds your payment until you confirm the item is received.", confirmLabel: "Buy via rekber" });
+    if (!ok) return;
+    setBuyingId(l.id);
+    try {
+      const t = await rekberApi.create(l.id);
+      onDeal(t.id);
+    } catch (e) {
+      await dialog.alert({ title: "Couldn't start the deal", message: e instanceof Error ? e.message : "failed" });
+    } finally {
+      setBuyingId(null);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -208,33 +225,46 @@ function Feed({ kind, onOpen }: { kind: Kind; onOpen: (l: Listing) => void }) {
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {items.map((l) => <ListingCard key={l.id} l={l} onOpen={() => onOpen(l)} />)}
+          {items.map((l) => <ListingCard key={l.id} l={l} onOpen={() => onOpen(l)} onBuy={() => buy(l)} buying={buyingId === l.id} />)}
         </div>
       )}
     </div>
   );
 }
 
-function ListingCard({ l, onOpen }: { l: Listing; onOpen: () => void }) {
+function ListingCard({ l, onOpen, onBuy, buying }: { l: Listing; onOpen: () => void; onBuy: () => void; buying: boolean }) {
+  const mine = !!useProfile().user?.username && l.username === useProfile().user?.username;
   return (
-    <button onClick={onOpen} className="group overflow-hidden rounded-xl border border-white/10 bg-white/[0.02] text-left hover:border-white/20">
-      <div className="aspect-video w-full overflow-hidden bg-white/5">
-        {l.images[0] ? (
-          <img src={l.images[0]} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
+    <div className="group overflow-hidden rounded-xl border border-white/10 bg-white/[0.02] hover:border-white/20">
+      <button onClick={onOpen} className="block w-full text-left">
+        <div className="aspect-video w-full overflow-hidden bg-white/5">
+          {l.images[0] ? (
+            <img src={l.images[0]} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
+          ) : (
+            <div className="flex h-full items-center justify-center text-white/20"><Tag className="h-6 w-6" /></div>
+          )}
+        </div>
+        <div className="p-2.5 pb-1.5">
+          <div className="truncate text-xs font-medium text-white">{l.title}</div>
+          <div className="mt-0.5 text-sm font-semibold text-emerald-300">{idr(l.price_amount, l.currency)}</div>
+          <div className="mt-1 truncate text-[10px] text-white/35">by {l.display_name || l.username}</div>
+        </div>
+      </button>
+      <div className="flex gap-1.5 p-2.5 pt-1">
+        <button onClick={onOpen} className="flex-1 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1.5 text-[11px] font-medium text-white/70 hover:bg-white/10">Details</button>
+        {mine ? (
+          <span className="flex-1 rounded-lg bg-white/[0.03] px-2 py-1.5 text-center text-[11px] text-white/30">Yours</span>
         ) : (
-          <div className="flex h-full items-center justify-center text-white/20"><Tag className="h-6 w-6" /></div>
+          <button onClick={onBuy} disabled={buying} className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-indigo-500 px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">
+            {buying ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShoppingCart className="h-3 w-3" />} Buy
+          </button>
         )}
       </div>
-      <div className="p-2.5">
-        <div className="truncate text-xs font-medium text-white">{l.title}</div>
-        <div className="mt-0.5 text-sm font-semibold text-emerald-300">{idr(l.price_amount, l.currency)}</div>
-        <div className="mt-1 truncate text-[10px] text-white/35">by {l.display_name || l.username}</div>
-      </div>
-    </button>
+    </div>
   );
 }
 
-function ListingDetail({ listing, onBack, onDeleted, onDeal }: { listing: Listing; onBack: () => void; onDeleted: () => void; onDeal: (threadId: number) => void }) {
+function ListingDetail({ listing, onClose, onDeleted, onDeal }: { listing: Listing; onClose: () => void; onDeleted: () => void; onDeal: (threadId: number) => void }) {
   const profile = useProfile();
   const dialog = useDialog();
   const [busy, setBusy] = useState(false);
@@ -248,6 +278,7 @@ function ListingDetail({ listing, onBack, onDeleted, onDeal }: { listing: Listin
     setDealing(true);
     try {
       const t = await rekberApi.create(listing.id);
+      onClose();
       onDeal(t.id);
     } catch (e) {
       await dialog.alert({ title: "Couldn't start deal", message: e instanceof Error ? e.message : "failed" });
@@ -260,13 +291,15 @@ function ListingDetail({ listing, onBack, onDeleted, onDeal }: { listing: Listin
     const ok = await dialog.confirm({ title: "Delete listing?", message: `"${listing.title}" will be removed.`, confirmLabel: "Delete", danger: true });
     if (!ok) return;
     setBusy(true);
-    try { await marketplaceApi.remove(listing.id); onDeleted(); } catch { /* ignore */ } finally { setBusy(false); }
+    try { await marketplaceApi.remove(listing.id); onDeleted(); onClose(); } catch { /* ignore */ } finally { setBusy(false); }
   };
 
   return (
-    <div className="p-4">
-      <button onClick={onBack} className="mb-3 flex items-center gap-1.5 text-xs text-white/50 hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> Back</button>
-      <div className="mx-auto max-w-2xl">
+    <div className="absolute inset-0 z-50 flex items-start justify-center overflow-auto bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="my-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-[#11131a] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-2 flex justify-end">
+          <button onClick={onClose} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
         {listing.images.length > 0 && (
           <div className="mb-3 grid grid-cols-2 gap-2">
             {listing.images.map((src, i) => (
