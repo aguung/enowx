@@ -4,8 +4,9 @@ import { accountsApi, keysApi, filesApi, type ProviderModel, type DirListing } f
 import { AiMarkdown } from "../components/AiMarkdown";
 import { ALWAYS_ON_TOOLS, AGENT_TOOLS, TOOL_META, GROUPABLE_TOOLS, GROUP_VERB, lineDiff, runTool, needsApproval, type PermLevel, type ToolName, type ToolResult } from "./agent/tools";
 
-const DEFAULT_SYSTEM = `You are a helpful coding assistant running inside the enowx dashboard.
+const DEFAULT_SYSTEM = `You are a helpful assistant running inside the enowx dashboard.
 Reply in the same language the user writes in. Be concise and precise.
+When the user asks you to make, generate, or create a song/music/track, you MUST call the generate_music tool with a prompt (do NOT just write lyrics as text) — the tool produces the actual audio. Put the theme/vibe (and lyrics if the user wants specific ones) in the prompt argument.
 When agent tools are available, use them to inspect and modify the project in the working directory: read files before editing, prefer edit_file for small changes, and explain what you did.`;
 
 // OpenAI-native chat messages, so the full history (incl. tool_calls + tool
@@ -33,7 +34,8 @@ const MAX_STEPS = 12;
 const LS = {
   chat: "enowx-aichat-history",
   model: "enowx-aichat-model",
-  sys: "enowx-aichat-system",
+  sys: "enowx-aichat-system-v2", // bumped so the music-tool instruction reaches existing users
+
   cwd: "enowx-aichat-cwd",
   perm: "enowx-aichat-perm",
   agent: "enowx-aichat-agent",
