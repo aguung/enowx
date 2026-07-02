@@ -531,7 +531,7 @@ function buildItems(msgs: ChatMsg[]): RenderItem[] {
     if (m.images?.length) { flushRun(); items.push({ kind: "aimages", images: m.images, key: `ai_${i}` }); }
     if (m.suno?.length) { flushRun(); items.push({ kind: "songs", tracks: m.suno, key: `sn_${i}` }); }
     if (m.content) { flushRun(); items.push({ kind: "text", content: m.content, key: `a_${i}` }); }
-    else if (!m.reasoning && !m.images?.length && !m.tool_calls?.length) { flushRun(); items.push({ kind: "spinner", key: `s_${i}` }); }
+    else if (!m.reasoning && !m.images?.length && !m.suno?.length && !m.tool_calls?.length) { flushRun(); items.push({ kind: "spinner", key: `s_${i}` }); }
     for (const c of m.tool_calls ?? []) {
       const result = m.results?.[c.id];
       if (GROUPABLE_TOOLS.has(c.name as ToolName)) run.push({ call: c, result });
