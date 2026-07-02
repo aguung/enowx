@@ -666,6 +666,50 @@ func (m *Manager) SellerReviews(ctx context.Context, sellerID, query string) (st
 	return string(raw), nil
 }
 
+// --- inbox ---
+
+func (m *Manager) Inbox(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/inbox", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) InboxRead(ctx context.Context, body any) error {
+	return m.call(ctx, http.MethodPost, "/inbox/read", body, nil)
+}
+
+// --- admin inbox ---
+
+func (m *Manager) SendInbox(ctx context.Context, body any) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPost, "/admin/inbox", body, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) AdminInboxList(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/inbox", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) DeleteInbox(ctx context.Context, id string) error {
+	return m.call(ctx, http.MethodDelete, "/admin/inbox/"+id, nil, nil)
+}
+
+func (m *Manager) InboxRoles(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/inbox/roles", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // --- subscriptions ---
 
 // Subscription fetches the caller's Premium status + the plan on offer.

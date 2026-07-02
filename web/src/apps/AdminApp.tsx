@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search, MoreHorizontal, Ban, VolumeX, AlertTriangle, Plus, Minus, Boxes, Trash2, Pencil, RefreshCw, Ticket } from "lucide-react";
+import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search, MoreHorizontal, Ban, VolumeX, AlertTriangle, Plus, Minus, Boxes, Trash2, Pencil, RefreshCw, Ticket, Mail, Send } from "lucide-react";
 import { openProfile } from "../os/profileViewer";
 import { useAdminEvents } from "../os/adminBus";
 import { useDialog } from "../os/dialog";
 import { FileSearch, X, Store, Check, Puzzle, ShoppingBag } from "lucide-react";
 import { Tooltip } from "../components/Tooltip";
-import { adminApi, modApi, searchApi, adminVipApi, couponAdminApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type Coupon } from "../lib/api";
+import { adminApi, modApi, searchApi, adminVipApi, couponAdminApi, inboxAdminApi, subscriptionApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type Coupon, type InboxMessage, type InboxRole, type UserHit } from "../lib/api";
 
-type Tab = "stats" | "flags" | "users" | "models" | "market" | "store" | "scan" | "reviews" | "log" | "coupons";
+type Tab = "stats" | "flags" | "users" | "models" | "market" | "store" | "scan" | "reviews" | "log" | "coupons" | "inbox";
 
 // AdminApp is the moderator-only Admin Tools app. It only appears in the dock
 // for moderators (see apps registry), and every endpoint it calls is role-gated
@@ -25,6 +25,7 @@ export function AdminApp() {
     { id: "scan", label: "Plugin scan", icon: ShieldCheck },
     { id: "reviews", label: "Review log", icon: FileSearch },
     { id: "coupons", label: "Coupons", icon: Ticket },
+    { id: "inbox", label: "Inbox", icon: Mail },
     { id: "log", label: "Mod log", icon: ScrollText },
   ];
   const NavBtn = ({ t }: { t: { id: Tab; label: string; icon: typeof Users } }) => {
@@ -64,6 +65,7 @@ export function AdminApp() {
         {tab === "scan" && <PluginScanTab />}
         {tab === "reviews" && <ReviewLogTab />}
         {tab === "coupons" && <CouponsTab />}
+        {tab === "inbox" && <InboxTab />}
         {tab === "log" && <LogTab />}
       </div>
     </div>
@@ -931,6 +933,118 @@ function CouponsTab() {
               <span className="text-white/40">{c.used_count}{c.max_uses ? `/${c.max_uses}` : ""} used</span>
               {!c.active && <span className="rounded bg-white/10 px-1 text-[9px] uppercase text-white/40">inactive</span>}
               <button onClick={() => couponAdminApi.remove(c.id).then(load)} className="ml-auto text-white/30 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// InboxTab composes admin messages and lists sent ones.
+function InboxTab() {
+  const [rows, setRows] = useState<InboxMessage[] | null>(null);
+  const [roles, setRoles] = useState<InboxRole[]>([]);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [audience, setAudience] = useState<"all" | "role" | "user">("all");
+  const [roleTarget, setRoleTarget] = useState("");
+  const [userQ, setUserQ] = useState("");
+  const [userHits, setUserHits] = useState<UserHit[]>([]);
+  const [userPick, setUserPick] = useState<UserHit | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+
+  const load = () => inboxAdminApi.list().then((r) => setRows(r.messages ?? [])).catch(() => setRows([]));
+  useEffect(() => { load(); inboxAdminApi.roles().then((r) => setRoles(r.roles ?? [])).catch(() => setRoles([])); }, []);
+
+  useEffect(() => {
+    if (audience !== "user" || userPick || userQ.trim().length < 2) { setUserHits([]); return; }
+    const t = setTimeout(() => subscriptionApi.searchUsers(userQ.trim()).then((r) => setUserHits(r.users ?? [])).catch(() => setUserHits([])), 250);
+    return () => clearTimeout(t);
+  }, [userQ, audience, userPick]);
+
+  const send = async () => {
+    if (!title.trim()) { setErr("Title is required."); return; }
+    let target = "";
+    if (audience === "role") { if (!roleTarget) { setErr("Pick a role."); return; } target = roleTarget; }
+    if (audience === "user") { if (!userPick) { setErr("Pick a user."); return; } target = userPick.id; }
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      await inboxAdminApi.send({ title: title.trim(), body, audience, target });
+      setTitle(""); setBody(""); setRoleTarget(""); setUserPick(null); setUserQ("");
+      setMsg("Sent.");
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "failed");
+    } finally { setBusy(false); }
+  };
+
+  const audienceLabel = (m: InboxMessage) =>
+    m.audience === "all" ? "Everyone" : m.audience === "role" ? `Role: ${roles.find((r) => r.id === m.target)?.name ?? m.target}` : "One user";
+
+  return (
+    <div>
+      <h2 className="mb-3 text-sm font-bold text-white">Inbox</h2>
+      <div className="mb-4 space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 text-sm text-white outline-none focus:border-white/25" />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message (markdown supported)" rows={4} className="w-full resize-y rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs text-white outline-none focus:border-white/25" />
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={audience} onChange={(e) => { setAudience(e.target.value as "all" | "role" | "user"); setUserPick(null); }} className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-white outline-none">
+            <option value="all">Everyone</option>
+            <option value="role">A role</option>
+            <option value="user">A specific user</option>
+          </select>
+          {audience === "role" && (
+            <select value={roleTarget} onChange={(e) => setRoleTarget(e.target.value)} className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-white outline-none">
+              <option value="">Pick a role…</option>
+              {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          )}
+          {audience === "user" && (
+            userPick ? (
+              <span className="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-white">
+                {userPick.display_name || userPick.username}
+                <button onClick={() => { setUserPick(null); setUserQ(""); }} className="text-white/40 hover:text-white"><X className="h-3 w-3" /></button>
+              </span>
+            ) : (
+              <div className="relative">
+                <input value={userQ} onChange={(e) => setUserQ(e.target.value)} placeholder="Search user…" className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-white outline-none focus:border-white/25" />
+                {userHits.length > 0 && (
+                  <div className="absolute z-10 mt-1 max-h-40 w-56 overflow-auto rounded-md border border-white/10 bg-[#0e1016] shadow-xl">
+                    {userHits.map((h) => (
+                      <button key={h.id} onClick={() => { setUserPick(h); setUserHits([]); }} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-white/5">
+                        <span className="truncate text-white/80">{h.display_name || h.username}</span>
+                        <span className="truncate text-white/30">@{h.username}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          )}
+          <button onClick={send} disabled={busy} className="ml-auto flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90 disabled:opacity-50">
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Send
+          </button>
+        </div>
+        {err && <div className="text-[11px] text-red-300">{err}</div>}
+        {msg && <div className="text-[11px] text-emerald-300">{msg}</div>}
+      </div>
+
+      {!rows ? (
+        <div className="flex justify-center py-8"><Loader2 className="h-4 w-4 animate-spin text-white/40" /></div>
+      ) : rows.length === 0 ? (
+        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4 text-center text-xs text-white/40">No messages sent yet.</div>
+      ) : (
+        <div className="space-y-1.5">
+          {rows.map((m) => (
+            <div key={m.id} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-medium text-white">{m.title}</div>
+                <div className="text-[10px] text-white/40">{audienceLabel(m)} · {m.read_count ?? 0} read</div>
+              </div>
+              <button onClick={() => inboxAdminApi.remove(m.id).then(load)} className="text-white/30 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>
             </div>
           ))}
         </div>

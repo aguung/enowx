@@ -475,6 +475,31 @@ export const settingsApi = {
   get: () => api.get<Settings>("/api/settings"),
 };
 
+export interface InboxMessage {
+  id: number;
+  title: string;
+  body: string;
+  audience: string;
+  target: string;
+  author_name: string;
+  author_display: string;
+  created_at: string;
+  unread: boolean;
+  read_count?: number;
+}
+export const inboxApi = {
+  list: () => api.get<{ messages: InboxMessage[]; unread: number }>("/api/inbox"),
+  read: (id?: number) => api.post<{ ok: boolean }>("/api/inbox/read", id ? { id } : {}),
+};
+
+export interface InboxRole { id: string; name: string; }
+export const inboxAdminApi = {
+  list: () => api.get<{ messages: InboxMessage[] }>("/api/admin/inbox"),
+  send: (m: { title: string; body: string; audience: string; target: string }) => api.post<{ id: number }>("/api/admin/inbox", m),
+  remove: (id: number) => api.del<{ ok: boolean }>(`/api/admin/inbox/${id}`),
+  roles: () => api.get<{ roles: InboxRole[] }>("/api/admin/inbox/roles"),
+};
+
 export interface SubscriptionStatus {
   active: boolean;
   plan: string;

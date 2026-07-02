@@ -3,6 +3,7 @@ import { SystemStats } from "./SystemStats";
 import { TopBarNowPlaying } from "./TopBarNowPlaying";
 import { NotifBell } from "./NotifBell";
 import { ChangelogButton } from "./ChangelogButton";
+import { InboxButton } from "./InboxButton";
 
 export function TopBar({ nav }: { nav?: ReactNode }) {
   const [clock, setClock] = useState("--:--");
@@ -24,6 +25,7 @@ export function TopBar({ nav }: { nav?: ReactNode }) {
       <TopBarNowPlaying />
       <div className="ml-auto flex shrink-0 items-center gap-3">
         <ChangelogButton />
+        <InboxButton />
         <NotifBell />
         <SystemStats />
         <span className="tabular-nums text-white/70">{clock}</span>
