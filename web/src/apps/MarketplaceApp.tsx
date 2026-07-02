@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign, ShoppingCart, ExternalLink, Copy } from "lucide-react";
-import { marketplaceApi, rekberApi, orderApi, officialApi, type Listing, type ListingCategory, type RekberThread, type RekberMessage, type Order, type OfficialProduct, type RekberOrder } from "../lib/api";
+import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign, ShoppingCart, ExternalLink, Copy, Wallet, AlertTriangle } from "lucide-react";
+import { marketplaceApi, rekberApi, orderApi, officialApi, payoutApi, type Listing, type ListingCategory, type RekberThread, type RekberMessage, type Order, type OfficialProduct, type RekberOrder, type PayoutAccount } from "../lib/api";
 import { useProfile } from "../os/useProfile";
 import { useImageAttach } from "../os/useImageAttach";
 import { useDialog } from "../os/dialog";
@@ -8,7 +8,7 @@ import { openLightbox } from "../os/lightbox";
 import { openProfile } from "../os/profileViewer";
 
 type Kind = "community" | "official";
-type View = "browse" | "deals" | "orders";
+type View = "browse" | "deals" | "orders" | "payout";
 
 function idr(amount: number, currency: string) {
   if (currency === "IDR") return "Rp " + amount.toLocaleString("id-ID");
@@ -21,8 +21,22 @@ export function MarketplaceApp() {
   const [detail, setDetail] = useState<Listing | null>(null);
   const [creating, setCreating] = useState(false);
   const [openThread, setOpenThread] = useState<number | null>(null);
+  const dialog = useDialog();
 
   const openDeal = (id: number) => { setOpenThread(id); setView("deals"); };
+
+  // Selling requires a payout account first.
+  const onSell = async () => {
+    try {
+      const r = await payoutApi.get();
+      if (!r.set) {
+        const ok = await dialog.confirm({ title: "Set your payout account first", message: "Before selling, set the account where rekber funds will be disbursed to you.", confirmLabel: "Set payout" });
+        if (ok) setView("payout");
+        return;
+      }
+    } catch { /* ignore */ }
+    setCreating(true);
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -31,10 +45,13 @@ export function MarketplaceApp() {
         <button onClick={() => { setView("browse"); setKind("community"); }} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "browse" && kind === "community" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><Store className="h-3.5 w-3.5" /> Community</button>
         <button onClick={() => { setView("deals"); setOpenThread(null); }} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "deals" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><Handshake className="h-3.5 w-3.5" /> My Deals</button>
         <button onClick={() => setView("orders")} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "orders" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><ShoppingCart className="h-3.5 w-3.5" /> My Orders</button>
-        <button onClick={() => setCreating(true)} className="ml-auto flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90"><Plus className="h-3.5 w-3.5" /> Sell</button>
+        <button onClick={() => setView("payout")} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "payout" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><Wallet className="h-3.5 w-3.5" /> Payout</button>
+        <button onClick={onSell} className="ml-auto flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90"><Plus className="h-3.5 w-3.5" /> Sell</button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        {view === "orders" ? (
+        {view === "payout" ? (
+          <PayoutView />
+        ) : view === "orders" ? (
           <OrdersView />
         ) : view === "deals" ? (
           <DealsView openThread={openThread} setOpenThread={setOpenThread} />
@@ -47,6 +64,96 @@ export function MarketplaceApp() {
         )}
       </div>
       {creating && <SellModal onClose={() => setCreating(false)} onCreated={() => setCreating(false)} />}
+    </div>
+  );
+}
+
+// PayoutView lets a seller set their disbursement account (bank/ewallet/qris).
+function PayoutView() {
+  const [kind, setKind] = useState<"bank" | "ewallet" | "qris">("bank");
+  const [provider, setProvider] = useState("");
+  const [number, setNumber] = useState("");
+  const [holder, setHolder] = useState("");
+  const [existingQris, setExistingQris] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const qris = useImageAttach();
+
+  useEffect(() => {
+    payoutApi.get().then((r) => {
+      if (r.set && r.account) {
+        setKind(r.account.kind);
+        setProvider(r.account.provider); setNumber(r.account.number); setHolder(r.account.holder); setExistingQris(r.account.qris_url);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    setErr(""); setMsg("");
+    const body: Partial<PayoutAccount> = { kind };
+    if (kind === "qris") {
+      const q = qris.images[0] || existingQris;
+      if (!q) { setErr("Upload your QRIS image."); return; }
+      body.qris_url = q;
+    } else {
+      if (!provider.trim() || !number.trim() || !holder.trim()) { setErr("Fill in provider, number and holder name."); return; }
+      body.provider = provider.trim(); body.number = number.trim(); body.holder = holder.trim();
+    }
+    setSaving(true);
+    try { await payoutApi.set(body); if (body.qris_url) setExistingQris(body.qris_url); qris.clear(); setMsg("Payout account saved."); }
+    catch (e) { setErr(e instanceof Error ? e.message : "failed"); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="mx-auto max-w-lg p-4">
+      <h2 className="text-sm font-semibold text-white">Payout account</h2>
+      <p className="mt-1 text-xs text-white/50">This is where rekber funds are disbursed to you after a deal completes. You must set it before you can sell.</p>
+      <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200/90">
+        <AlertTriangle className="mt-[1px] h-3.5 w-3.5 shrink-0" />
+        Double-check your details. The admin is not responsible for funds sent to a wrong account.
+      </div>
+
+      <div className="mt-3 flex gap-1">
+        {(["bank", "ewallet", "qris"] as const).map((k) => (
+          <button key={k} onClick={() => setKind(k)} className={`rounded-lg px-2.5 py-1 text-xs ${kind === k ? "bg-white/12 text-white" : "text-white/45 hover:bg-white/5"}`}>{k === "bank" ? "Bank" : k === "ewallet" ? "E-wallet" : "QRIS"}</button>
+        ))}
+      </div>
+
+      <div className="mt-3 space-y-2.5">
+        {kind === "qris" ? (
+          <div>
+            <label className="mb-1 block text-[11px] text-white/50">QRIS image</label>
+            <div className="flex items-center gap-2">
+              {(qris.images[0] || existingQris) && <img src={qris.images[0] || existingQris} alt="" className="h-24 w-24 rounded object-cover" />}
+              <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded border border-dashed border-white/15 text-white/40 hover:bg-white/5">
+                {qris.uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+                <span className="mt-0.5 text-[9px]">Upload</span>
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => qris.upload(e.target.files)} />
+              </label>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div>
+              <label className="mb-1 block text-[11px] text-white/50">{kind === "bank" ? "Bank name" : "E-wallet"}</label>
+              <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder={kind === "bank" ? "BCA / Mandiri / BNI…" : "DANA / OVO / GoPay…"} className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] text-white/50">Account number</label>
+              <input value={number} onChange={(e) => setNumber(e.target.value)} placeholder="1234567890" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-sm text-white outline-none focus:border-white/25" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] text-white/50">Account holder name</label>
+              <input value={holder} onChange={(e) => setHolder(e.target.value)} placeholder="Full name as on the account" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
+            </div>
+          </>
+        )}
+        {err && <div className="text-xs text-red-300">{err}</div>}
+        {msg && <div className="flex items-center gap-1 text-xs text-emerald-300"><Check className="h-3.5 w-3.5" /> {msg}</div>}
+        <button onClick={save} disabled={saving} className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-black hover:opacity-90 disabled:opacity-50">{saving ? "Saving…" : "Save payout account"}</button>
+      </div>
     </div>
   );
 }
@@ -411,8 +518,19 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
         <button onClick={onBack} className="mb-2 flex items-center gap-1.5 text-xs text-white/50 hover:text-white"><ArrowLeft className="h-3.5 w-3.5" /> My deals</button>
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-white">{thread.title}</div>
-          <div className="text-[11px] text-white/45">{idrShort(thread.amount, thread.currency)} · fee {idrShort(thread.fee, thread.currency)} · kamu: <span className="text-white/70">{role === "middleman" ? "middleman (founder)" : role || "observer"}</span></div>
+          <div className="text-[11px] text-white/45">{idrShort(thread.amount, thread.currency)} · fee {idrShort(thread.fee, thread.currency)} · you: <span className="text-white/70">{role === "middleman" ? "middleman (founder)" : role || "observer"}</span></div>
         </div>
+        {/* Seller payout (where the middleman releases funds) */}
+        {thread.seller_payout && (
+          <div className="mt-2 rounded-lg border border-white/10 bg-white/[0.03] p-2 text-[11px]">
+            <div className="mb-0.5 flex items-center gap-1 text-white/40"><Wallet className="h-3 w-3" /> Seller payout</div>
+            {thread.seller_payout.kind === "qris" ? (
+              <img src={thread.seller_payout.qris_url} alt="QRIS" onClick={() => openLightbox([thread.seller_payout!.qris_url], 0)} className="h-24 w-24 cursor-zoom-in rounded object-cover" />
+            ) : (
+              <div className="font-mono text-white/75">{thread.seller_payout.provider} · {thread.seller_payout.number} · a/n {thread.seller_payout.holder}</div>
+            )}
+          </div>
+        )}
         {/* Status stepper */}
         <div className="mt-2 flex items-center gap-1">
           {STATUS_STEPS.map((s, i) => (

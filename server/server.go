@@ -226,6 +226,8 @@ func New(addr string, d Deps) *Server {
 		r.Post("/marketplace/rekber/threads/{id}/{action}", syncH.RekberAction)
 		r.Get("/marketplace/admin/rekber/account", syncH.RekberAccountGet)
 		r.Put("/marketplace/admin/rekber/account", syncH.RekberAccountSet)
+		r.Get("/marketplace/payout", syncH.PayoutGet)
+		r.Put("/marketplace/payout", syncH.PayoutSet)
 		r.Get("/marketplace/official", syncH.OfficialList)
 		r.Post("/marketplace/orders", syncH.OrderCreate)
 		r.Get("/marketplace/orders", syncH.OrdersList)

@@ -488,6 +488,23 @@ func (m *Manager) TakedownPlugin(ctx context.Context, id string) (string, error)
 	return string(raw), nil
 }
 
+// PayoutGet/Set proxy the caller's marketplace payout account.
+func (m *Manager) PayoutGet(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/marketplace/payout", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) PayoutSet(ctx context.Context, body json.RawMessage) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPut, "/marketplace/payout", body, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // RekberDelivery fetches the private delivered goods for a thread (buyer/seller).
 func (m *Manager) RekberDelivery(ctx context.Context, id string) (string, error) {
 	var raw json.RawMessage

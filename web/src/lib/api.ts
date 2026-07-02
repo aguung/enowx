@@ -762,6 +762,20 @@ export interface ListingInput {
   delivery_payload?: string;
 }
 
+// Seller payout account (bank | ewallet | qris).
+export interface PayoutAccount {
+  kind: "bank" | "ewallet" | "qris";
+  provider: string;
+  number: string;
+  holder: string;
+  qris_url: string;
+}
+
+export const payoutApi = {
+  get: () => api.get<{ set: boolean; account?: PayoutAccount }>("/api/marketplace/payout"),
+  set: (a: Partial<PayoutAccount>) => api.put<{ ok: boolean }>("/api/marketplace/payout", a),
+};
+
 export const marketplaceApi = {
   list: (opts?: { kind?: string; category?: string; q?: string; before?: number }) => {
     const p = new URLSearchParams();
@@ -797,6 +811,7 @@ export interface RekberThread {
   buyer: RekberParty;
   seller: RekberParty;
   middleman?: RekberParty;
+  seller_payout?: PayoutAccount;
 }
 export interface RekberMessage {
   id: number;

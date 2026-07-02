@@ -86,6 +86,17 @@ func (h *Sync) RekberAction(w http.ResponseWriter, r *http.Request) {
 	proxyJSON(w, out, err)
 }
 
+func (h *Sync) PayoutGet(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.PayoutGet(r.Context())
+	proxyJSON(w, out, err)
+}
+
+func (h *Sync) PayoutSet(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 4096))
+	out, err := h.mgr.PayoutSet(r.Context(), body)
+	proxyJSON(w, out, err)
+}
+
 func (h *Sync) RekberDelivery(w http.ResponseWriter, r *http.Request) {
 	out, err := h.mgr.RekberDelivery(r.Context(), chi.URLParam(r, "id"))
 	proxyJSON(w, out, err)
