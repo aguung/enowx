@@ -78,7 +78,7 @@ export function ProfileCard({ p, footer, action, compact }: { p: CardProfile; fo
             rest of the row (Kleos badge) stays in normal flow. */}
         <div className="mb-2 flex items-start justify-between pt-2">
           <div
-            className="-ml-1 -mt-14 flex h-[72px] w-[72px] items-center justify-center rounded-full ring-[6px]"
+            className="relative z-10 -ml-1 -mt-14 flex h-[72px] w-[72px] items-center justify-center rounded-full ring-[6px]"
             style={{ ["--tw-ring-color" as string]: ring }}
           >
             {p.avatar_url ? (
