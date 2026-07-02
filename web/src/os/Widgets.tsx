@@ -197,7 +197,9 @@ function PoolWidget({ accounts, onOpen }: { accounts: Account[] | null; onOpen: 
         <p className="text-sm text-white/40">No accounts yet. Add one in Providers.</p>
       ) : (
         <>
-          <div className="space-y-1.5">
+          {/* Fixed height so the widget never grows with the provider count —
+              the list scrolls internally instead of pushing widgets below down. */}
+          <div className="h-[132px] space-y-1.5 overflow-y-auto pr-1">
             {providers.map((p) => (
               <div key={p} className="flex items-center justify-between text-xs">
                 <span className="text-white/70">{p}</span>
