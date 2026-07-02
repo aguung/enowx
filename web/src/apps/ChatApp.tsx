@@ -83,7 +83,7 @@ function ChatRoom() {
   const profile = useProfile();
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
-  const [openUser, setOpenUser] = useState<string | null>(null);
+  const [openUser, setOpenUser] = useState<number | null>(null);
   const [reply, setReply] = useState<ReplyTarget | null>(null);
   const img = useImageAttach();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -160,8 +160,8 @@ function ChatRoom() {
               mine={!!myUsername && m.username === myUsername}
               pingsMe={mentionsMe(m.content, myUsername, myDisplayName)}
               canModerate={canModerate}
-              onOpenUser={() => setOpenUser(m.user_id)}
-              open={openUser === m.user_id}
+              onOpenUser={() => setOpenUser(m.id)}
+              open={openUser === m.id}
               onClose={() => setOpenUser(null)}
               onReply={() => startReply(m)}
             />
