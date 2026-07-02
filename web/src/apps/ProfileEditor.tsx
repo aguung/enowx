@@ -17,6 +17,10 @@ export function ProfileEditor() {
   const profile = useProfile();
   const u = profile.user;
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Anchor the modal to the app content area (not the tiny banner slot it lives
+  // in), so it covers the window like before instead of a full-screen overlay.
+  const host = triggerRef.current?.closest("[data-app-content]") ?? null;
   const [displayName, setDisplayName] = useState(u?.display_name ?? "");
   const [pronouns, setPronouns] = useState(u?.pronouns ?? "");
   const [bio, setBio] = useState(u?.bio ?? "");
@@ -101,6 +105,7 @@ export function ProfileEditor() {
     <>
       {/* Glass pill: pencil icon that expands to "Edit" on hover. */}
       <button
+        ref={triggerRef}
         onClick={() => setOpen(true)}
         title="Edit profile"
         className="group flex items-center rounded-full border border-white/15 bg-black/25 px-1.5 py-1.5 text-xs text-white/80 shadow-lg backdrop-blur-md transition-colors hover:bg-black/40 hover:text-white"
@@ -111,9 +116,9 @@ export function ProfileEditor() {
         </span>
       </button>
 
-      {open && createPortal(
+      {open && host && createPortal(
         <div
-          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+          className="absolute inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
           onClick={() => !busy && setOpen(false)}
         >
           <div
@@ -244,7 +249,7 @@ export function ProfileEditor() {
             </div>
           </div>
         </div>,
-        document.body,
+        host,
       )}
     </>
   );

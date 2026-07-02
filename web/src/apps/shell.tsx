@@ -19,7 +19,7 @@ export function AppShell({
         <h1 className="text-sm font-bold text-white">{title}</h1>
         {subtitle && <p className="text-[11px] text-white/40">{subtitle}</p>}
       </div>
-      <div className={flush ? "min-h-0 flex-1" : "flex-1 overflow-auto p-4"}>{children}</div>
+      <div data-app-content className={`relative ${flush ? "min-h-0 flex-1" : "flex-1 overflow-auto p-4"}`}>{children}</div>
     </div>
   );
 }
