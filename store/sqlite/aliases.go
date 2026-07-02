@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/enowdev/enowx/core/syncbus"
 	"github.com/enowdev/enowx/store"
 )
 
@@ -31,11 +32,17 @@ func (s *aliasStore) Set(ctx context.Context, alias, target string) error {
 		`INSERT INTO model_aliases (alias, target) VALUES (?, ?)
 		 ON CONFLICT(alias) DO UPDATE SET target = excluded.target`,
 		alias, target)
+	if err == nil {
+		syncbus.Dirty("alias")
+	}
 	return err
 }
 
 func (s *aliasStore) Delete(ctx context.Context, alias string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM model_aliases WHERE alias = ?`, alias)
+	if err == nil {
+		syncbus.Dirty("alias")
+	}
 	return err
 }
 

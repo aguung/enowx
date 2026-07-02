@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/enowdev/enowx/core/syncbus"
 	"github.com/enowdev/enowx/store"
 )
 
@@ -55,11 +56,15 @@ func (s *keyStore) Add(ctx context.Context, k store.APIKey) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	syncbus.Dirty("apikey")
 	return res.LastInsertId()
 }
 
 func (s *keyStore) Delete(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM api_keys WHERE id = ?`, id)
+	if err == nil {
+		syncbus.Dirty("apikey")
+	}
 	return err
 }
 

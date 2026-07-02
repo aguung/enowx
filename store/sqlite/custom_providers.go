@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 
+	"github.com/enowdev/enowx/core/syncbus"
 	"github.com/enowdev/enowx/store"
 )
 
@@ -60,6 +61,7 @@ func (s *customProviderStore) Create(ctx context.Context, p store.CustomProvider
 	if err != nil {
 		return 0, err
 	}
+	syncbus.Dirty("custom_provider")
 	return res.LastInsertId()
 }
 
@@ -68,10 +70,16 @@ func (s *customProviderStore) Update(ctx context.Context, p store.CustomProvider
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE custom_providers SET name=?, prefix=?, format=?, base_url=?, default_model=?, models=? WHERE id=?`,
 		p.Name, p.Prefix, p.Format, p.BaseURL, p.DefaultModel, string(models), p.ID)
+	if err == nil {
+		syncbus.Dirty("custom_provider")
+	}
 	return err
 }
 
 func (s *customProviderStore) Delete(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM custom_providers WHERE id = ?`, id)
+	if err == nil {
+		syncbus.Dirty("custom_provider")
+	}
 	return err
 }

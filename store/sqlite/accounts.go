@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 
+	"github.com/enowdev/enowx/core/syncbus"
 	"github.com/enowdev/enowx/store"
 )
 
@@ -38,6 +39,7 @@ func (s *accountStore) Add(ctx context.Context, a store.Account) (int64, error) 
 	if err != nil {
 		return 0, err
 	}
+	syncbus.Dirty("account")
 	return res.LastInsertId()
 }
 
@@ -48,6 +50,9 @@ func (s *accountStore) SetStatus(ctx context.Context, id int64, status string) e
 
 func (s *accountStore) SetLabel(ctx context.Context, id int64, label string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE accounts SET label = ? WHERE id = ?`, label, id)
+	if err == nil {
+		syncbus.Dirty("account")
+	}
 	return err
 }
 
@@ -58,11 +63,17 @@ func (s *accountStore) SetDisabled(ctx context.Context, id int64, disabled bool)
 
 func (s *accountStore) UpdateCreds(ctx context.Context, id int64, creds map[string]string) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE accounts SET creds = ? WHERE id = ?`, encodeCreds(creds), id)
+	if err == nil {
+		syncbus.Dirty("account")
+	}
 	return err
 }
 
 func (s *accountStore) Delete(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM accounts WHERE id = ?`, id)
+	if err == nil {
+		syncbus.Dirty("account")
+	}
 	return err
 }
 
