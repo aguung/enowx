@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign, ShoppingCart, ExternalLink, Copy, Wallet, AlertTriangle } from "lucide-react";
-import { marketplaceApi, rekberApi, orderApi, officialApi, payoutApi, type Listing, type ListingCategory, type RekberThread, type RekberMessage, type Order, type OfficialProduct, type RekberOrder, type PayoutAccount } from "../lib/api";
+import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign, ShoppingCart, ExternalLink, Copy, Wallet, AlertTriangle, Star } from "lucide-react";
+import { marketplaceApi, rekberApi, orderApi, officialApi, payoutApi, reviewApi, type Listing, type ListingCategory, type RekberThread, type RekberMessage, type Order, type OfficialProduct, type RekberOrder, type PayoutAccount } from "../lib/api";
 import { useProfile } from "../os/useProfile";
 import { useImageAttach } from "../os/useImageAttach";
 import { useDialog } from "../os/dialog";
@@ -14,6 +14,15 @@ type View = "browse" | "deals" | "orders" | "payout";
 function idr(amount: number, currency: string) {
   if (currency === "IDR") return "Rp " + amount.toLocaleString("id-ID");
   return currency + " " + amount.toLocaleString();
+}
+
+// relTime formats an ISO timestamp as a short "2h ago" / "just now".
+function relTime(iso: string): string {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
 }
 
 export function MarketplaceApp() {
@@ -247,7 +256,13 @@ function ListingCard({ l, onOpen, onBuy, buying }: { l: Listing; onOpen: () => v
         <div className="p-2.5 pb-1.5">
           <div className="truncate text-xs font-medium text-white">{l.title}</div>
           <div className="mt-0.5 text-sm font-semibold text-emerald-300">{idr(l.price_amount, l.currency)}</div>
-          <div className="mt-1 truncate text-[10px] text-white/35">by {l.display_name || l.username}</div>
+          <div className="mt-1 flex items-center gap-1.5 text-[10px] text-white/35">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${l.seller_online ? "bg-emerald-400" : "bg-white/25"}`} title={l.seller_online ? "Online" : "Offline"} />
+            <span className="truncate">by {l.display_name || l.username}</span>
+            {(l.seller_rating_count ?? 0) > 0 && (
+              <span className="ml-auto flex shrink-0 items-center gap-0.5 text-amber-300"><Star className="h-2.5 w-2.5 fill-amber-300" />{(l.seller_rating_avg ?? 0).toFixed(1)}</span>
+            )}
+          </div>
         </div>
       </button>
       <div className="flex gap-1.5 p-2.5 pt-1">
@@ -319,7 +334,18 @@ function ListingDetail({ listing, onClose, onDeleted, onDeal }: { listing: Listi
             <button onClick={remove} disabled={busy} className="rounded-lg border border-white/10 bg-white/[0.03] p-1.5 text-white/55 hover:bg-red-500/30 hover:text-red-200 disabled:opacity-40"><Trash2 className="h-4 w-4" /></button>
           )}
         </div>
-        <button onClick={() => openProfile(listing.user_id)} className="mt-1.5 text-xs text-white/50 hover:underline">Seller: {listing.display_name || listing.username}</button>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+          <button onClick={() => openProfile(listing.user_id)} className="flex items-center gap-1.5 text-white/60 hover:underline">
+            <span className={`h-1.5 w-1.5 rounded-full ${listing.seller_online ? "bg-emerald-400" : "bg-white/25"}`} />
+            Seller: {listing.display_name || listing.username}
+          </button>
+          <span className="text-white/35">
+            {listing.seller_online ? "online" : listing.seller_last_seen ? `last seen ${relTime(listing.seller_last_seen)}` : "offline"}
+          </span>
+          {(listing.seller_rating_count ?? 0) > 0 && (
+            <span className="flex items-center gap-0.5 text-amber-300"><Star className="h-3 w-3 fill-amber-300" />{(listing.seller_rating_avg ?? 0).toFixed(1)} <span className="text-white/35">({listing.seller_rating_count})</span></span>
+          )}
+        </div>
         {listing.warranty && <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2 text-[11px] text-emerald-200/90">Warranty: {listing.warranty}</div>}
         {listing.description && <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/70">{listing.description}</p>}
         <div className="mt-4 flex gap-2">
@@ -624,6 +650,9 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
         </div>
       )}
 
+      {/* Buyer review prompt — only after the deal is released. */}
+      {done && role === "buyer" && <ReviewPrompt threadId={threadId} />}
+
       {/* Composer */}
       {!dead && (
         <div className="flex items-center gap-2 border-t border-white/5 px-4 py-2.5">
@@ -632,6 +661,47 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
         </div>
       )}
       {shipping && <ShipModal onClose={() => setShipping(false)} onShip={(content, images) => { setShipping(false); runAction("mark-shipped", { content, images }); }} />}
+    </div>
+  );
+}
+
+// ReviewPrompt lets the buyer rate the seller once, after a completed deal.
+function ReviewPrompt({ threadId }: { threadId: number }) {
+  const [rating, setRating] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [body, setBody] = useState("");
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  if (done) return <div className="border-t border-white/5 px-4 py-2 text-center text-[11px] text-emerald-300">Thanks for your review!</div>;
+
+  const submit = async () => {
+    if (rating < 1) { setErr("Pick a star rating."); return; }
+    setBusy(true); setErr("");
+    try {
+      await reviewApi.submit(threadId, rating, body.trim());
+      setDone(true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="border-t border-white/5 px-4 py-2.5">
+      <div className="mb-1.5 text-[11px] font-medium text-white/60">Rate the seller</div>
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} onMouseEnter={() => setHover(n)} onMouseLeave={() => setHover(0)} onClick={() => setRating(n)}>
+            <Star className={`h-5 w-5 ${(hover || rating) >= n ? "fill-amber-300 text-amber-300" : "text-white/25"}`} />
+          </button>
+        ))}
+      </div>
+      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} placeholder="Share your experience (optional)…" className="mt-2 w-full resize-none rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs text-white outline-none focus:border-white/25" />
+      {err && <div className="mt-1 text-[11px] text-red-300">{err}</div>}
+      <button onClick={submit} disabled={busy} className="mt-2 rounded-lg bg-amber-500/90 px-3 py-1.5 text-xs font-medium text-black hover:bg-amber-400 disabled:opacity-50">{busy ? "Submitting…" : "Submit review"}</button>
     </div>
   );
 }

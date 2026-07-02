@@ -494,6 +494,10 @@ export interface SyncUser {
   is_moderator?: boolean;
   is_premium?: boolean;
   is_donor?: boolean;
+  online?: boolean;
+  last_seen?: string;
+  rating_avg?: number;
+  rating_count?: number;
   entitlements?: string[];
   display_name?: string;
   bio?: string;
@@ -768,8 +772,28 @@ export interface Listing {
   top_role_id: string;
   wears_tag: boolean;
   guild_tag: string;
+  // Seller social signals (marketplace trust).
+  seller_online?: boolean;
+  seller_last_seen?: string;
+  seller_rating_avg?: number;
+  seller_rating_count?: number;
 }
 export interface ListingCategory { key: string; label: string }
+export interface SellerReview {
+  id: number;
+  reviewer_id: string;
+  reviewer: string;
+  reviewer_avatar: string;
+  rating: number;
+  body: string;
+  created_at: string;
+}
+export const reviewApi = {
+  submit: (threadId: number, rating: number, body: string) =>
+    api.post<{ ok: boolean }>(`/api/marketplace/rekber/threads/${threadId}/review`, { rating, body }),
+  seller: (sellerId: string, offset = 0) =>
+    api.get<{ reviews: SellerReview[]; rating_avg: number; rating_count: number }>(`/api/marketplace/sellers/${sellerId}/reviews?offset=${offset}`),
+};
 export interface ListingInput {
   kind: "official" | "community";
   category: string;
@@ -1070,6 +1094,10 @@ export interface PublicProfile {
   is_moderator?: boolean;
   is_premium?: boolean;
   is_donor?: boolean;
+  online?: boolean;
+  last_seen?: string;
+  rating_avg?: number;
+  rating_count?: number;
   equipped?: Equipped;
   banner_url?: string;
   links: ProfileLink[];

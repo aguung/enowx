@@ -1,4 +1,13 @@
-import { ShieldCheck, Coins, Link as LinkIcon, Crown, HandCoins } from "lucide-react";
+import { ShieldCheck, Coins, Link as LinkIcon, Crown, HandCoins, Star } from "lucide-react";
+
+// cardRelTime formats an ISO timestamp as a short "2h ago".
+function cardRelTime(iso: string): string {
+  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
 import type { TopRole, ProfileLink, Equipped } from "../lib/api";
 
 // CardProfile is the shape the card renders. Both SyncUser (self) and
@@ -21,6 +30,10 @@ export interface CardProfile {
   is_moderator?: boolean;
   is_premium?: boolean;
   is_donor?: boolean;
+  online?: boolean;
+  last_seen?: string;
+  rating_avg?: number;
+  rating_count?: number;
   equipped?: Equipped;
   created_at?: string;
 }
@@ -96,6 +109,16 @@ export function ProfileCard({ p, footer, compact }: { p: CardProfile; footer?: R
         <div className="flex items-baseline gap-1.5">
           <span className="truncate text-base font-bold text-white">{p.display_name || p.username}</span>
           {p.display_name && <span className="truncate text-xs text-white/35">@{p.username}</span>}
+        </div>
+        {/* Presence + rating. */}
+        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="flex items-center gap-1 text-white/45">
+            <span className={`h-1.5 w-1.5 rounded-full ${p.online ? "bg-emerald-400" : "bg-white/25"}`} />
+            {p.online ? "Online" : p.last_seen ? `last seen ${cardRelTime(p.last_seen)}` : "Offline"}
+          </span>
+          {(p.rating_count ?? 0) > 0 && (
+            <span className="flex items-center gap-0.5 text-amber-300"><Star className="h-3 w-3 fill-amber-300" />{(p.rating_avg ?? 0).toFixed(1)} <span className="text-white/35">({p.rating_count})</span></span>
+          )}
         </div>
         {p.pronouns && <p className="text-[11px] text-white/40">{p.pronouns}</p>}
 
