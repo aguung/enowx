@@ -271,17 +271,17 @@ function SellModal({ onClose, onCreated }: { onClose: () => void; onCreated: () 
 
 const STATUS_STEPS = ["open", "awaiting_payment", "payment_sent", "funds_held", "shipped", "released"] as const;
 const STATUS_LABEL: Record<string, string> = {
-  open: "Dibuka", awaiting_payment: "Nunggu bayar", payment_sent: "Sudah bayar", funds_held: "Dana aman", shipped: "Dikirim", released: "Selesai",
-  cancelled: "Batal",
+  open: "Opened", awaiting_payment: "Awaiting payment", payment_sent: "Paid", funds_held: "Funds held", shipped: "Shipped", released: "Completed",
+  cancelled: "Cancelled",
 };
 // action key → button label + icon.
 const ACTION_META: Record<string, { label: string; icon: typeof Check }> = {
-  "send-payment-info": { label: "Kirim info rekening", icon: CircleDollarSign },
-  "mark-paid": { label: "Sudah bayar", icon: Check },
-  "confirm-funds": { label: "Konfirmasi dana masuk", icon: Check },
-  "mark-shipped": { label: "Barang sudah dikirim", icon: Send },
-  "confirm-receipt": { label: "Konfirmasi diterima", icon: Check },
-  "release": { label: "Rilis dana ke seller", icon: CircleDollarSign },
+  "send-payment-info": { label: "Send payment info", icon: CircleDollarSign },
+  "mark-paid": { label: "Mark as paid", icon: Check },
+  "confirm-funds": { label: "Confirm funds received", icon: Check },
+  "mark-shipped": { label: "Mark as shipped", icon: Send },
+  "confirm-receipt": { label: "Confirm received", icon: Check },
+  "release": { label: "Release funds to seller", icon: CircleDollarSign },
 };
 
 function idrShort(n: number, c: string) { return c === "IDR" ? "Rp " + n.toLocaleString("id-ID") : c + " " + n.toLocaleString(); }
@@ -365,7 +365,7 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
   const runAction = async (action: string, extra: Record<string, unknown> = {}) => {
     // "mark-paid" requires a transfer proof image.
     if (action === "mark-paid" && proof.images.length === 0) {
-      await dialog.alert({ title: "Lampirkan bukti transfer", message: "Upload bukti transfer dulu sebelum menekan \"Sudah bayar\"." });
+      await dialog.alert({ title: "Attach transfer proof", message: "Upload the transfer proof before marking as paid." });
       return;
     }
     // "mark-shipped" opens the ship modal (fills the private goods).
@@ -374,13 +374,13 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
       return;
     }
     const confirmMsg: Record<string, string> = {
-      "send-payment-info": "Kirim info rekening rekber ke buyer?",
-      "confirm-funds": "Konfirmasi dana buyer sudah masuk ke rekening rekber?",
-      "release": "Rilis dana ke seller? Aksi ini final.",
-      "confirm-receipt": "Konfirmasi barang sudah diterima? Dana akan diteruskan ke seller.",
+      "send-payment-info": "Send the rekber account details to the buyer?",
+      "confirm-funds": "Confirm the buyer's payment has arrived?",
+      "release": "Release funds to the seller? This is final.",
+      "confirm-receipt": "Confirm the item was received? Funds will be released to the seller.",
     };
     if (confirmMsg[action]) {
-      const ok = await dialog.confirm({ title: "Konfirmasi", message: confirmMsg[action], confirmLabel: "Ya" });
+      const ok = await dialog.confirm({ title: "Confirm", message: confirmMsg[action], confirmLabel: "Yes" });
       if (!ok) return;
     }
     setBusy(true);
@@ -391,7 +391,7 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
       proof.clear();
       await refresh(false);
     } catch (e) {
-      await dialog.alert({ title: "Gagal", message: e instanceof Error ? e.message : "failed" });
+      await dialog.alert({ title: "Failed", message: e instanceof Error ? e.message : "failed" });
     } finally {
       setBusy(false);
     }
@@ -439,7 +439,7 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
 
       {/* Reminder: whose turn */}
       {!done && !dead && !meta && (
-        <div className="border-t border-white/5 px-4 py-1.5 text-center text-[11px] text-amber-200/80">Menunggu aksi pihak lain…</div>
+        <div className="border-t border-white/5 px-4 py-1.5 text-center text-[11px] text-amber-200/80">Waiting for the other party…</div>
       )}
 
       {/* Role-gated action */}
@@ -451,7 +451,7 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
                 <div key={i} className="relative"><img src={src} alt="" className="h-12 w-12 rounded object-cover" /><button onClick={() => proof.removeAt(i)} className="absolute -right-1 -top-1 rounded-full bg-black/80 p-0.5 text-white/70"><X className="h-3 w-3" /></button></div>
               ))}
               <label className="flex cursor-pointer items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-white/60 hover:bg-white/10">
-                <ImagePlus className="h-3.5 w-3.5" /> {proof.uploading ? "…" : "Bukti transfer"}
+                <ImagePlus className="h-3.5 w-3.5" /> {proof.uploading ? "…" : "Transfer proof"}
                 <input type="file" accept="image/*" className="hidden" onChange={(e) => proof.upload(e.target.files)} />
               </label>
             </div>
@@ -460,7 +460,7 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
             <button onClick={() => runAction(nextAct)} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-400 disabled:opacity-50">
               {ActIcon && <ActIcon className="h-3.5 w-3.5" />} {meta.label}
             </button>
-            <button onClick={async () => { const ok = await dialog.confirm({ title: "Batalkan deal?", message: "Deal akan dibatalkan.", confirmLabel: "Batalkan", danger: true }); if (ok) runAction("cancel"); }} disabled={busy} className="ml-auto rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/50 hover:bg-red-500/15 hover:text-red-200">Batalkan</button>
+            <button onClick={async () => { const ok = await dialog.confirm({ title: "Cancel deal?", message: "The deal will be cancelled.", confirmLabel: "Cancel deal", danger: true }); if (ok) runAction("cancel"); }} disabled={busy} className="ml-auto rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/50 hover:bg-red-500/15 hover:text-red-200">Cancel</button>
           </div>
         </div>
       )}
@@ -468,7 +468,7 @@ function RekberPanel({ threadId, onBack }: { threadId: number; onBack: () => voi
       {/* Composer */}
       {!dead && (
         <div className="flex items-center gap-2 border-t border-white/5 px-4 py-2.5">
-          <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Pesan…" className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
+          <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()} placeholder="Message…" className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
           <button onClick={send} className="rounded-lg bg-white/10 p-2 text-white/70 hover:bg-white/20"><Send className="h-4 w-4" /></button>
         </div>
       )}
@@ -483,18 +483,18 @@ function ShipModal({ onClose, onShip }: { onClose: () => void; onShip: (content:
   const img = useImageAttach();
   const [err, setErr] = useState("");
   const submit = () => {
-    if (!content.trim() && img.images.length === 0) { setErr("Isi detail barang atau lampirkan file."); return; }
+    if (!content.trim() && img.images.length === 0) { setErr("Fill in the item details or attach a file."); return; }
     onShip(content.trim(), img.images);
   };
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#11131a] shadow-2xl" onClick={(e) => e.stopPropagation()} onPaste={img.onPaste}>
         <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3">
-          <div className="min-w-0 flex-1 text-sm font-semibold text-white">Kirim barang</div>
+          <div className="min-w-0 flex-1 text-sm font-semibold text-white">Ship item</div>
           <button onClick={onClose} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
         </div>
         <div className="space-y-3 p-4">
-          <p className="text-[11px] text-white/40">Barang ini hanya terlihat oleh buyer & seller — middleman/admin tidak bisa melihatnya.</p>
+          <p className="text-[11px] text-white/40">Only the buyer & seller can see this — the middleman/admin cannot.</p>
           <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={5} placeholder="akun@email:password&#10;resi JNE 1234567&#10;link download…" className="w-full resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 font-mono text-xs text-white outline-none focus:border-white/25" />
           {img.images.length > 0 && (
             <div className="flex flex-wrap gap-2">
@@ -504,11 +504,11 @@ function ShipModal({ onClose, onShip }: { onClose: () => void; onShip: (content:
             </div>
           )}
           <label className="flex w-fit cursor-pointer items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-white/60 hover:bg-white/10">
-            <ImagePlus className="h-3.5 w-3.5" /> {img.uploading ? "…" : "Lampirkan gambar"}
+            <ImagePlus className="h-3.5 w-3.5" /> {img.uploading ? "…" : "Attach image"}
             <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => img.upload(e.target.files)} />
           </label>
           {err && <div className="text-xs text-red-300">{err}</div>}
-          <button onClick={submit} className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-400"><Send className="h-4 w-4" /> Kirim barang</button>
+          <button onClick={submit} className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-400"><Send className="h-4 w-4" /> Ship item</button>
         </div>
       </div>
     </div>
@@ -545,7 +545,7 @@ function OrdersView() {
       {!orders ? (
         <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-white/40" /></div>
       ) : orders.length === 0 && rekber.length === 0 ? (
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center text-xs text-white/40">Belum ada pesanan.</div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center text-xs text-white/40">No orders yet.</div>
       ) : (
         <div className="space-y-2">
           {orders.map((o) => (
@@ -560,14 +560,14 @@ function OrdersView() {
               {o.status === "delivered" && o.delivered_payload && (
                 <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] p-2">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="text-[10px] font-semibold uppercase text-emerald-300/80">Terkirim</span>
-                    <button onClick={() => copy(o.delivered_payload!)} className="flex items-center gap-1 text-[10px] text-white/50 hover:text-white"><Copy className="h-3 w-3" /> Salin</button>
+                    <span className="text-[10px] font-semibold uppercase text-emerald-300/80">Delivered</span>
+                    <button onClick={() => copy(o.delivered_payload!)} className="flex items-center gap-1 text-[10px] text-white/50 hover:text-white"><Copy className="h-3 w-3" /> Copy</button>
                   </div>
                   <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-white/80">{o.delivered_payload}</pre>
                 </div>
               )}
               {o.status === "pending" && o.pay_url && (
-                <button onClick={() => window.open(o.pay_url!, "_blank", "noopener")} className="mt-2 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/70 hover:bg-white/10"><ExternalLink className="h-3.5 w-3.5" /> Lanjutkan pembayaran</button>
+                <button onClick={() => window.open(o.pay_url!, "_blank", "noopener")} className="mt-2 flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-white/70 hover:bg-white/10"><ExternalLink className="h-3.5 w-3.5" /> Continue payment</button>
               )}
             </div>
           ))}
@@ -576,14 +576,14 @@ function OrdersView() {
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-white">{o.title} — {o.counterpart}</div>
-                  <div className="mt-0.5 text-[11px] text-white/45">{idr(o.amount, o.currency)} · rekber ({o.role === "buyer" ? "beli dari" : "jual ke"} {o.counterpart})</div>
+                  <div className="mt-0.5 text-[11px] text-white/45">{idr(o.amount, o.currency)} · rekber ({o.role === "buyer" ? "bought from" : "sold to"} {o.counterpart})</div>
                 </div>
                 <span className="shrink-0 rounded bg-indigo-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-indigo-300">{STATUS_LABEL[o.status] ?? o.status}</span>
               </div>
               <div className="mt-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] p-2">
                 <div className="mb-1 flex items-center justify-between">
-                  <span className="text-[10px] font-semibold uppercase text-emerald-300/80">Barang</span>
-                  {o.content && <button onClick={() => copy(o.content)} className="flex items-center gap-1 text-[10px] text-white/50 hover:text-white"><Copy className="h-3 w-3" /> Salin</button>}
+                  <span className="text-[10px] font-semibold uppercase text-emerald-300/80">Item</span>
+                  {o.content && <button onClick={() => copy(o.content)} className="flex items-center gap-1 text-[10px] text-white/50 hover:text-white"><Copy className="h-3 w-3" /> Copy</button>}
                 </div>
                 {o.content && <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] text-white/80">{o.content}</pre>}
                 {o.images?.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1.5">{o.images.map((src, i) => <img key={i} src={src} alt="" onClick={() => openLightbox(o.images, i)} className="h-16 w-16 cursor-zoom-in rounded object-cover" />)}</div>}
@@ -718,8 +718,8 @@ function RekberAccountEditor() {
   return (
     <div className="mb-3 rounded-xl border border-indigo-500/20 bg-indigo-500/[0.05] p-3">
       <div className="mb-1 flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-indigo-300/80">Rekening rekber (middleman)</span>
-        {saved && <span className="flex items-center gap-1 text-[10px] text-emerald-300"><Check className="h-3 w-3" /> Tersimpan</span>}
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-indigo-300/80">Rekber account (middleman)</span>
+        {saved && <span className="flex items-center gap-1 text-[10px] text-emerald-300"><Check className="h-3 w-3" /> Saved</span>}
       </div>
       {editing ? (
         <>
@@ -738,14 +738,14 @@ function RekberAccountEditor() {
             </label>
           </div>
           <div className="mt-2 flex justify-end gap-2">
-            <button onClick={() => { setEditing(false); img.clear(); }} className="rounded-lg px-2.5 py-1 text-[11px] text-white/50 hover:text-white">Batal</button>
-            <button onClick={save} className="rounded-lg bg-white px-3 py-1 text-[11px] font-medium text-black hover:opacity-90">Simpan</button>
+            <button onClick={() => { setEditing(false); img.clear(); }} className="rounded-lg px-2.5 py-1 text-[11px] text-white/50 hover:text-white">Cancel</button>
+            <button onClick={save} className="rounded-lg bg-white px-3 py-1 text-[11px] font-medium text-black hover:opacity-90">Save</button>
           </div>
         </>
       ) : (
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <pre className="truncate whitespace-pre-wrap font-mono text-[11px] text-white/70">{account || "Belum diatur — buyer perlu ini untuk transfer."}</pre>
+            <pre className="truncate whitespace-pre-wrap font-mono text-[11px] text-white/70">{account || "Not set yet — the buyer needs this to transfer."}</pre>
             {images.length > 0 && <div className="mt-1.5 flex gap-1.5">{images.map((src, i) => <img key={i} src={src} alt="" onClick={() => openLightbox(images, i)} className="h-12 w-12 cursor-zoom-in rounded object-cover" />)}</div>}
           </div>
           <button onClick={() => setEditing(true)} className="shrink-0 rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-white/60 hover:bg-white/5">Edit</button>
