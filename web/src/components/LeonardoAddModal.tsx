@@ -88,7 +88,7 @@ function BrowserTab({ onSaved }: { onSaved: () => void }) {
       <div className="space-y-3">
         <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-xs text-white/70">
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-indigo-300" />
-          A browser window opened — log in to Leonardo there. This closes automatically once you're signed in.
+          A browser window opened — sign in with Canva, then open Leonardo. This closes automatically once your session is detected.
         </div>
         <button onClick={cancel} className="w-full rounded-lg border border-white/10 px-4 py-2 text-sm text-white/70 hover:bg-white/5">Cancel</button>
       </div>
@@ -96,7 +96,7 @@ function BrowserTab({ onSaved }: { onSaved: () => void }) {
   }
   return (
     <div className="space-y-3">
-      <p className="text-xs text-white/50">Open Leonardo in a real browser window and log in. enowx reads your session automatically — no copy/paste, and it passes Leonardo's bot check.</p>
+      <p className="text-xs text-white/50">Opens the Canva → Leonardo page in a real browser. Log in with your Canva Business account and continue into Leonardo — enowx reads your session automatically (no copy/paste) once you're in.</p>
       <Err msg={err} />
       <Primary onClick={start} disabled={busy}>
         <span className="flex items-center justify-center gap-1.5">{busy ? "Opening…" : "Open Leonardo login"} <ExternalLink className="h-3.5 w-3.5" /></span>

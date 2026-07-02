@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/coder/websocket"
 )
@@ -19,7 +18,10 @@ import (
 // ErrNotReady means the browser tab isn't logged in yet (keep polling).
 var ErrNotReady = fmt.Errorf("leonardo session not ready")
 
-const leonardoAppURL = "https://app.leonardo.ai/"
+// startURL is where the login browser opens. Leonardo access is provisioned
+// through Canva Business, so we begin on the Canva feature page; the user
+// continues into app.leonardo.ai (Canva SSO), and we read the session there.
+const startURL = "https://www.canva.com/business/features/leonardo-ai/"
 
 // Session is a launched Chrome instance driven over the DevTools Protocol.
 type Session struct {
@@ -86,7 +88,7 @@ func LaunchChrome() (*Session, error) {
 		"--no-first-run",
 		"--no-default-browser-check",
 		"--new-window",
-		leonardoAppURL,
+		startURL,
 	)
 	if err := cmd.Start(); err != nil {
 		_ = os.RemoveAll(dir)
@@ -100,10 +102,14 @@ func LaunchChrome() (*Session, error) {
 // Returns ErrNotReady until the user has logged in.
 func (s *Session) EvalGetSession(ctx context.Context) (*SessionCreds, error) {
 	wsURL, err := s.leonardoTargetWS(ctx)
+	if err == errNoLeonardoTab {
+		return nil, ErrNotReady // still on Canva / logging in
+	}
 	if err != nil {
 		return nil, err
 	}
-	raw, err := s.eval(ctx, wsURL, `fetch('/api/auth/get-session',{credentials:'include'}).then(r=>r.text()).catch(e=>'ERR:'+e)`)
+	// Hit the absolute URL so it works regardless of the tab's current path.
+	raw, err := s.eval(ctx, wsURL, `fetch('https://app.leonardo.ai/api/auth/get-session',{credentials:'include'}).then(r=>r.text()).catch(e=>'ERR:'+e)`)
 	if err != nil {
 		return nil, err
 	}
@@ -152,45 +158,35 @@ func (s *Session) Close() {
 	}
 }
 
-// leonardoTargetWS finds the debugger WebSocket URL of the leonardo.ai tab.
+// errNoLeonardoTab means the debug endpoint is up but no leonardo.ai tab exists
+// yet (the user is still on Canva / signing in).
+var errNoLeonardoTab = fmt.Errorf("no leonardo tab yet")
+
+// leonardoTargetWS finds the debugger WebSocket URL of the leonardo.ai tab. It
+// returns errNoLeonardoTab if the browser is reachable but no such tab is open.
 func (s *Session) leonardoTargetWS(ctx context.Context) (string, error) {
-	var targets []struct {
-		Type   string `json:"type"`
-		URL    string `json:"url"`
-		WSURL  string `json:"webSocketDebuggerUrl"`
+	type target struct {
+		Type  string `json:"type"`
+		URL   string `json:"url"`
+		WSURL string `json:"webSocketDebuggerUrl"`
 	}
-	// The debug endpoint may take a moment to come up after launch.
-	deadline := time.Now().Add(15 * time.Second)
-	for {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/json", s.port), nil)
-		resp, err := http.DefaultClient.Do(req)
-		if err == nil {
-			raw, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if json.Unmarshal(raw, &targets) == nil {
-				for _, t := range targets {
-					if t.Type == "page" && strings.Contains(t.URL, "leonardo.ai") && t.WSURL != "" {
-						return t.WSURL, nil
-					}
-				}
-				// Fall back to any page target (the tab may have redirected to
-				// the Google login domain during sign-in).
-				for _, t := range targets {
-					if t.Type == "page" && t.WSURL != "" {
-						return t.WSURL, nil
-					}
-				}
-			}
-		}
-		if time.Now().After(deadline) {
-			return "", fmt.Errorf("browser debug endpoint not reachable")
-		}
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-time.After(500 * time.Millisecond):
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/json", s.port), nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("browser debug endpoint not reachable")
+	}
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	var targets []target
+	if json.Unmarshal(raw, &targets) != nil {
+		return "", errNoLeonardoTab
+	}
+	for _, t := range targets {
+		if t.Type == "page" && strings.Contains(t.URL, "leonardo.ai") && t.WSURL != "" {
+			return t.WSURL, nil
 		}
 	}
+	return "", errNoLeonardoTab
 }
 
 // eval runs a JS expression in the page via Runtime.evaluate and returns the
