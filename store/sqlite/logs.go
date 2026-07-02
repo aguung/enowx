@@ -14,13 +14,35 @@ func (s *logStore) Insert(ctx context.Context, l store.RequestLog) error {
 	if source == "" {
 		source = "api"
 	}
-	_, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO request_logs (provider, model, status, source, in_tokens, out_tokens, latency_ms)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		l.Provider, l.Model, l.Status, source, l.InTokens, l.OutTokens, l.LatencyMS)
-	return err
+		l.Provider, l.Model, l.Status, source, l.InTokens, l.OutTokens, l.LatencyMS); err != nil {
+		return err
+	}
+	// Accumulate the aggregate rollup (survives "clear logs").
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO stats_rollup (hour, provider, model, status, requests, in_tokens, out_tokens, latency_sum)
+		 VALUES (strftime('%Y-%m-%d %H:00','now'), ?, ?, ?, 1, ?, ?, ?)
+		 ON CONFLICT(hour, provider, model, status) DO UPDATE SET
+		   requests    = requests + 1,
+		   in_tokens   = in_tokens + excluded.in_tokens,
+		   out_tokens  = out_tokens + excluded.out_tokens,
+		   latency_sum = latency_sum + excluded.latency_sum`,
+		l.Provider, l.Model, l.Status, l.InTokens, l.OutTokens, l.LatencyMS); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
+// Clear removes the detailed request logs. Stats live in stats_rollup and are
+// intentionally NOT touched, so clearing logs never wipes statistics.
 func (s *logStore) Clear(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM request_logs`)
 	return err
@@ -28,17 +50,22 @@ func (s *logStore) Clear(ctx context.Context) error {
 
 func (s *logStore) SummaryToday(ctx context.Context) (store.LogSummary, error) {
 	var sum store.LogSummary
+	var reqs, latSum int64
 	err := s.db.QueryRowContext(ctx,
 		`SELECT
-		   COUNT(*),
-		   COALESCE(SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END), 0),
-		   COALESCE(SUM(CASE WHEN status != 'success' THEN 1 ELSE 0 END), 0),
+		   COALESCE(SUM(requests), 0),
+		   COALESCE(SUM(CASE WHEN status = 'success' THEN requests ELSE 0 END), 0),
+		   COALESCE(SUM(CASE WHEN status != 'success' THEN requests ELSE 0 END), 0),
 		   COALESCE(SUM(in_tokens), 0),
 		   COALESCE(SUM(out_tokens), 0),
-		   COALESCE(CAST(AVG(latency_ms) AS INTEGER), 0)
-		 FROM request_logs
-		 WHERE created_at >= date('now')`,
-	).Scan(&sum.Total, &sum.OK, &sum.Errors, &sum.InTokens, &sum.OutTokens, &sum.AvgMS)
+		   COALESCE(SUM(latency_sum), 0)
+		 FROM stats_rollup
+		 WHERE hour >= strftime('%Y-%m-%d 00:00', 'now')`,
+	).Scan(&sum.Total, &sum.OK, &sum.Errors, &sum.InTokens, &sum.OutTokens, &latSum)
+	reqs = sum.Total
+	if reqs > 0 {
+		sum.AvgMS = latSum / reqs
+	}
 	return sum, err
 }
 
@@ -48,35 +75,45 @@ func (s *logStore) SummaryToday(ctx context.Context) (store.LogSummary, error) {
 func (s *logStore) TotalOutTokens(ctx context.Context) (int64, error) {
 	var total int64
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(out_tokens), 0) FROM request_logs WHERE status = 'success'`,
+		`SELECT COALESCE(SUM(out_tokens), 0) FROM stats_rollup WHERE status = 'success'`,
 	).Scan(&total)
 	return total, err
 }
 
+// Totals returns lifetime aggregates (all statuses) from the rollup, for syncing
+// a per-user summary to the cloud.
+func (s *logStore) Totals(ctx context.Context) (requests, inTokens, outTokens int64, err error) {
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(requests),0), COALESCE(SUM(in_tokens),0), COALESCE(SUM(out_tokens),0) FROM stats_rollup`,
+	).Scan(&requests, &inTokens, &outTokens)
+	return
+}
+
 func (s *logStore) Series(ctx context.Context, r store.SeriesRange) ([]store.SeriesPoint, error) {
-	// bucket = strftime format; where = time window predicate.
-	bucket := "%Y-%m-%d" // daily buckets by default
-	where := ""
+	// The rollup's `hour` column is already 'YYYY-MM-DD HH:00'. Hourly buckets use
+	// it as-is; daily buckets take its date prefix. Windows compare the string.
+	bucket := "hour"                         // hourly by default
+	where := "WHERE hour >= strftime('%Y-%m-%d %H:00', datetime('now','-24 hours'))"
 	switch r {
 	case store.RangeDaily:
-		bucket = "%Y-%m-%d %H:00"
-		where = "WHERE created_at >= datetime('now', '-24 hours')"
+		bucket = "hour"
+		where = "WHERE hour >= strftime('%Y-%m-%d %H:00', datetime('now','-24 hours'))"
 	case store.Range7d:
-		where = "WHERE created_at >= datetime('now', '-7 days')"
+		bucket = "substr(hour, 1, 10)"
+		where = "WHERE hour >= strftime('%Y-%m-%d %H:00', datetime('now','-7 days'))"
 	case store.Range30d:
-		where = "WHERE created_at >= datetime('now', '-30 days')"
+		bucket = "substr(hour, 1, 10)"
+		where = "WHERE hour >= strftime('%Y-%m-%d %H:00', datetime('now','-30 days'))"
 	case store.RangeAll:
+		bucket = "substr(hour, 1, 10)"
 		where = ""
-	default:
-		bucket = "%Y-%m-%d %H:00"
-		where = "WHERE created_at >= datetime('now', '-24 hours')"
 	}
 
-	q := `SELECT strftime('` + bucket + `', created_at) AS bucket,
-	             COUNT(*),
+	q := `SELECT ` + bucket + ` AS bucket,
+	             COALESCE(SUM(requests), 0),
 	             COALESCE(SUM(in_tokens), 0),
 	             COALESCE(SUM(out_tokens), 0)
-	      FROM request_logs ` + where + `
+	      FROM stats_rollup ` + where + `
 	      GROUP BY bucket ORDER BY bucket`
 	rows, err := s.db.QueryContext(ctx, q)
 	if err != nil {
@@ -99,11 +136,11 @@ func (s *logStore) TopModels(ctx context.Context, limit int) ([]store.ModelStat,
 		limit = 5
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT model, COUNT(*) AS reqs,
+		`SELECT model, COALESCE(SUM(requests), 0) AS reqs,
 		        COALESCE(SUM(in_tokens), 0),
 		        COALESCE(SUM(out_tokens), 0)
-		 FROM request_logs
-		 WHERE created_at >= date('now')
+		 FROM stats_rollup
+		 WHERE hour >= strftime('%Y-%m-%d 00:00', 'now')
 		 GROUP BY model ORDER BY reqs DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err

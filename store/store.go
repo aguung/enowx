@@ -327,5 +327,6 @@ type LogStore interface {
 	TotalOutTokens(ctx context.Context) (int64, error)
 	Series(ctx context.Context, r SeriesRange) ([]SeriesPoint, error)
 	TopModels(ctx context.Context, limit int) ([]ModelStat, error)
+	Totals(ctx context.Context) (requests, inTokens, outTokens int64, err error)
 	Clear(ctx context.Context) error
 }
