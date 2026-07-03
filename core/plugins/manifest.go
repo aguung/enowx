@@ -27,8 +27,10 @@ type Manifest struct {
 
 var idRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,47}$`)
 
-// validRuntimes are the runtimes a plugin may declare.
-var validRuntimes = map[string]bool{"go": true, "python": true, "node": true, "static": true}
+// validRuntimes are the runtimes a plugin may declare. "bin" ships a prebuilt
+// executable per OS/arch (entry may contain {os}/{arch} placeholders), so it runs
+// without any toolchain installed — used for official plugins in the marketplace.
+var validRuntimes = map[string]bool{"go": true, "python": true, "node": true, "static": true, "bin": true}
 
 // readManifest loads and validates a plugin.json from a plugin folder.
 func readManifest(dir string) (*Manifest, error) {

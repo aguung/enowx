@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +67,18 @@ func runtimeBin(id string) string {
 		}
 	}
 	return ""
+}
+
+// resolveBinEntry expands {os}/{arch} placeholders in a "bin" plugin's entry to
+// the current platform, adding .exe on Windows. e.g. "bin/app-{os}-{arch}" →
+// "bin/app-darwin-arm64".
+func resolveBinEntry(entry string) string {
+	e := strings.ReplaceAll(entry, "{os}", runtime.GOOS)
+	e = strings.ReplaceAll(e, "{arch}", runtime.GOARCH)
+	if runtime.GOOS == "windows" && !strings.HasSuffix(e, ".exe") {
+		e += ".exe"
+	}
+	return e
 }
 
 // runArgs builds the command + args to launch a plugin's entry for a runtime.

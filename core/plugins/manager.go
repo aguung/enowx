@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -106,9 +107,25 @@ func (m *Manager) Start(id string) error {
 	}
 	m.mu.Unlock()
 
-	bin, args, ok := runArgs(man.Runtime, man.Entry)
-	if !ok {
-		return fmt.Errorf("%s runtime is not installed", man.Runtime)
+	var bin string
+	var args []string
+	if man.Runtime == "bin" {
+		// Prebuilt binary shipped with the plugin: resolve the per-OS/arch file
+		// and run it directly (no toolchain needed).
+		exe := filepath.Join(m.dir, id, resolveBinEntry(man.Entry))
+		if _, err := os.Stat(exe); err != nil {
+			return fmt.Errorf("no prebuilt binary for %s/%s", runtime.GOOS, runtime.GOARCH)
+		}
+		if runtime.GOOS != "windows" {
+			_ = os.Chmod(exe, 0o755)
+		}
+		bin = exe
+	} else {
+		var ok bool
+		bin, args, ok = runArgs(man.Runtime, man.Entry)
+		if !ok {
+			return fmt.Errorf("%s runtime is not installed", man.Runtime)
+		}
 	}
 	port, err := freePort()
 	if err != nil {
