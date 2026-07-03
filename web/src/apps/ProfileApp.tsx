@@ -221,8 +221,8 @@ function QrisModal({ pay, onClose, onPaid }: {
         {state === "paid" ? (
           <div className="flex flex-col items-center gap-2 py-8">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15"><Check className="h-7 w-7 text-emerald-400" /></div>
-            <p className="text-sm font-medium text-emerald-300">Pembayaran diterima!</p>
-            <p className="text-[11px] text-white/50">Mengaktifkan Premium…</p>
+            <p className="text-sm font-medium text-emerald-300">Payment received!</p>
+            <p className="text-[11px] text-white/50">Activating Premium…</p>
           </div>
         ) : (
           <>
@@ -232,12 +232,12 @@ function QrisModal({ pay, onClose, onPaid }: {
             <p className="mt-3 text-center text-lg font-bold text-white">{idr(pay.amount)}</p>
             <p className="mt-1 flex items-center justify-center gap-1.5 text-center text-[11px] text-white/45">
               <Loader2 className="h-3 w-3 animate-spin" />
-              {state === "failed" ? <span className="text-red-300">Pembayaran gagal / kedaluwarsa</span> : "Menunggu pembayaran…"}
+              {state === "failed" ? <span className="text-red-300">Payment failed / expired</span> : "Waiting for payment…"}
             </p>
-            <p className="mt-3 text-center text-[11px] text-white/40">Scan pakai e-wallet / m-banking apa saja (GoPay, OVO, DANA, dll).</p>
+            <p className="mt-3 text-center text-[11px] text-white/40">Scan with any e-wallet / mobile banking (GoPay, OVO, DANA, etc.).</p>
             {pay.url && (
               <a href={pay.url} target="_blank" rel="noreferrer noopener" className="mt-2 flex items-center justify-center gap-1 text-[11px] text-indigo-300 hover:underline">
-                <ExternalLink className="h-3 w-3" /> Buka halaman pembayaran
+                <ExternalLink className="h-3 w-3" /> Open payment page
               </a>
             )}
           </>
