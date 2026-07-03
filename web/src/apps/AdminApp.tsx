@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search, MoreHorizontal, Ban, VolumeX, AlertTriangle, Plus, Minus, Boxes, Trash2, Pencil, RefreshCw, Ticket, Mail, Send, Bug, CheckCircle2, RotateCcw, Crown, Coins } from "lucide-react";
 import { openProfile } from "../os/profileViewer";
+import { tierClass, tierVars } from "../os/tier";
 import { useAdminEvents } from "../os/adminBus";
 import { useProfile } from "../os/useProfile";
 import { useDialog } from "../os/dialog";
@@ -314,8 +315,8 @@ function UserRow({ u, patch }: { u: AdminUserRow; patch: (id: string, p: Partial
         <button onClick={() => openProfile(u.id)} className="min-w-0 flex flex-1 items-center gap-2.5 text-left">
           {u.avatar_url ? <img src={u.avatar_url} alt="" className="h-8 w-8 rounded-full" /> : <div className="h-8 w-8 rounded-full bg-white/10" />}
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5 truncate text-sm font-medium text-white">
-              {u.display_name || u.username}
+            <div className="flex items-center gap-1.5 truncate text-sm font-medium">
+              <span className={`role-name truncate${tierClass(u.nick_tier)}`} style={tierVars(u.nick_tier)}>{u.display_name || u.username}</span>
               {u.is_moderator && <span className="text-[10px] text-emerald-300">MOD</span>}
               {u.is_banned && <span className="rounded bg-red-500/20 px-1 text-[10px] text-red-300">BANNED</span>}
               {muted && <span className="rounded bg-amber-500/20 px-1 text-[10px] text-amber-300">MUTED</span>}

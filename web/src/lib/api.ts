@@ -782,6 +782,7 @@ export interface AdminUser {
   muted_until?: string;
   kleos: number;
   created_at: string;
+  nick_tier?: NickTier;
 }
 
 export const adminApi = {

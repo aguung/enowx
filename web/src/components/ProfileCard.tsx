@@ -54,9 +54,11 @@ export function ProfileCard({ p, footer, action, compact }: { p: CardProfile; fo
   const accent = p.accent_color || p.primary_color || "#1a1c23";
   // Discord themes the body with a top-to-bottom Primary→Accent gradient. Even
   // 50:50 spread so neither color dominates.
+  // No theme yet (new users): use a solid dark surface, not a near-transparent
+  // wash — otherwise the card looks see-through over whatever is behind it.
   const body = hasTheme
     ? `linear-gradient(to bottom, ${primary} 0%, ${accent} 100%)`
-    : "rgba(255,255,255,0.03)";
+    : "#1a1c23";
   // The avatar outline follows the primary color (falls back to dark when grey).
   const ring = p.primary_color || "#0b0c10";
   // Equipped cosmetics (bought with Kleos): banner preset gradient, title, badge,
