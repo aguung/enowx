@@ -121,7 +121,9 @@ func pythonTooOld(ver string) bool {
 func probeVersion(bin, flag string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, bin, flag).CombinedOutput()
+	cmd := exec.CommandContext(ctx, bin, flag)
+	hideWindow(cmd) // don't flash a console window on Windows for each probe
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return ""
 	}
