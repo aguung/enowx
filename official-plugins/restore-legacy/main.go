@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 var enowxAPI = strings.TrimRight(os.Getenv("ENOWX_API"), "/")
@@ -28,6 +29,7 @@ func main() {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/restore", handleRestore)
+	mux.HandleFunc("/api/progress", handleProgress)
 	mux.HandleFunc("/", serveStatic)
 	fmt.Println("restore-legacy plugin on :" + port)
 	_ = http.ListenAndServe("127.0.0.1:"+port, mux)
@@ -87,56 +89,132 @@ type existingAccount struct {
 	Label    string `json:"label"`
 }
 
-type summary struct {
-	Imported      int            `json:"imported"`
-	Skipped       int            `json:"skipped"`
-	Failed        int            `json:"failed"`
-	Unsupported   map[string]int `json:"unsupported"`
-	DonationTotal int64          `json:"donation_total_idr"`
-	Found         bool           `json:"found"`
-	Message       string         `json:"message,omitempty"`
+// progressData is the live state of a restore run (JSON-serialisable, no lock).
+type progressData struct {
+	Running     bool           `json:"running"`
+	Finished    bool           `json:"finished"`
+	Total       int            `json:"total"`
+	Done        int            `json:"done"`
+	Imported    int            `json:"imported"`
+	Skipped     int            `json:"skipped"`
+	Failed      int            `json:"failed"`
+	Unsupported map[string]int `json:"unsupported"`
+	Donation    int64          `json:"donation_total_idr"`
+	Found       bool           `json:"found"`
+	Error       string         `json:"error,omitempty"`
+	Message     string         `json:"message,omitempty"`
 }
 
-func handleRestore(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	out := summary{Unsupported: map[string]int{}}
+// progress guards progressData. It lives in the sidecar process, which outlives
+// the plugin's iframe, so the UI can reconnect (poll /api/progress) after
+// switching tabs and keep showing the same run.
+type progress struct {
+	mu sync.Mutex
+	d  progressData
+}
 
-	// 1) Pull the decrypted legacy accounts from the cloud (via the gateway).
+var job = &progress{d: progressData{Unsupported: map[string]int{}}}
+
+func (p *progress) snapshot() progressData {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	cp := p.d
+	cp.Unsupported = make(map[string]int, len(p.d.Unsupported))
+	for k, v := range p.d.Unsupported {
+		cp.Unsupported[k] = v
+	}
+	return cp
+}
+
+// handleRestore starts a restore run in the background (idempotent: if one is
+// already running it just returns the current progress). Returns immediately.
+func handleRestore(w http.ResponseWriter, r *http.Request) {
+	job.mu.Lock()
+	if job.d.Running {
+		job.mu.Unlock()
+		writeJSON(w, http.StatusOK, job.snapshot())
+		return
+	}
+	// reset for a fresh run
+	job.d = progressData{Running: true, Unsupported: map[string]int{}}
+	job.mu.Unlock()
+
+	go runRestore()
+	writeJSON(w, http.StatusOK, job.snapshot())
+}
+
+func handleProgress(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, job.snapshot())
+}
+
+// runRestore does the actual work, updating `job` as it goes.
+func runRestore() {
+	finish := func(msg, errMsg string) {
+		job.mu.Lock()
+		job.d.Running, job.d.Finished = false, true
+		if msg != "" {
+			job.d.Message = msg
+		}
+		if errMsg != "" {
+			job.d.Error = errMsg
+		}
+		job.mu.Unlock()
+	}
+
 	leg, err := fetchLegacy()
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		finish("", err.Error())
 		return
 	}
-	out.Found = leg.Found
-	out.DonationTotal = leg.DonationTotal
+	job.mu.Lock()
+	job.d.Found = leg.Found
+	job.d.Donation = leg.DonationTotal
+	job.mu.Unlock()
 	if !leg.Found {
-		out.Message = "No legacy account was found for your Discord login."
-		writeJSON(w, http.StatusOK, out)
+		finish("No legacy account was found for your Discord login.", "")
 		return
 	}
 
-	// 2) De-dupe against what's already added.
+	// De-dupe against what's already added; total = mapped accounts to attempt.
 	have := existingSet()
+	total := 0
+	for _, a := range leg.Accounts {
+		if _, ok := providerMap[a.Provider]; ok {
+			total++
+		}
+	}
+	job.mu.Lock()
+	job.d.Total = total
+	job.mu.Unlock()
 
-	// 3) Re-add each mapped account locally.
 	for _, a := range leg.Accounts {
 		v2, ok := providerMap[a.Provider]
 		if !ok {
-			out.Unsupported[a.Provider]++
+			job.mu.Lock()
+			job.d.Unsupported[a.Provider]++
+			job.mu.Unlock()
 			continue
 		}
-		if have[v2+"\x00"+a.Email] {
-			out.Skipped++
+		key := v2 + "\x00" + a.Email
+		if have[key] {
+			job.mu.Lock()
+			job.d.Skipped++
+			job.d.Done++
+			job.mu.Unlock()
 			continue
 		}
-		if addAccount(v2, a.Email, a.Creds) {
-			out.Imported++
-			have[v2+"\x00"+a.Email] = true
+		ok = addAccount(v2, a.Email, a.Creds)
+		job.mu.Lock()
+		if ok {
+			job.d.Imported++
+			have[key] = true
 		} else {
-			out.Failed++
+			job.d.Failed++
 		}
+		job.d.Done++
+		job.mu.Unlock()
 	}
-	writeJSON(w, http.StatusOK, out)
+	finish("Done! Enable cloud sync to back your accounts up.", "")
 }
 
 func fetchLegacy() (*legacyResp, error) {

@@ -7,12 +7,15 @@
   <link rel="stylesheet" href="/plugin-kit/kit.css" />
   <script src="/plugin-kit/kit.js" defer></script>
   <style>
-    .stat { display:flex; gap:.5rem; align-items:baseline; }
-    .stat b { font-size:1.4rem; }
     .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem; margin-top:1rem; }
     .box { border:1px solid rgba(255,255,255,.1); border-radius:.6rem; padding:.6rem .8rem; }
+    .box b { font-size:1.4rem; display:block; }
     .ok { color:#5ee6a8; } .warn { color:#ffcf6b; } .bad { color:#ff8a8a; }
     .muted { opacity:.6; font-size:.8rem; }
+    .bar-wrap { margin-top:1rem; }
+    .bar-track { height:10px; border-radius:99px; background:rgba(255,255,255,.08); overflow:hidden; }
+    .bar-fill { height:100%; width:0%; border-radius:99px; background:linear-gradient(90deg,#7c5cff,#a78bfa); transition:width .3s ease; }
+    .bar-row { display:flex; justify-content:space-between; font-size:.8rem; margin-bottom:.35rem; }
   </style>
 </head>
 <body class="ex">
@@ -21,51 +24,97 @@
     <p class="ex-muted">
       Bring your provider accounts over from the previous enowx. You must be
       <b>signed in</b> here — we match your accounts by your Discord login. Nothing
-      leaves your machine except over the local app.
+      leaves your machine except over the local app. You can switch to another app
+      while it runs.
     </p>
-    <div class="ex-row">
-      <button id="go" class="ex-btn">Restore my accounts</button>
+
+    <div id="idle">
+      <div class="ex-row"><button id="go" class="ex-btn">Restore my accounts</button></div>
     </div>
-    <div id="result" style="display:none">
+
+    <div id="progress" style="display:none">
+      <div class="bar-wrap">
+        <div class="bar-row"><span id="phase">Restoring…</span><span id="pct">0%</span></div>
+        <div class="bar-track"><div id="fill" class="bar-fill"></div></div>
+        <div class="muted" id="count" style="margin-top:.4rem"></div>
+      </div>
       <div class="grid">
-        <div class="box"><div class="stat"><b id="imported" class="ok">0</b></div><div class="muted">Imported</div></div>
-        <div class="box"><div class="stat"><b id="skipped" class="warn">0</b></div><div class="muted">Already had</div></div>
-        <div class="box"><div class="stat"><b id="failed" class="bad">0</b></div><div class="muted">Failed</div></div>
+        <div class="box"><b id="imported" class="ok">0</b><span class="muted">Imported</span></div>
+        <div class="box"><b id="skipped" class="warn">0</b><span class="muted">Already had</span></div>
+        <div class="box"><b id="failed" class="bad">0</b><span class="muted">Failed</span></div>
       </div>
       <p id="donation" class="muted" style="margin-top:.8rem"></p>
       <p id="unsupported" class="muted"></p>
       <p id="msg" class="muted"></p>
     </div>
+
     <pre id="err" class="ex-out" style="display:none"></pre>
   </div>
+
   <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const $ = (id) => document.getElementById(id);
+    const $ = (id) => document.getElementById(id);
+    let timer = null;
+
+    function render(p) {
+      // idle (never run) → show the button
+      if (!p.running && !p.finished) {
+        $("idle").style.display = "block";
+        $("progress").style.display = "none";
+        return;
+      }
+      $("idle").style.display = "none";
+      $("progress").style.display = "block";
+      $("err").style.display = "none";
+
+      const total = p.total || 0, done = p.done || 0;
+      const pct = total ? Math.round((done / total) * 100) : (p.finished ? 100 : 0);
+      $("fill").style.width = pct + "%";
+      $("pct").textContent = pct + "%";
+      $("count").textContent = total ? `${done} of ${total} accounts` : "";
+      $("imported").textContent = p.imported || 0;
+      $("skipped").textContent = p.skipped || 0;
+      $("failed").textContent = p.failed || 0;
+      $("donation").textContent = p.donation_total_idr
+        ? "Carried over your donations: Rp" + Number(p.donation_total_idr).toLocaleString("id-ID") : "";
+      const un = p.unsupported && Object.keys(p.unsupported);
+      $("unsupported").textContent = (un && un.length)
+        ? "Skipped unsupported providers: " + un.map((k) => `${k} (${p.unsupported[k]})`).join(", ") : "";
+
+      $("phase").textContent = p.finished ? (p.error ? "Failed" : "Complete ✓") : "Restoring…";
+      $("msg").textContent = p.error || p.message || "";
+
+      if (p.finished) {
+        if (timer) { clearInterval(timer); timer = null; }
+        if (p.error) { $("err").style.display = "block"; $("err").textContent = p.error; }
+      }
+    }
+
+    async function poll() {
+      try { render(await (await fetch("api/progress")).json()); } catch {}
+    }
+
+    function startPolling() {
+      if (timer) return;
+      poll();
+      timer = setInterval(poll, 1000);
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
       $("go").onclick = async () => {
-        $("go").disabled = true; $("go").textContent = "Restoring…";
-        $("err").style.display = "none";
         try {
-          const r = await fetch("api/restore", { method: "POST" });
-          const j = await r.json();
-          if (!r.ok || j.error) throw new Error(j.error || "restore failed");
-          $("result").style.display = "block";
-          $("imported").textContent = j.imported || 0;
-          $("skipped").textContent = j.skipped || 0;
-          $("failed").textContent = j.failed || 0;
-          $("donation").textContent = j.donation_total_idr
-            ? "Carried over your donations: Rp" + Number(j.donation_total_idr).toLocaleString("id-ID")
-            : "";
-          const un = j.unsupported && Object.keys(j.unsupported);
-          $("unsupported").textContent = (un && un.length)
-            ? "Skipped unsupported providers: " + un.join(", ") : "";
-          $("msg").textContent = j.message || (j.imported ? "Done! Enable cloud sync to back them up." : "");
+          const p = await (await fetch("api/restore", { method: "POST" })).json();
+          render(p);
+          startPolling();
         } catch (e) {
-          $("err").style.display = "block";
-          $("err").textContent = e.message;
-        } finally {
-          $("go").disabled = false; $("go").textContent = "Restore my accounts";
+          $("err").style.display = "block"; $("err").textContent = e.message;
         }
       };
+      // Reconnect: if a run is already in flight (or just finished), show it.
+      try {
+        const p = await (await fetch("api/progress")).json();
+        render(p);
+        if (p.running) startPolling();
+      } catch {}
     });
   </script>
 </body>
