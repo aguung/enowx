@@ -22,6 +22,8 @@ export function ProviderIcon({ icon, label, size = 40 }: { icon: string; label: 
     <img
       src={`/providers/${icon}.${exts[step]}`}
       alt=""
+      loading="lazy"
+      decoding="async"
       onError={() => setStep((s) => s + 1)}
       className="rounded-xl object-contain"
       style={{ width: size, height: size, imageRendering: "auto" }}

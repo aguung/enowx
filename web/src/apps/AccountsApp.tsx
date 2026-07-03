@@ -29,6 +29,8 @@ export function AccountsApp() {
   const [busy, setBusy] = useState<number | null>(null);
   const [warming, setWarming] = useState<number | null>(null);
   const [warmAll, setWarmAll] = useState<{ done: number; total: number } | null>(null);
+  const [bulkMenu, setBulkMenu] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [usage, setUsage] = useState<Record<number, Usage>>({});
   const [modelsFor, setModelsFor] = useState<Account | null>(null);
   const dialog = useDialog();
@@ -176,6 +178,43 @@ export function AccountsApp() {
     else setNotice(`Warmed up ${targets.length} account(s).`);
   }
 
+  // bulkTargets picks accounts (within the active filter) matching a category.
+  function bulkTargets(kind: "all" | "banned" | "exhausted" | "disabled"): Account[] {
+    return filtered.filter((a) => {
+      if (kind === "all") return true;
+      if (kind === "disabled") return a.disabled;
+      return a.status === kind;
+    });
+  }
+
+  async function bulkDelete(kind: "all" | "banned" | "exhausted" | "disabled") {
+    setBulkMenu(false);
+    const targets = bulkTargets(kind);
+    if (targets.length === 0) return;
+    const scope = filter === "all" ? "" : ` ${filter}`;
+    const ok = await dialog.confirm({
+      title: `Delete ${targets.length}${scope} account(s)?`,
+      message: `${kind === "all" ? "All shown" : `All ${kind}`}${scope} accounts will be removed from the pool. This cannot be undone.`,
+      confirmLabel: `Delete ${targets.length}`,
+      danger: true,
+    });
+    if (!ok) return;
+    setBulkBusy(true);
+    setError("");
+    let failures = 0;
+    for (const a of targets) {
+      try {
+        await accountsApi.remove(a.id);
+      } catch {
+        failures++;
+      }
+    }
+    await load();
+    setBulkBusy(false);
+    if (failures > 0) setError(`${failures} of ${targets.length} account(s) failed to delete.`);
+    else setNotice(`Deleted ${targets.length} account(s).`);
+  }
+
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(""), 4000);
@@ -234,6 +273,46 @@ export function AccountsApp() {
               {warmAll ? `Warming ${warmAll.done}/${warmAll.total}` : "Warm all"}
             </button>
           </Tooltip>
+          <div className="relative shrink-0">
+            <Tooltip label="Delete accounts in bulk" place="bottom">
+              <button
+                onClick={() => setBulkMenu((o) => !o)}
+                disabled={bulkBusy || filtered.length === 0}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white/50 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-40"
+              >
+                {bulkBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              </button>
+            </Tooltip>
+            {bulkMenu && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setBulkMenu(false)} />
+                <div className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-xl border border-white/10 bg-[#15161c] py-1 shadow-xl">
+                  <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-white/30">
+                    Delete{filter !== "all" ? ` ${filter}` : ""}…
+                  </div>
+                  {([
+                    ["banned", "Banned"],
+                    ["exhausted", "Exhausted"],
+                    ["disabled", "Disabled"],
+                    ["all", "All shown"],
+                  ] as const).map(([kind, label]) => {
+                    const n = bulkTargets(kind).length;
+                    return (
+                      <button
+                        key={kind}
+                        onClick={() => bulkDelete(kind)}
+                        disabled={n === 0}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-white/5 disabled:opacity-30 ${kind === "all" ? "text-red-300" : "text-white/80"}`}
+                      >
+                        <span>{label}</span>
+                        <span className="text-white/40">{n}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
           <Tooltip label="Reload accounts" place="bottom">
             <button onClick={load} disabled={!!warmAll} className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white/50 hover:bg-white/10 hover:text-white disabled:opacity-40">
               <RefreshCw className="h-4 w-4" />
