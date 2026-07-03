@@ -17,6 +17,12 @@ func (h *Sync) MarketplaceList(w http.ResponseWriter, r *http.Request) {
 	proxyJSON(w, out, err)
 }
 
+// MarketplaceMine proxies the caller's own listings.
+func (h *Sync) MarketplaceMine(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.MarketplaceMine(r.Context())
+	proxyJSON(w, out, err)
+}
+
 // MarketplaceGet proxies fetching one listing.
 func (h *Sync) MarketplaceGet(w http.ResponseWriter, r *http.Request) {
 	out, err := h.mgr.MarketplaceGet(r.Context(), chi.URLParam(r, "id"))

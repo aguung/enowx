@@ -617,6 +617,15 @@ func (m *Manager) MarketplaceList(ctx context.Context, query string) (string, er
 	return string(raw), nil
 }
 
+// MarketplaceMine lists the caller's own listings (any status).
+func (m *Manager) MarketplaceMine(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/marketplace/my-listings", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // MarketplaceGet fetches one listing.
 func (m *Manager) MarketplaceGet(ctx context.Context, id string) (string, error) {
 	var raw json.RawMessage

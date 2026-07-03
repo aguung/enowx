@@ -974,6 +974,7 @@ export const marketplaceApi = {
     const s = p.toString();
     return api.get<{ listings: Listing[]; categories: ListingCategory[] }>(`/api/marketplace/listings${s ? `?${s}` : ""}`);
   },
+  mine: () => api.get<{ listings: Listing[] }>("/api/marketplace/my-listings"),
   get: (id: number) => api.get<Listing>(`/api/marketplace/listings/${id}`),
   create: (in_: ListingInput) => api.post<Listing>("/api/marketplace/listings", in_),
   update: (id: number, in_: Partial<ListingInput>) => api.patch<Listing>(`/api/marketplace/listings/${id}`, in_),

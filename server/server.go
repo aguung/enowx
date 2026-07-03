@@ -256,6 +256,7 @@ func New(addr string, d Deps) *Server {
 		r.Post("/admin/coupons", syncH.CreateCoupon)
 		r.Delete("/admin/coupons/{id}", syncH.DeleteCoupon)
 		r.Get("/marketplace/listings", syncH.MarketplaceList)
+		r.Get("/marketplace/my-listings", syncH.MarketplaceMine)
 		r.Get("/marketplace/listings/{id}", syncH.MarketplaceGet)
 		r.Post("/marketplace/listings", syncH.MarketplaceCreate)
 		r.Patch("/marketplace/listings/{id}", syncH.MarketplaceUpdate)

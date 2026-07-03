@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign, ShoppingCart, ExternalLink, Copy, Wallet, AlertTriangle, Star } from "lucide-react";
-import { marketplaceApi, rekberApi, orderApi, officialApi, payoutApi, reviewApi, type Listing, type ListingCategory, type RekberThread, type RekberMessage, type Order, type OfficialProduct, type RekberOrder, type PayoutAccount } from "../lib/api";
+import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign, ShoppingCart, ExternalLink, Copy, Wallet, AlertTriangle, Star, Boxes, Pencil } from "lucide-react";
+import { marketplaceApi, rekberApi, orderApi, officialApi, payoutApi, reviewApi, type Listing, type ListingInput, type ListingCategory, type RekberThread, type RekberMessage, type Order, type OfficialProduct, type RekberOrder, type PayoutAccount } from "../lib/api";
 import { useProfile } from "../os/useProfile";
 import { SignInGate } from "../components/SignInGate";
 import { useImageAttach } from "../os/useImageAttach";
@@ -10,7 +10,7 @@ import { openProfile } from "../os/profileViewer";
 import { useMarketplaceNav, consumeMarketplaceThread } from "../os/marketplaceNav";
 
 type Kind = "community" | "official";
-type View = "browse" | "deals" | "orders" | "payout";
+type View = "browse" | "mine" | "deals" | "orders" | "payout";
 
 function idr(amount: number, currency: string) {
   if (currency === "IDR") return "Rp " + amount.toLocaleString("id-ID");
@@ -69,6 +69,7 @@ export function MarketplaceApp() {
       <div className="flex items-center gap-2 border-b border-white/5 px-4 py-2.5">
         <button onClick={() => { setView("browse"); setKind("official"); }} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "browse" && kind === "official" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><ShieldCheck className="h-3.5 w-3.5" /> Official Store</button>
         <button onClick={() => { setView("browse"); setKind("community"); }} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "browse" && kind === "community" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><Store className="h-3.5 w-3.5" /> Community</button>
+        <button onClick={() => setView("mine")} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "mine" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><Boxes className="h-3.5 w-3.5" /> My Listings</button>
         <button onClick={() => { setView("deals"); setOpenThread(null); }} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "deals" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><Handshake className="h-3.5 w-3.5" /> My Deals</button>
         <button onClick={() => setView("orders")} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "orders" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><ShoppingCart className="h-3.5 w-3.5" /> My Orders</button>
         <button onClick={() => setView("payout")} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${view === "payout" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><Wallet className="h-3.5 w-3.5" /> Payout</button>
@@ -77,6 +78,8 @@ export function MarketplaceApp() {
       <div className="min-h-0 flex-1 overflow-auto">
         {view === "payout" ? (
           <PayoutView />
+        ) : view === "mine" ? (
+          <MyListingsView refreshKey={refreshKey} onChanged={() => setRefreshKey((k) => k + 1)} />
         ) : view === "orders" ? (
           <OrdersView />
         ) : view === "deals" ? (
@@ -379,32 +382,85 @@ function ListingDetail({ listing, onClose, onDeleted, onDeal }: { listing: Listi
   );
 }
 
-function SellModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("other");
-  const [price, setPrice] = useState("");
-  const [description, setDescription] = useState("");
-  const [warranty, setWarranty] = useState("");
-  const [stock, setStock] = useState("1");
+// MyListingsView lists the seller's own listings with stock + an edit action.
+function MyListingsView({ refreshKey, onChanged }: { refreshKey: number; onChanged: () => void }) {
+  const [items, setItems] = useState<Listing[] | null>(null);
+  const [editing, setEditing] = useState<Listing | null>(null);
+  const dialog = useDialog();
+
+  const load = useCallback(() => {
+    marketplaceApi.mine().then((r) => setItems(r?.listings ?? [])).catch(() => setItems([]));
+  }, []);
+  useEffect(() => { setItems(null); load(); }, [load, refreshKey]);
+
+  const remove = async (l: Listing) => {
+    const ok = await dialog.confirm({ title: `Delete "${l.title}"?`, message: "This removes your listing from the marketplace.", confirmLabel: "Delete" });
+    if (!ok) return;
+    await marketplaceApi.remove(l.id).catch(() => {});
+    onChanged();
+  };
+
+  return (
+    <div className="p-4">
+      {!items ? (
+        <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-white/40" /></div>
+      ) : items.length === 0 ? (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center text-xs text-white/40">You have no listings yet. Hit “Sell” to post one.</div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((l) => (
+            <div key={l.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+              {l.images?.[0] ? <img src={l.images[0]} alt="" className="h-12 w-12 rounded-lg object-cover" /> : <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/5 text-white/30"><Tag className="h-4 w-4" /></div>}
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-medium text-white">{l.title}</div>
+                <div className="text-[11px] text-emerald-300">{idr(l.price_amount, l.currency)}</div>
+                <div className="mt-0.5 flex items-center gap-2 text-[10px] text-white/40">
+                  <span className={`rounded px-1 ${l.stock > 0 ? "bg-white/10 text-white/60" : "bg-rose-500/15 text-rose-300"}`}>{l.stock > 0 ? `${l.stock} in stock` : "out of stock"}</span>
+                  {l.status && l.status !== "active" && <span className="rounded bg-white/10 px-1 uppercase">{l.status}</span>}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button onClick={() => setEditing(l)} title="Edit" className="rounded-lg border border-white/10 p-1.5 text-white/50 hover:bg-white/10 hover:text-white"><Pencil className="h-3.5 w-3.5" /></button>
+                <button onClick={() => remove(l)} title="Delete" className="rounded-lg border border-white/10 p-1.5 text-white/40 hover:bg-red-500/20 hover:text-red-200"><Trash2 className="h-3.5 w-3.5" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {editing && <SellModal listing={editing} onClose={() => setEditing(null)} onCreated={() => { setEditing(null); onChanged(); }} />}
+    </div>
+  );
+}
+
+function SellModal({ listing, onClose, onCreated }: { listing?: Listing; onClose: () => void; onCreated: () => void }) {
+  const editing = !!listing;
+  const [title, setTitle] = useState(listing?.title ?? "");
+  const [category, setCategory] = useState(listing?.category ?? "other");
+  const [price, setPrice] = useState(listing ? String(listing.price_amount) : "");
+  const [description, setDescription] = useState(listing?.description ?? "");
+  const [warranty, setWarranty] = useState(listing?.warranty ?? "");
+  const [stock, setStock] = useState(listing ? String(listing.stock) : "");
   const [cats, setCats] = useState<ListingCategory[]>([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
-  const img = useImageAttach();
+  const img = useImageAttach(listing?.images ?? []);
 
   useEffect(() => { marketplaceApi.list({ kind: "community" }).then((r) => setCats(r?.categories ?? [])).catch(() => {}); }, []);
 
   const submit = async () => {
     if (!title.trim()) { setErr("Title required"); return; }
     setSaving(true); setErr("");
+    const body: ListingInput = {
+      kind: "community", category, title: title.trim(), description: description.trim(),
+      images: img.images, price_amount: Math.max(0, parseInt(price || "0", 10) || 0),
+      currency: "IDR", stock: Math.max(0, parseInt(stock || "0", 10) || 0), warranty: warranty.trim(),
+    };
     try {
-      await marketplaceApi.create({
-        kind: "community", category, title: title.trim(), description: description.trim(),
-        images: img.images, price_amount: Math.max(0, parseInt(price || "0", 10) || 0),
-        currency: "IDR", stock: Math.max(0, parseInt(stock || "1", 10) || 0), warranty: warranty.trim(),
-      });
+      if (editing) await marketplaceApi.update(listing!.id, body);
+      else await marketplaceApi.create(body);
       onCreated();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "failed to create");
+      setErr(e instanceof Error ? e.message : editing ? "failed to save" : "failed to create");
     } finally {
       setSaving(false);
     }
@@ -414,7 +470,7 @@ function SellModal({ onClose, onCreated }: { onClose: () => void; onCreated: () 
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="flex max-h-[90%] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#11131a] shadow-2xl" onClick={(e) => e.stopPropagation()} onPaste={img.onPaste}>
         <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3">
-          <div className="flex-1 text-sm font-semibold text-white">New listing</div>
+          <div className="flex-1 text-sm font-semibold text-white">{editing ? "Edit listing" : "New listing"}</div>
           <button onClick={onClose} className="rounded p-1 text-white/40 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
         </div>
         <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
@@ -452,7 +508,7 @@ function SellModal({ onClose, onCreated }: { onClose: () => void; onCreated: () 
         <div className="flex justify-end gap-2 border-t border-white/5 px-4 py-3">
           <button onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs text-white/50 hover:text-white">Cancel</button>
           <button onClick={submit} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-white px-4 py-1.5 text-xs font-medium text-black hover:opacity-90 disabled:opacity-50">
-            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Publish
+            {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {editing ? "Save changes" : "Publish"}
           </button>
         </div>
       </div>

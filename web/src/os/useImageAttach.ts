@@ -6,8 +6,8 @@ const MAX_IMAGES = 4;
 // useImageAttach manages pending image attachments (up to MAX_IMAGES): upload
 // Files (from a picker, drag-drop, or clipboard paste) to the CDN and hold their
 // URLs until the message/post is sent, then clear. Shared by chat + posts.
-export function useImageAttach() {
-  const [images, setImages] = useState<string[]>([]);
+export function useImageAttach(initial: string[] = []) {
+  const [images, setImages] = useState<string[]>(initial);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
 
