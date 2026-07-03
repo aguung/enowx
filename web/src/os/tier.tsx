@@ -46,6 +46,21 @@ export function TierBadge({ tier }: { tier?: NickTier | null }) {
   );
 }
 
+// effectClass maps a cosmetic effect key (catalog payload) to the CSS classes
+// that render it. Shared by the Shop preview and the profile card so they match.
+export function effectClass(effect?: string | null): string {
+  switch (effect) {
+    case "glow": return "shadow-[0_0_24px_-4px] shadow-indigo-500/50";
+    case "shimmer": return "fx-shimmer";
+    case "gradient": return "fx-gradient";
+    case "holo": return "ring-1 ring-fuchsia-400/40 fx-holo";
+    case "neon": return "fx-neon";
+    case "starfield": return "fx-starfield";
+    case "rainbow": return "fx-rainbow";
+    default: return "";
+  }
+}
+
 // hexOf converts a decimal Discord color to a #rrggbb string (grey when 0).
 function hexOf(n?: number): string {
   if (!n || n <= 0) return "#8a8f98";

@@ -3,6 +3,7 @@ import { Loader2, Coins, Check, Lock } from "lucide-react";
 import { AppShell } from "./shell";
 import { useProfile, refreshProfile } from "../os/useProfile";
 import { shopApi, type ShopState, type CosmeticItem, type Equipped } from "../lib/api";
+import { effectClass } from "../os/tier";
 
 // equippedPayload reads the equipped payload for a cosmetic kind.
 function equippedPayload(eq: Equipped | undefined, kind: string): string {
@@ -10,8 +11,8 @@ function equippedPayload(eq: Equipped | undefined, kind: string): string {
   return kind === "title" ? eq.title : kind === "badge" ? eq.badge : kind === "effect" ? eq.effect : kind === "banner" ? eq.banner : "";
 }
 
-const KIND_LABEL: Record<string, string> = { title: "Titles", badge: "Badges", effect: "Effects", banner: "Banners" };
-const KIND_ORDER = ["title", "badge", "effect", "banner"];
+const KIND_LABEL: Record<string, string> = { title: "Titles", badge: "Badges", effect: "Effects" };
+const KIND_ORDER = ["title", "badge", "effect"];
 
 // ShopApp lets the user spend Kleos on profile cosmetics, then equip what they
 // own. Login-gated.
@@ -141,9 +142,6 @@ export function ShopApp() {
 
 // Preview renders a small visual of the cosmetic.
 function Preview({ item }: { item: CosmeticItem }) {
-  if (item.kind === "banner") {
-    return <div className="h-10 w-full rounded-lg" style={{ background: item.payload }} />;
-  }
   if (item.kind === "title") {
     return <div className="flex h-10 items-center rounded-lg bg-black/20 px-2 text-[11px] font-medium uppercase tracking-wide text-indigo-300/80">{item.payload}</div>;
   }
@@ -154,10 +152,10 @@ function Preview({ item }: { item: CosmeticItem }) {
       </div>
     );
   }
-  // effect
+  // effect — same rendering the profile card uses (shared effectClass)
   return (
-    <div className={`flex h-10 items-center justify-center rounded-lg bg-black/20 text-[11px] text-white/60 ${item.payload === "glow" ? "shadow-[0_0_18px_-4px] shadow-indigo-500/50" : "ring-1 ring-fuchsia-400/30"}`}>
-      {item.payload}
+    <div className={`flex h-10 items-center justify-center rounded-lg bg-black/20 text-[11px] text-white/70 ${effectClass(item.payload)}`}>
+      {item.name}
     </div>
   );
 }

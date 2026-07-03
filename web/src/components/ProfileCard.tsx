@@ -9,7 +9,7 @@ function cardRelTime(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 import type { TopRole, ProfileLink, Equipped, NickTier, RoleBadge as RoleBadgeInfo } from "../lib/api";
-import { tierVars, tierClass, RoleBadges, TierBadge } from "../os/tier";
+import { tierVars, tierClass, RoleBadges, TierBadge, effectClass } from "../os/tier";
 
 // CardProfile is the shape the card renders. Both SyncUser (self) and
 // PublicProfile (others) satisfy it, so the card is reused in both places.
@@ -62,7 +62,7 @@ export function ProfileCard({ p, footer, action, compact }: { p: CardProfile; fo
   // Equipped cosmetics (bought with Kleos): banner preset gradient, title, badge,
   // and a visual effect class.
   const eq = p.equipped;
-  const effectCls = eq?.effect === "glow" ? "shadow-[0_0_24px_-4px] shadow-indigo-500/40" : eq?.effect === "holo" ? "ring-1 ring-fuchsia-400/30" : "";
+  const effectCls = effectClass(eq?.effect);
 
   return (
     <div className={`overflow-hidden rounded-2xl border border-white/10 ${effectCls}`}>
