@@ -135,6 +135,7 @@ function BugReportCard() {
 // (cloud.sync.full) — credentials are encrypted before upload.
 function CloudSyncCard() {
   const profile = useProfile();
+  const full = profile.has("cloud.sync.full"); // full sync is a Premium perk
   const [busy, setBusy] = useState("");
   const [synced, setSynced] = useState("");
   const [error, setError] = useState("");
@@ -188,19 +189,19 @@ function CloudSyncCard() {
             Push changes automatically and pull updates from your other devices.
           </p>
         </div>
-        <Tooltip label={profile.autoSync ? "Turn off automatic sync" : "Turn on automatic sync"} place="bottom">
+        <Tooltip label={!full ? "Premium only" : profile.autoSync ? "Turn off automatic sync" : "Turn on automatic sync"} place="bottom">
           <button
             onClick={toggleAuto}
-            disabled={!!busy}
+            disabled={!!busy || !full}
             role="switch"
-            aria-checked={profile.autoSync}
-            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
-              profile.autoSync ? "bg-emerald-500/80" : "bg-white/15"
+            aria-checked={profile.autoSync && full}
+            className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              profile.autoSync && full ? "bg-emerald-500/80" : "bg-white/15"
             }`}
           >
             <span
               className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-                profile.autoSync ? "translate-x-4" : "translate-x-0"
+                profile.autoSync && full ? "translate-x-4" : "translate-x-0"
               }`}
             />
           </button>
@@ -208,11 +209,11 @@ function CloudSyncCard() {
       </div>
 
       <div className="flex items-center gap-2">
-        <Tooltip label="Reconcile with the cloud now" place="bottom">
+        <Tooltip label={!full ? "Premium only" : "Reconcile with the cloud now"} place="bottom">
           <button
             onClick={syncNow}
-            disabled={!!busy}
-            className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/15 disabled:opacity-50"
+            disabled={!!busy || !full}
+            className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {busy === "sync" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
             Sync now
@@ -227,9 +228,9 @@ function CloudSyncCard() {
       </div>
 
       <p className="text-[11px] leading-relaxed text-white/40">
-        {profile.has("cloud.sync.full")
+        {full
           ? "Full sync is on: your providers, accounts, gateway keys and aliases sync too — credentials are encrypted before they leave this device."
-          : "Playlists sync on every plan. A subscription unlocks full sync for your providers, accounts, keys and aliases."}
+          : "Playlists sync automatically on every plan. Upgrade to Premium in the Profile app to sync your providers, accounts, keys and aliases."}
       </p>
     </div>
   );

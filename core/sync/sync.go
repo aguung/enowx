@@ -138,10 +138,20 @@ func (m *Manager) Enabled(ctx context.Context) bool {
 	return m.get(ctx, keyEnabled) == "1" && m.Configured(ctx)
 }
 
-// AutoEnabled reports the user's global automatic-sync toggle. Defaults to on
-// (only an explicit "0" turns it off), and requires being logged in.
+// AutoEnabled reports the user's global automatic-sync toggle. Defaults to OFF
+// (only an explicit "1" turns it on) — full sync is a Premium perk, so it's
+// auto-enabled when the user becomes Premium (see EnsurePremiumSync). Requires
+// being logged in.
 func (m *Manager) AutoEnabled(ctx context.Context) bool {
-	return m.get(ctx, keyAuto) != "0" && m.Enabled(ctx)
+	return m.get(ctx, keyAuto) == "1" && m.Enabled(ctx)
+}
+
+// EnsurePremiumSync auto-enables auto-sync the first time a user is seen as
+// Premium (when the toggle was never set). Called after applying /me.
+func (m *Manager) EnsurePremiumSync(ctx context.Context, premium bool) {
+	if premium && m.get(ctx, keyAuto) == "" {
+		_ = m.settings.Set(ctx, keyAuto, "1")
+	}
 }
 
 // SetAuto flips the global automatic-sync toggle.
@@ -231,6 +241,8 @@ func (m *Manager) Me(ctx context.Context) (string, error) {
 		return "", err
 	}
 	_ = m.settings.Set(ctx, keyUser, string(raw))
+	// Auto-enable auto-sync the first time we see the user as Premium.
+	m.EnsurePremiumSync(ctx, m.hasFullSync(ctx))
 	return string(raw), nil
 }
 
