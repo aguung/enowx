@@ -57,8 +57,8 @@ func main() {
 	}
 
 	reg := provider.NewRegistry()
-	reg.Register(codebuddy.New())
-	reg.Register(codebuddy.NewCN())
+	reg.Register(codebuddy.New(doer))
+	reg.Register(codebuddy.NewCN(doer))
 	reg.Register(kiro.New(doer, saveCreds))
 	reg.Register(codex.New(doer, saveCreds))
 	reg.Register(antigravity.New(doer, saveCreds))

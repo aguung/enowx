@@ -28,6 +28,7 @@ export function AccountsApp() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
   const [warming, setWarming] = useState<number | null>(null);
+  const [warmAll, setWarmAll] = useState<{ done: number; total: number } | null>(null);
   const [usage, setUsage] = useState<Record<number, Usage>>({});
   const [modelsFor, setModelsFor] = useState<Account | null>(null);
   const dialog = useDialog();
@@ -144,6 +145,37 @@ export function AccountsApp() {
     }
   }
 
+  // warmupAll warms every account currently shown (i.e. matching the active
+  // provider filter + search), skipping disabled ones. Sequential so we don't
+  // hammer upstreams; progress drives the button label.
+  async function warmupAll() {
+    const targets = filtered.filter((a) => !a.disabled);
+    if (targets.length === 0) return;
+    setError("");
+    setWarmAll({ done: 0, total: targets.length });
+    let failures = 0;
+    for (let i = 0; i < targets.length; i++) {
+      const a = targets[i];
+      setWarming(a.id);
+      startWarmup({ accountId: a.id, provider: a.provider, label: a.label });
+      try {
+        const r = await accountsApi.warmup(a.id);
+        if (r.usage && (r.usage.limit > 0 || (r.usage.windows?.length ?? 0) > 0)) setUsage((m) => ({ ...m, [a.id]: r.usage! }));
+        if (!r.ok) failures++;
+      } catch {
+        failures++;
+      } finally {
+        finishWarmup(a.id);
+        setWarming(null);
+        setWarmAll({ done: i + 1, total: targets.length });
+      }
+    }
+    await load();
+    setWarmAll(null);
+    if (failures > 0) setError(`${failures} of ${targets.length} account(s) failed to warm up.`);
+    else setNotice(`Warmed up ${targets.length} account(s).`);
+  }
+
   useEffect(() => {
     if (!notice) return;
     const t = setTimeout(() => setNotice(""), 4000);
@@ -192,8 +224,18 @@ export function AccountsApp() {
               </option>
             ))}
           </select>
+          <Tooltip label={filter === "all" ? "Warm up all accounts" : `Warm up all ${filter} accounts`} place="bottom">
+            <button
+              onClick={warmupAll}
+              disabled={!!warmAll || filtered.filter((a) => !a.disabled).length === 0}
+              className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white disabled:opacity-40"
+            >
+              {warmAll ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              {warmAll ? `Warming ${warmAll.done}/${warmAll.total}` : "Warm all"}
+            </button>
+          </Tooltip>
           <Tooltip label="Reload accounts" place="bottom">
-            <button onClick={load} className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white/50 hover:bg-white/10 hover:text-white">
+            <button onClick={load} disabled={!!warmAll} className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white/50 hover:bg-white/10 hover:text-white disabled:opacity-40">
               <RefreshCw className="h-4 w-4" />
             </button>
           </Tooltip>

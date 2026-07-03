@@ -12,6 +12,7 @@ import (
 	"github.com/enowdev/enowx/core/model"
 	"github.com/enowdev/enowx/core/provider"
 	"github.com/enowdev/enowx/core/provider/oaistream"
+	"github.com/enowdev/enowx/core/transport"
 )
 
 // variant captures what differs between the global (.ai) and China (.cn)
@@ -29,15 +30,16 @@ var (
 )
 
 type Provider struct {
-	ids identifiers
-	v   variant
+	ids  identifiers
+	v    variant
+	doer transport.Doer
 }
 
 // New is the global CodeBuddy (.ai) provider.
-func New() *Provider { return &Provider{v: variantGlobal} }
+func New(doer transport.Doer) *Provider { return &Provider{v: variantGlobal, doer: doer} }
 
 // NewCN is the CodeBuddy CN (China) provider — same wire format, different host.
-func NewCN() *Provider { return &Provider{v: variantCN} }
+func NewCN(doer transport.Doer) *Provider { return &Provider{v: variantCN, doer: doer} }
 
 func (p *Provider) Name() string        { return p.v.name }
 func (p *Provider) Caps() provider.Caps { return provider.Caps{Chat: true, Images: true} }
