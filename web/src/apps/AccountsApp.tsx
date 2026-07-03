@@ -238,21 +238,22 @@ export function AccountsApp() {
   return (
     <AppShell title="Accounts" subtitle="The credential pool across providers">
       <div className="flex h-full flex-col">
+        {/* Search on its own row so it stays full-width; controls below. */}
+        <div className="mb-2 flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3">
+          <Search className="h-4 w-4 shrink-0 text-white/30" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search accounts…"
+            className="w-full bg-transparent text-sm text-white placeholder:text-white/30 focus:outline-none"
+          />
+        </div>
         <div className="mb-3 flex items-center gap-2">
-          <div className="flex h-10 flex-1 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3">
-            <Search className="h-4 w-4 shrink-0 text-white/30" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search accounts…"
-              className="w-full bg-transparent text-sm text-white placeholder:text-white/30 focus:outline-none"
-            />
-          </div>
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             title="Filter by provider"
-            className="h-10 shrink-0 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs text-white/80 focus:outline-none"
+            className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 text-xs text-white/80 focus:outline-none"
           >
             <option value="all" className="bg-[#15161c]">
               All providers
