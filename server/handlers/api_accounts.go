@@ -98,10 +98,14 @@ func (h *Accounts) Add(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Auto-warmup before the account enters the pool (credit check + test
-	// request); the result is included so the UI can show it immediately.
+	// request); the result is included so the UI can show it immediately. Bulk
+	// importers pass ?warmup=0 to skip it (warming hundreds of accounts inline is
+	// slow + rate-limited; the user can Warm all afterwards).
 	out := map[string]any{"id": id}
-	if warm := autoWarm(r.Context(), h.warmer, h.store, id); warm != nil {
-		out["warmup"] = warm
+	if q := r.URL.Query().Get("warmup"); q != "0" && q != "false" {
+		if warm := autoWarm(r.Context(), h.warmer, h.store, id); warm != nil {
+			out["warmup"] = warm
+		}
 	}
 	writeData(w, out)
 }

@@ -225,8 +225,13 @@ func runRestore() {
 			total++
 		}
 	}
+	// Reset the per-run counters here: a resumed run re-processes every account
+	// (idempotent via the dedupe above), so we must NOT keep the counts from the
+	// interrupted run — otherwise done can exceed total (e.g. 914 of 744).
 	job.mu.Lock()
 	job.d.Total = total
+	job.d.Done, job.d.Imported, job.d.Skipped, job.d.Failed = 0, 0, 0, 0
+	job.d.Unsupported = map[string]int{}
 	job.mu.Unlock()
 	job.save()
 
@@ -335,7 +340,9 @@ func addAccount(provider, label, creds string) bool {
 		body["secret"] = creds
 	}
 	payload, _ := json.Marshal(body)
-	resp, err := http.Post(enowxAPI+"/api/accounts", "application/json", bytes.NewReader(payload))
+	// warmup=0: bulk import shouldn't warm each account inline (slow + rate-limited);
+	// the user runs "Warm all" afterwards.
+	resp, err := http.Post(enowxAPI+"/api/accounts?warmup=0", "application/json", bytes.NewReader(payload))
 	if err != nil {
 		return false
 	}
