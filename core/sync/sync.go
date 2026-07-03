@@ -23,10 +23,10 @@ import (
 	"github.com/enowdev/enowx/store"
 )
 
-// DefaultServerURL is the built-in enowx cloud endpoint. Users don't configure
-// this; it's fixed (swap to the production URL when ready). An override can
-// still be stored via SetServer for development.
-const DefaultServerURL = "https://api-dev.enowxlabs.com"
+// DefaultServerURL is the built-in enowx cloud endpoint (production). Users don't
+// configure this; an override can still be stored via SetServer for development
+// (e.g. pointing at the api-dev staging cloud).
+const DefaultServerURL = "https://api.enowxlabs.com"
 
 // settings keys (in the gateway's settings KV)
 const (
