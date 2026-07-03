@@ -40,9 +40,25 @@ type urlEntry struct {
 	exp time.Time
 }
 
+// streamUA is a browser User-Agent. googlevideo (and YouTube's APIs) reject the
+// default Go HTTP client UA with 403, so every outbound request presents this.
+const streamUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+
+// uaTransport tags every request with the browser User-Agent.
+type uaTransport struct{ base http.RoundTripper }
+
+func (t uaTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if r.Header.Get("User-Agent") == "" {
+		r.Header.Set("User-Agent", streamUA)
+	}
+	return t.base.RoundTrip(r)
+}
+
 func NewMusic(s store.MusicStore) *Music {
+	uaClient := &http.Client{Timeout: 30 * time.Second, Transport: uaTransport{http.DefaultTransport}}
 	return &Music{
-		http:  &http.Client{Timeout: 30 * time.Second},
+		http:  uaClient,
+		yt:    youtube.Client{HTTPClient: uaClient},
 		store: s,
 		cache: map[string]urlEntry{},
 	}
@@ -305,6 +321,9 @@ func (h *Music) Stream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad upstream url", http.StatusBadGateway)
 		return
 	}
+	// googlevideo 403s requests without a browser-like User-Agent (the default
+	// Go-http-client UA gets rejected), so present one.
+	req.Header.Set("User-Agent", streamUA)
 	if rng := r.Header.Get("Range"); rng != "" {
 		req.Header.Set("Range", rng)
 	}
