@@ -183,11 +183,29 @@ func existingSet() map[string]bool {
 }
 
 func addAccount(provider, label, creds string) bool {
-	payload, _ := json.Marshal(map[string]string{
-		"provider": provider,
-		"label":    label,
-		"creds":    creds,
-	})
+	// Old credentials are a JSON object string. The add API wants creds as a
+	// map[string]string (multi-field) or a plain secret (single token). Coerce
+	// every value to a string so numeric/bool fields don't break the decode.
+	body := map[string]any{"provider": provider, "label": label}
+	var raw map[string]any
+	if json.Unmarshal([]byte(creds), &raw) == nil && len(raw) > 0 {
+		m := make(map[string]string, len(raw))
+		for k, v := range raw {
+			switch t := v.(type) {
+			case string:
+				m[k] = t
+			case nil:
+				m[k] = ""
+			default:
+				b, _ := json.Marshal(t)
+				m[k] = string(b)
+			}
+		}
+		body["creds"] = m
+	} else {
+		body["secret"] = creds
+	}
+	payload, _ := json.Marshal(body)
 	resp, err := http.Post(enowxAPI+"/api/accounts", "application/json", bytes.NewReader(payload))
 	if err != nil {
 		return false
