@@ -29,6 +29,10 @@ export function SettingsApp() {
         <CloudSyncCard />
       </Section>
 
+      <Section title="Layout">
+        <LayoutCard />
+      </Section>
+
       <Section title="Dashboard password">
         <PasswordCard auth={auth} reload={loadAuth} />
       </Section>
@@ -45,6 +49,34 @@ export function SettingsApp() {
         </div>
       </Section>
     </AppShell>
+  );
+}
+
+// LayoutCard resets the dock arrangement back to the app's defaults (handy after
+// the default left/right dock apps change). Positions are stored per-browser in
+// localStorage, so this just clears them and reloads.
+function LayoutCard() {
+  const dialog = useDialog();
+  const reset = async () => {
+    const ok = await dialog.confirm({
+      title: "Reset dock layout?",
+      message: "Apps in the left/right docks go back to their defaults. Your accounts and settings are untouched.",
+      confirmLabel: "Reset",
+    });
+    if (!ok) return;
+    localStorage.removeItem("enx.app-locations");
+    location.reload();
+  };
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+      <div>
+        <div className="text-xs font-medium text-white">Dock layout</div>
+        <div className="text-[11px] text-white/45">Reset the left/right docks to the default apps.</div>
+      </div>
+      <button onClick={reset} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[11px] text-white/70 hover:bg-white/10 hover:text-white">
+        <RefreshCw className="h-3.5 w-3.5" /> Reset
+      </button>
+    </div>
   );
 }
 
