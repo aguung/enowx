@@ -26,16 +26,13 @@ func (h *Auth) Status(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Setup sets the dashboard password the first time. Allowed only when no
-// password exists yet AND the caller is already trusted (localhost or session)
-// — so a stranger on the tunnel can't claim an unconfigured gateway.
+// Setup sets the dashboard password the first time. Allowed from anywhere as long
+// as no password exists yet, so a headless/remote instance (e.g. a VPS reached
+// only through a tunnel) can be set up without local browser access. The
+// HasPassword guard still prevents overwriting an already-configured gateway.
 func (h *Auth) Setup(w http.ResponseWriter, r *http.Request) {
 	if h.dash.HasPassword(r.Context()) {
 		writeAPIErr(w, http.StatusConflict, "password already set")
-		return
-	}
-	if !h.dash.Authorized(r) {
-		writeAPIErr(w, http.StatusForbidden, "set the password from localhost first")
 		return
 	}
 	pw := decodePassword(r)

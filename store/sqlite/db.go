@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -31,10 +32,22 @@ type DB struct {
 }
 
 func Open(path string) (*DB, error) {
-	db, err := sql.Open("sqlite", path)
+	// WAL lets readers run concurrently with a writer, and busy_timeout makes a
+	// blocked write wait for the lock instead of failing immediately — together
+	// these stop the "database is locked (SQLITE_BUSY)" errors under concurrent
+	// requests (e.g. an OAuth add running while sync writes). _txlock=immediate
+	// takes the write lock up front so transactions don't deadlock upgrading.
+	dsn := path
+	if !strings.Contains(dsn, "?") {
+		dsn += "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)&_txlock=immediate"
+	}
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
+	// A single writer connection serializes writes; SQLite is single-writer
+	// anyway, and this removes lock contention entirely for the write path.
+	db.SetMaxOpenConns(1)
 	if err := migrate(db); err != nil {
 		db.Close()
 		return nil, err

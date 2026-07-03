@@ -27,7 +27,11 @@ Invoke-WebRequest -Uri $url -OutFile $dest
 
 # Verify checksum when published alongside the asset.
 try {
-  $sha = (Invoke-WebRequest -Uri "$url.sha256" -UseBasicParsing).Content.Split(" ")[0].Trim()
+  $shaRaw = (Invoke-WebRequest -Uri "$url.sha256" -UseBasicParsing).Content
+  # .Content can come back as a byte array (no charset on the response); coerce
+  # to text before splitting, and use the -split operator so it works either way.
+  if ($shaRaw -is [byte[]]) { $shaRaw = [System.Text.Encoding]::UTF8.GetString($shaRaw) }
+  $sha = ([string]$shaRaw -split '\s+')[0].Trim().ToLower()
   $actual = (Get-FileHash -Algorithm SHA256 $dest).Hash.ToLower()
   if ($sha -and $sha -ne $actual) { throw "checksum mismatch" }
 } catch {
