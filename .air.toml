@@ -4,7 +4,7 @@ tmp_dir = "tmp"
 [build]
   cmd = "go build -tags dev -o ./tmp/enowx ./cmd/enowx"
   bin = "./tmp/enowx"
-  full_bin = "ENOWX_PORT=1430 ENOWX_LOG_LEVEL=debug ENOWX_VITE_URL=http://127.0.0.1:5174 ./tmp/enowx"
+  full_bin = "ENOWX_PORT=1431 ENOWX_LOG_LEVEL=debug ENOWX_VITE_URL=http://127.0.0.1:5174 ./tmp/enowx"
   include_ext = ["go"]
   exclude_dir = ["web", "server/webdist", "tmp", "bin"]
   delay = 400

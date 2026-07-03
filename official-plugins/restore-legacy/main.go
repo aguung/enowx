@@ -10,6 +10,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -243,8 +245,18 @@ func runRestore() {
 			job.mu.Unlock()
 			continue
 		}
-		key := v2 + "\x00" + a.Email
-		if have[key] {
+		// De-dupe on the credentials, not the email: token-based providers (kiro,
+		// codebuddy) can have an empty or shared email across many distinct
+		// accounts, so keying on email collapsed them into one. The label stays
+		// human-friendly (email when present, else a short creds fingerprint) and
+		// is made unique so re-runs match the pool account exactly.
+		fp := credsFingerprint(a.Creds)
+		label := a.Email
+		if label == "" {
+			label = v2 + "-" + fp
+		}
+		key := v2 + "\x00" + fp
+		if have[key] || have[v2+"\x00"+label] {
 			job.mu.Lock()
 			job.d.Skipped++
 			job.d.Done++
@@ -255,11 +267,12 @@ func runRestore() {
 			}
 			continue
 		}
-		ok = addAccount(v2, a.Email, a.Creds)
+		ok = addAccount(v2, label, a.Creds)
 		job.mu.Lock()
 		if ok {
 			job.d.Imported++
 			have[key] = true
+			have[v2+"\x00"+label] = true
 		} else {
 			job.d.Failed++
 		}
@@ -271,6 +284,13 @@ func runRestore() {
 		}
 	}
 	finish("Done! Enable cloud sync to back your accounts up.", "")
+}
+
+// credsFingerprint returns a short stable hash of a credential blob, used to
+// identify an account independent of its (possibly empty/shared) email.
+func credsFingerprint(creds string) string {
+	sum := sha256.Sum256([]byte(creds))
+	return hex.EncodeToString(sum[:])[:12]
 }
 
 func fetchLegacy() (*legacyResp, error) {

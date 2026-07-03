@@ -4,6 +4,7 @@
 // items instead, so right-click behaviour stays inside enowx.
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Scissors, Copy, ClipboardPaste, TextCursorInput } from "lucide-react";
+import { copyText } from "./clipboard";
 
 export interface MenuItem {
   label?: string;
@@ -72,7 +73,7 @@ function editItems(el: HTMLElement): MenuItem[] {
       disabled: !hasSel,
       onClick: async () => {
         try {
-          await navigator.clipboard.writeText(selection);
+          await copyText(selection);
         } catch { /* ignore */ }
         if (isInput) {
           const i = el as HTMLInputElement;
@@ -86,7 +87,7 @@ function editItems(el: HTMLElement): MenuItem[] {
       label: "Copy",
       icon: <Copy className="h-3.5 w-3.5" />,
       disabled: !hasSel,
-      onClick: () => { navigator.clipboard.writeText(selection).catch(() => {}); },
+      onClick: () => { void copyText(selection); },
     },
     {
       label: "Paste",

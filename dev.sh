@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Dev mode, one port, hot-reload, no build step:
-#   - Go server (air, -tags dev) listens on :1430, serves /api + /v1 and proxies
+#   - Go server (air, -tags dev) listens on :1431, serves /api + /v1 and proxies
 #     everything else (SPA + HMR) to the internal Vite server on :5174.
-#   - Open http://localhost:1430
+#   - Open http://localhost:1431
 set -euo pipefail
 cd "$(dirname "$0")"
 
-export ENOWX_PORT="${ENOWX_PORT:-1430}"
+export ENOWX_PORT="${ENOWX_PORT:-1431}"
 export ENOWX_VITE_PORT="${ENOWX_VITE_PORT:-5174}"
 # Dev talks to the staging cloud; the built-in default is production.
 export ENOWX_SYNC_SERVER="${ENOWX_SYNC_SERVER:-https://api-dev.enowxlabs.com}"
