@@ -4,6 +4,7 @@ import { AppShell, Empty } from "./shell";
 import { Tooltip } from "../components/Tooltip";
 import { useDialog } from "../os/dialog";
 import { notifyPluginsChanged } from "../os/pluginBus";
+import { subscribeLive } from "../os/liveBus";
 import { useProfile } from "../os/useProfile";
 import { SignInGate } from "../components/SignInGate";
 import { pluginsApi, marketApi, type PluginManifest, type PluginRuntime, type MarketPlugin } from "../lib/api";
@@ -310,6 +311,9 @@ function Marketplace({ onInstalled }: { onInstalled: () => void }) {
     }
   };
   useEffect(() => { if (profile.loggedIn) load(); }, [profile.loggedIn]);
+
+  // Live: a newly published plugin shows up without a manual refresh.
+  useEffect(() => subscribeLive(["plugin_published"], () => load()), []);
 
   if (!profile.loading && !profile.loggedIn) {
     return <SignInGate reason="Sign in to browse plugins" />;

@@ -90,8 +90,11 @@ func (m *Manager) liveOnce(ctx context.Context, onChange func()) error {
 		case "chat_message", "message_edited", "message_deleted", "reaction_changed",
 			"post_created", "post_edited", "post_deleted", "post_upvote_changed", "post_reaction_changed",
 			"comment_added", "comment_edited", "comment_deleted", "comment_reaction_changed",
+			"listing_created", "listing_updated", "listing_deleted",
+			"order_updated", "order_delivered",
+			"plugin_published",
 			"notification":
-			// Relay community chat + post events straight to UI subscribers (SSE).
+			// Relay community chat + post + marketplace/plugin events to UI (SSE).
 			m.publish(ev)
 		case "announcement":
 			m.publish(ev)

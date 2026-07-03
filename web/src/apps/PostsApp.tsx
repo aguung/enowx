@@ -6,7 +6,7 @@ import { ProfileCard } from "../components/ProfileCard";
 import { EmojiPicker } from "../components/EmojiPicker";
 import { useProfile } from "../os/useProfile";
 import { useDialog } from "../os/dialog";
-import { useFeed, loadFeed, loadMoreFeed, createPost, upvotePost, reactPost, editPost, deletePost } from "../os/postsBus";
+import { useFeed, loadFeed, loadMoreFeed, createPost, upvotePost, reactPost, editPost, deletePost, subscribeComments } from "../os/postsBus";
 import { tierVars, tierClass, RoleBadges } from "../os/tier";
 import { RowSkeleton } from "../components/Skeleton";
 import { openProfile } from "../os/profileViewer";
@@ -423,6 +423,33 @@ function CommentThread({ postId, myUsername, myDisplayName, canMod }: { postId: 
     }
   }
   useEffect(() => { load(); }, [postId]);
+
+  // Live: apply comment events for this post without a refresh.
+  useEffect(() => {
+    return subscribeComments((event, data) => {
+      if (event === "comment_added") {
+        if (data.post_id !== postId) return;
+        const c = data.comment as Comment;
+        setComments((cs) => (cs && !cs.some((x) => x.id === c.id) ? [...cs, c] : cs));
+      } else if (event === "comment_deleted") {
+        if (data.post_id !== postId) return;
+        setComments((cs) => (cs ? cs.filter((x) => x.id !== data.id) : cs));
+      } else if (event === "comment_edited") {
+        if (data.post_id !== postId) return;
+        setComments((cs) => (cs ? cs.map((x) => (x.id === data.id ? { ...x, body: data.body } : x)) : cs));
+      } else if (event === "comment_reaction_changed") {
+        setComments((cs) =>
+          cs
+            ? cs.map((x) => {
+                if (x.id !== data.id) return x;
+                const mine = new Set((x.reactions ?? []).filter((r) => r.me).map((r) => r.emoji));
+                return { ...x, reactions: (data.reactions ?? []).map((r: any) => ({ ...r, me: mine.has(r.emoji) })) };
+              })
+            : cs,
+        );
+      }
+    });
+  }, [postId]);
 
   async function send() {
     if (!draft.trim() || busy) return;

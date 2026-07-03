@@ -19,6 +19,25 @@ function emit() {
   listeners.forEach((l) => l());
 }
 
+// Live comment events, fanned out to open CommentThreads (which subscribe by
+// postId). Reuses the single feed EventSource — no extra connection.
+type CommentEvent = "comment_added" | "comment_deleted" | "comment_edited" | "comment_reaction_changed";
+const commentListeners = new Set<(event: CommentEvent, data: any) => void>();
+
+function emitComment(event: string, data: any) {
+  commentListeners.forEach((l) => l(event as CommentEvent, data));
+}
+
+// subscribeComments registers a handler for live comment events and ensures the
+// feed stream is open. Returns an unsubscribe function.
+export function subscribeComments(handler: (event: CommentEvent, data: any) => void): () => void {
+  commentListeners.add(handler);
+  ensureStream();
+  return () => {
+    commentListeners.delete(handler);
+  };
+}
+
 export async function loadFeed(opts?: { sort?: string; category?: string }) {
   if (opts?.sort !== undefined) sort = opts.sort;
   if (opts?.category !== undefined) category = opts.category;
@@ -104,6 +123,28 @@ function ensureStream() {
           emit();
           break;
         }
+        case "comment_added": {
+          // Bump the parent post's comment count live (was only correct after a
+          // manual refresh before).
+          const pid = ev.data.post_id;
+          posts = posts.map((p) => (p.id === pid ? { ...p, comment_count: (p.comment_count ?? 0) + 1 } : p));
+          emit();
+          emitComment(ev.event, ev.data);
+          break;
+        }
+        case "comment_deleted": {
+          const pid = ev.data.post_id;
+          posts = posts.map((p) =>
+            p.id === pid ? { ...p, comment_count: Math.max(0, (p.comment_count ?? 0) - 1) } : p,
+          );
+          emit();
+          emitComment(ev.event, ev.data);
+          break;
+        }
+        case "comment_edited":
+        case "comment_reaction_changed":
+          emitComment(ev.event, ev.data);
+          break;
       }
     } catch {
       /* ignore */

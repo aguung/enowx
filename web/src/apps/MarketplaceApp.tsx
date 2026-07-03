@@ -8,6 +8,7 @@ import { useDialog } from "../os/dialog";
 import { openLightbox } from "../os/lightbox";
 import { openProfile } from "../os/profileViewer";
 import { useMarketplaceNav, consumeMarketplaceThread } from "../os/marketplaceNav";
+import { subscribeLive } from "../os/liveBus";
 
 type Kind = "community" | "official";
 type View = "browse" | "mine" | "deals" | "orders" | "payout";
@@ -53,6 +54,14 @@ export function MarketplaceApp() {
     const id = consumeMarketplaceThread();
     if (id !== null) { setOpenThread(id); setView("deals"); }
   }, [mktNav]);
+
+  // Live: refetch listings/deals when the catalog or an order changes anywhere.
+  useEffect(() => {
+    return subscribeLive(
+      ["listing_created", "listing_updated", "listing_deleted", "order_updated", "order_delivered"],
+      () => setRefreshKey((k) => k + 1),
+    );
+  }, []);
 
   // Selling requires a payout account first.
   const onSell = async () => {
