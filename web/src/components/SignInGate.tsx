@@ -11,6 +11,7 @@ export function SignInGate({ reason }: { reason?: string }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [authURL, setAuthURL] = useState("");
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => () => { if (poll.current) clearInterval(poll.current); }, []);
@@ -18,13 +19,14 @@ export function SignInGate({ reason }: { reason?: string }) {
   async function connect() {
     setError("");
     setBusy(true);
-    // Open the tab SYNCHRONOUSLY on click so the browser doesn't throttle/delay
-    // the popup; fill in the real URL once startLogin resolves.
-    const win = window.open("", "_blank", "noopener");
+    setError("");
+    setAuthURL("");
     try {
       const { authorize_url, state } = await profile.startLogin();
-      if (win) win.location.href = authorize_url;
-      else window.location.href = authorize_url; // popup blocked → same-tab
+      // Open Discord in a NEW tab; keep enowx on this page. Never navigate the
+      // current window — if the popup is blocked, offer a manual link instead.
+      const win = window.open(authorize_url, "_blank");
+      if (!win) setAuthURL(authorize_url);
       setStatus("Waiting for Discord…");
       poll.current = setInterval(async () => {
         try {
@@ -36,7 +38,6 @@ export function SignInGate({ reason }: { reason?: string }) {
         } catch { /* keep polling */ }
       }, 2000);
     } catch (e) {
-      if (win) win.close();
       setError(e instanceof Error ? e.message : "couldn't reach the server");
       setBusy(false);
     }
@@ -60,6 +61,11 @@ export function SignInGate({ reason }: { reason?: string }) {
         Continue with Discord
       </button>
       {status && <p className="mt-2 text-[11px] text-white/45">{status}</p>}
+      {authURL && (
+        <a href={authURL} target="_blank" rel="noreferrer" className="mt-2 text-[11px] text-indigo-300 underline hover:text-indigo-200">
+          Popup blocked — click here to open Discord
+        </a>
+      )}
       {error && <p className="mt-2 text-[11px] text-red-300">{error}</p>}
     </div>
   );
