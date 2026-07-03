@@ -951,7 +951,7 @@ function InboxTab() {
   const [roleTarget, setRoleTarget] = useState("");
   const [userQ, setUserQ] = useState("");
   const [userHits, setUserHits] = useState<UserHit[]>([]);
-  const [userPick, setUserPick] = useState<UserHit | null>(null);
+  const [userPicks, setUserPicks] = useState<UserHit[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
@@ -960,20 +960,25 @@ function InboxTab() {
   useEffect(() => { load(); inboxAdminApi.roles().then((r) => setRoles(r.roles ?? [])).catch(() => setRoles([])); }, []);
 
   useEffect(() => {
-    if (audience !== "user" || userPick || userQ.trim().length < 2) { setUserHits([]); return; }
+    if (audience !== "user" || userQ.trim().length < 2) { setUserHits([]); return; }
     const t = setTimeout(() => subscriptionApi.searchUsers(userQ.trim()).then((r) => setUserHits(r.users ?? [])).catch(() => setUserHits([])), 250);
     return () => clearTimeout(t);
-  }, [userQ, audience, userPick]);
+  }, [userQ, audience]);
+
+  const addPick = (h: UserHit) => {
+    setUserPicks((p) => (p.some((x) => x.id === h.id) ? p : [...p, h]));
+    setUserQ(""); setUserHits([]);
+  };
 
   const send = async () => {
     if (!title.trim()) { setErr("Title is required."); return; }
     let target = "";
     if (audience === "role") { if (!roleTarget) { setErr("Pick a role."); return; } target = roleTarget; }
-    if (audience === "user") { if (!userPick) { setErr("Pick a user."); return; } target = userPick.id; }
+    if (audience === "user") { if (userPicks.length === 0) { setErr("Pick at least one user."); return; } target = userPicks.map((u) => u.id).join(","); }
     setBusy(true); setErr(""); setMsg("");
     try {
       await inboxAdminApi.send({ title: title.trim(), body, audience, target });
-      setTitle(""); setBody(""); setRoleTarget(""); setUserPick(null); setUserQ("");
+      setTitle(""); setBody(""); setRoleTarget(""); setUserPicks([]); setUserQ("");
       setMsg("Sent.");
       await load();
     } catch (e) {
@@ -991,7 +996,7 @@ function InboxTab() {
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" className="w-full rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 text-sm text-white outline-none focus:border-white/25" />
         <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Message (markdown supported)" rows={4} className="w-full resize-y rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs text-white outline-none focus:border-white/25" />
         <div className="flex flex-wrap items-center gap-2">
-          <select value={audience} onChange={(e) => { setAudience(e.target.value as "all" | "role" | "user"); setUserPick(null); }} className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-white outline-none">
+          <select value={audience} onChange={(e) => { setAudience(e.target.value as "all" | "role" | "user"); setUserPicks([]); }} className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-white outline-none">
             <option value="all">Everyone</option>
             <option value="role">A role</option>
             <option value="user">A specific user</option>
@@ -1003,18 +1008,19 @@ function InboxTab() {
             </select>
           )}
           {audience === "user" && (
-            userPick ? (
-              <span className="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-white">
-                {userPick.display_name || userPick.username}
-                <button onClick={() => { setUserPick(null); setUserQ(""); }} className="text-white/40 hover:text-white"><X className="h-3 w-3" /></button>
-              </span>
-            ) : (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {userPicks.map((p) => (
+                <span key={p.id} className="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-white">
+                  {p.display_name || p.username}
+                  <button onClick={() => setUserPicks((list) => list.filter((x) => x.id !== p.id))} className="text-white/40 hover:text-white"><X className="h-3 w-3" /></button>
+                </span>
+              ))}
               <div className="relative">
-                <input value={userQ} onChange={(e) => setUserQ(e.target.value)} placeholder="Search user…" className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-white outline-none focus:border-white/25" />
+                <input value={userQ} onChange={(e) => setUserQ(e.target.value)} placeholder={userPicks.length ? "Add another…" : "Search user…"} className="rounded-md border border-white/10 bg-black/30 px-2 py-1.5 text-xs text-white outline-none focus:border-white/25" />
                 {userHits.length > 0 && (
                   <div className="absolute z-10 mt-1 max-h-40 w-56 overflow-auto rounded-md border border-white/10 bg-[#0e1016] shadow-xl">
-                    {userHits.map((h) => (
-                      <button key={h.id} onClick={() => { setUserPick(h); setUserHits([]); }} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-white/5">
+                    {userHits.filter((h) => !userPicks.some((p) => p.id === h.id)).map((h) => (
+                      <button key={h.id} onClick={() => addPick(h)} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-white/5">
                         <span className="truncate text-white/80">{h.display_name || h.username}</span>
                         <span className="truncate text-white/30">@{h.username}</span>
                       </button>
@@ -1022,7 +1028,7 @@ function InboxTab() {
                   </div>
                 )}
               </div>
-            )
+            </div>
           )}
           <button onClick={send} disabled={busy} className="ml-auto flex items-center gap-1.5 rounded-md bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90 disabled:opacity-50">
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Send
