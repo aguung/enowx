@@ -6,6 +6,7 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
+	"strings"
 )
 
 //go:embed all:webdist
@@ -17,6 +18,11 @@ func spaHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, err := fs.Stat(sub, trimSlash(r.URL.Path)); err != nil && r.URL.Path != "/" {
 			r.URL.Path = "/"
+		}
+		// Long-cache the hashed/static assets (provider icons, plugin-kit, /assets)
+		// so the browser doesn't re-fetch them on every render/scroll.
+		if p := r.URL.Path; strings.HasPrefix(p, "/providers/") || strings.HasPrefix(p, "/assets/") || strings.HasPrefix(p, "/plugin-kit/") {
+			w.Header().Set("Cache-Control", "public, max-age=604800, immutable")
 		}
 		fileServer.ServeHTTP(w, r)
 	})
