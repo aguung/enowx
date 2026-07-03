@@ -7,7 +7,7 @@ import { useProfile } from "../os/useProfile";
 import { useDialog } from "../os/dialog";
 import { FileSearch, X, Store, Check, Puzzle, ShoppingBag } from "lucide-react";
 import { Tooltip } from "../components/Tooltip";
-import { adminApi, modApi, searchApi, adminVipApi, couponAdminApi, inboxAdminApi, subscriptionApi, bugAdminApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type Coupon, type InboxMessage, type InboxRole, type UserHit, type BugReport } from "../lib/api";
+import { adminApi, modApi, searchApi, adminVipApi, couponAdminApi, inboxAdminApi, subscriptionApi, bugAdminApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type Coupon, type InboxMessage, type InboxRole, type UserHit, type BugReport, type NickTier } from "../lib/api";
 
 type Tab = "stats" | "flags" | "users" | "models" | "market" | "store" | "scan" | "reviews" | "log" | "coupons" | "inbox" | "bugs";
 
@@ -227,6 +227,7 @@ type AdminUserRow = {
   is_moderator: boolean;
   is_banned?: boolean;
   muted_until?: string;
+  nick_tier?: NickTier;
 };
 
 function UsersTab() {
