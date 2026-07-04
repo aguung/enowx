@@ -44,6 +44,7 @@ type Deps struct {
 	Sync       *syncpkg.Manager
 	CustomProv *custommgr.Manager
 	Filters    store.FilterStore
+	Proxies    store.ProxyStore
 	Doer       transport.Doer
 	Settings   handlers.SettingsInfo
 }
@@ -96,6 +97,10 @@ func New(addr string, d Deps) *Server {
 	market := handlers.NewMarket(dash, d.Sync, d.Plugins)
 	customProv := handlers.NewCustomProviders(dash, d.CustomProv, d.Accounts)
 	filters := handlers.NewFilters(dash, d.Filters, d.Sync)
+	proxies := handlers.NewProxy(d.Proxies, d.SettingsKV)
+	if d.Sync != nil {
+		proxies.SetSyncPush(func() { _, _, _ = d.Sync.Sync(context.Background()) })
+	}
 	music := handlers.NewMusic(d.Music)
 	sunoMusic := handlers.NewSuno(d.Accounts, d.Proxy, suno.New(d.Doer))
 	tun := handlers.NewTunnel(d.Tunnel, d.Keys)
@@ -208,6 +213,15 @@ func New(addr string, d Deps) *Server {
 		r.Get("/files", files.List)
 		r.Get("/files/read", files.Read)
 		r.Get("/files/raw", files.Raw)
+
+		// Outbound proxy pool.
+		r.Get("/proxies", proxies.List)
+		r.Post("/proxies", proxies.Add)
+		r.Delete("/proxies/{id}", proxies.Delete)
+		r.Patch("/proxies/{id}/enabled", proxies.Toggle)
+		r.Post("/proxies/{id}/test", proxies.Test)
+		r.Get("/proxies/settings", proxies.GetSettings)
+		r.Put("/proxies/settings", proxies.SaveSettings)
 
 		r.Post("/agent/fs/read", agent.FSRead)
 		r.Post("/agent/fs/list", agent.FSList)

@@ -150,6 +150,7 @@ func runServer() {
 		Sync:       syncMgr,
 		CustomProv: customMgr,
 		Filters:    db.Filters(),
+		Proxies:    db.Proxies(),
 		Doer:       doer,
 		Settings: handlers.SettingsInfo{
 			Version:    version,
