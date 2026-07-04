@@ -3,6 +3,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -76,6 +77,11 @@ func New(addr string, d Deps) *Server {
 	apply := handlers.NewApply(d.Accounts)
 	// Auto-warm newly-added accounts (credit check + test request) before pool.
 	accounts.SetWarmer(warmup)
+	// On delete, push the tombstone to the cloud right away so a background pull
+	// can't resurrect the account.
+	if d.Sync != nil {
+		accounts.SetSyncPush(func() { _, _, _ = d.Sync.Sync(context.Background()) })
+	}
 	kiro.SetWarmer(warmup)
 	codex.SetWarmer(warmup)
 	antigravity.SetWarmer(warmup)

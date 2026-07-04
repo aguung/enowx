@@ -14,14 +14,21 @@ import (
 
 // Accounts is the management API over the credential pool.
 type Accounts struct {
-	store  store.AccountStore
-	warmer Warmer
+	store   store.AccountStore
+	warmer  Warmer
+	onWrite func() // fire-and-forget: push local changes to the cloud now
 }
 
 func NewAccounts(s store.AccountStore) *Accounts { return &Accounts{store: s} }
 
 // SetWarmer enables automatic warmup of newly-added accounts.
 func (h *Accounts) SetWarmer(w Warmer) { h.warmer = w }
+
+// SetSyncPush registers a callback that pushes local account changes to the
+// cloud immediately. Called after a delete so the deletion's tombstone lands
+// before the next background pull can re-add the account (bug: deleted accounts
+// coming back). A no-op if the user isn't syncing.
+func (h *Accounts) SetSyncPush(f func()) { h.onWrite = f }
 
 type accountDTO struct {
 	ID        int64    `json:"id"`
@@ -160,6 +167,11 @@ func (h *Accounts) Delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.Delete(r.Context(), id); err != nil {
 		writeAPIErr(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	// Propagate the deletion to the cloud now (tombstone push) so a background
+	// pull can't resurrect it. Non-blocking; no-op when the user isn't syncing.
+	if h.onWrite != nil {
+		go h.onWrite()
 	}
 	writeData(w, map[string]any{"ok": true})
 }
