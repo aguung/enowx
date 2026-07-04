@@ -1112,6 +1112,15 @@ func (m *Manager) AdminUserAction(ctx context.Context, id, action string, body j
 	return string(raw), nil
 }
 
+// AdminUserDetail fetches the full admin detail for one user.
+func (m *Manager) AdminUserDetail(ctx context.Context, id string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/users/"+id+"/detail", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // Shop fetches the cosmetics catalog + the user's owned/equipped/balance.
 func (m *Manager) Shop(ctx context.Context) (string, error) {
 	var raw json.RawMessage

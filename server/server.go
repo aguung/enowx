@@ -329,6 +329,7 @@ func New(addr string, d Deps) *Server {
 		r.Get("/admin/log", syncH.AdminLog)
 		r.Get("/admin/stats", syncH.AdminStats)
 		r.Get("/admin/users", syncH.AdminUsers)
+		r.Get("/admin/users/{id}/detail", syncH.AdminUserDetail)
 		r.Get("/admin/models", syncH.AdminModels)
 		r.Post("/admin/models", syncH.AdminUpsertModel)
 		r.Patch("/admin/models/{id}", syncH.AdminUpdateModel)

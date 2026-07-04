@@ -1288,10 +1288,36 @@ export const chatApi = {
   shareMusic: (music: MusicShare, message?: string) => api.post<ChatMessage>("/api/chat/share-music", { music, message: message ?? "" }),
 };
 
+export interface UserDetail {
+  id: string;
+  discord_id: string;
+  username: string;
+  avatar_url: string;
+  plan: string;
+  nick_tier: NickTier;
+  is_admin: boolean;
+  is_moderator: boolean;
+  is_banned: boolean;
+  muted_until?: string | null;
+  kleos: number;
+  wears_tag: boolean;
+  guild_tag: string;
+  top_role_id: string;
+  role_badges?: { name: string; color: number; icon?: string }[];
+  is_premium: boolean;
+  premium_until?: string;
+  premium_days_left?: number;
+  created_at: string;
+  last_login_at: string;
+}
+
 export const modApi = {
   setModerator: (userId: string, on: boolean) => api.post<{ is_moderator: boolean }>(`/api/admin/users/${userId}/moderator`, { on }),
   setPremium: (userId: string, on: boolean) => api.post<{ is_premium: boolean }>(`/api/admin/users/${userId}/premium`, { on }),
   setDonor: (userId: string, on: boolean) => api.post<{ is_donor: boolean }>(`/api/admin/users/${userId}/donor`, { on }),
+  // GOD-only server-side (RequireAdmin): moderators get 403.
+  grantPremium: (userId: string, days: number) => api.post<{ granted_days: number; premium_until?: string }>(`/api/admin/users/${userId}/grant-premium`, { days }),
+  userDetail: (userId: string) => api.get<UserDetail>(`/api/admin/users/${userId}/detail`),
 };
 
 export interface Notification {

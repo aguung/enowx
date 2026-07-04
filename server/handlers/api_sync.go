@@ -386,6 +386,20 @@ func (h *Sync) AdminUsers(w http.ResponseWriter, r *http.Request) {
 	writeData(w, out)
 }
 
+// AdminUserDetail proxies the full detail for one user.
+func (h *Sync) AdminUserDetail(w http.ResponseWriter, r *http.Request) {
+	raw, err := h.mgr.AdminUserDetail(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		writeAPIErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	var out any
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &out)
+	}
+	writeData(w, out)
+}
+
 // AdminUserAction proxies a user-targeted moderator action (the {action} path
 // segment: moderator, ban, mute, warn, kleos).
 func (h *Sync) AdminUserAction(w http.ResponseWriter, r *http.Request) {

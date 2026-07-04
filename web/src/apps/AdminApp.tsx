@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search, MoreHorizontal, Ban, VolumeX, AlertTriangle, Plus, Minus, Boxes, Trash2, Pencil, RefreshCw, Ticket, Mail, Send, Bug, CheckCircle2, RotateCcw, Crown, Coins, Gift } from "lucide-react";
+import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search, MoreHorizontal, Ban, VolumeX, AlertTriangle, Plus, Minus, Boxes, Trash2, Pencil, RefreshCw, Ticket, Mail, Send, Bug, CheckCircle2, RotateCcw, Crown, Coins, Gift, Info } from "lucide-react";
 import { openProfile } from "../os/profileViewer";
 import { tierClass, tierVars } from "../os/tier";
 import { useAdminEvents } from "../os/adminBus";
@@ -7,7 +7,7 @@ import { useProfile } from "../os/useProfile";
 import { useDialog } from "../os/dialog";
 import { FileSearch, X, Store, Check, Puzzle, ShoppingBag } from "lucide-react";
 import { Tooltip } from "../components/Tooltip";
-import { adminApi, modApi, searchApi, adminVipApi, couponAdminApi, redeemAdminApi, inboxAdminApi, subscriptionApi, bugAdminApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type InboxMessage, type InboxRole, type UserHit, type NickTier } from "../lib/api";
+import { adminApi, modApi, searchApi, adminVipApi, couponAdminApi, redeemAdminApi, inboxAdminApi, subscriptionApi, bugAdminApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type InboxMessage, type InboxRole, type UserHit, type NickTier, type UserDetail } from "../lib/api";
 import { copyText } from "../os/clipboard";
 import { useCachedList, setCachedList } from "../os/useCachedList";
 
@@ -313,6 +313,16 @@ function UserRow({ u, patch }: { u: AdminUserRow; patch: (id: string, p: Partial
     const n = parseInt(raw || "0", 10);
     if (n > 0) await adminApi.adjustKleos(u.id, delta * n);
   });
+  // Give premium is GOD-only; the backend enforces it too (RequireAdmin → 403).
+  const givePremium = () => act(async () => {
+    const raw = await dialog.prompt({ title: "Give Premium", message: `to @${u.username} — how many days?`, defaultValue: "30" });
+    const days = parseInt(raw || "0", 10);
+    if (days > 0) {
+      const r = await modApi.grantPremium(u.id, days);
+      dialog.alert({ title: "Premium granted 🎉", message: `+${r.granted_days} days${r.premium_until ? ` — expires ${new Date(r.premium_until).toLocaleDateString()}` : ""}` });
+    }
+  });
+  const [detail, setDetail] = useState(false);
 
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.02]">
@@ -345,8 +355,62 @@ function UserRow({ u, patch }: { u: AdminUserRow; patch: (id: string, p: Partial
           <ActBtn onClick={warn} tone="neutral" icon={AlertTriangle}>Warn</ActBtn>
           {isAdmin && <ActBtn onClick={() => kleos(1)} tone="neutral" icon={Plus}>Kleos</ActBtn>}
           {isAdmin && <ActBtn onClick={() => kleos(-1)} tone="neutral" icon={Minus}>Kleos</ActBtn>}
+          {isAdmin && <ActBtn onClick={givePremium} tone="amber" icon={Crown}>Give Premium</ActBtn>}
+          <ActBtn onClick={() => { setDetail(true); setOpen(false); }} tone="neutral" icon={Info}>Info</ActBtn>
         </div>
       )}
+      {detail && <UserDetailModal userId={u.id} username={u.username} onClose={() => setDetail(false)} />}
+    </div>
+  );
+}
+
+// UserDetailModal shows a user's full admin info (identity, tier, premium
+// remaining, moderation flags, kleos, timestamps). Read-only.
+function UserDetailModal({ userId, username, onClose }: { userId: string; username: string; onClose: () => void }) {
+  const [d, setD] = useState<UserDetail | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => { modApi.userDetail(userId).then(setD).catch((e) => setErr(e instanceof Error ? e.message : "failed")); }, [userId]);
+  const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : "—");
+  const Row = ({ k, v }: { k: string; v: ReactNode }) => (
+    <div className="flex items-start justify-between gap-3 py-1.5 text-xs"><span className="text-white/40">{k}</span><span className="min-w-0 flex-1 text-right font-medium text-white/85 break-words">{v}</span></div>
+  );
+  return (
+    <div className="fixed inset-0 z-[10600] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#0e1016] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <h3 className="text-sm font-semibold text-white">User info — @{username}</h3>
+          <button onClick={onClose} className="rounded-lg p-1 text-white/40 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        {err ? (
+          <div className="p-6 text-center text-xs text-red-300">{err}</div>
+        ) : !d ? (
+          <div className="flex justify-center p-8"><Loader2 className="h-5 w-5 animate-spin text-white/30" /></div>
+        ) : (
+          <div className="max-h-[70vh] overflow-auto p-4">
+            <div className="mb-3 flex items-center gap-3">
+              {d.avatar_url ? <img src={d.avatar_url} alt="" className="h-12 w-12 rounded-full" /> : <div className="h-12 w-12 rounded-full bg-white/10" />}
+              <div>
+                <div className={`text-sm font-semibold${tierClass(d.nick_tier)}`} style={tierVars(d.nick_tier)}>{d.username}</div>
+                <div className="text-[11px] uppercase tracking-wide text-white/40">{d.nick_tier}{d.is_admin ? " · god" : d.is_moderator ? " · mod" : ""}</div>
+              </div>
+            </div>
+            <div className="divide-y divide-white/5">
+              <Row k="Premium" v={d.is_premium ? <span className="text-amber-300">Active</span> : "No"} />
+              {d.is_premium && <Row k="Expires" v={d.premium_until ? new Date(d.premium_until).toLocaleDateString() : "never"} />}
+              {d.is_premium && d.premium_days_left != null && <Row k="Days left" v={`${d.premium_days_left} days`} />}
+              <Row k="Plan" v={d.plan || "free"} />
+              <Row k="Kleos" v={d.kleos} />
+              <Row k="Banned" v={d.is_banned ? <span className="text-red-300">Yes</span> : "No"} />
+              <Row k="Muted until" v={fmt(d.muted_until)} />
+              <Row k="Server tag" v={d.wears_tag ? (d.guild_tag || "yes") : "—"} />
+              <Row k="Discord ID" v={<span className="font-mono">{d.discord_id}</span>} />
+              <Row k="User ID" v={<span className="font-mono text-[10px]">{d.id}</span>} />
+              <Row k="Joined" v={fmt(d.created_at)} />
+              <Row k="Last login" v={fmt(d.last_login_at)} />
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
