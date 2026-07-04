@@ -34,11 +34,15 @@ func (m *Manager) RunLive(ctx context.Context, onChange func()) {
 			}
 			continue
 		}
+		started := time.Now()
 		if err := m.liveOnce(ctx, onChange); err != nil && ctx.Err() == nil {
 			log.Printf("[sync] live disconnected: %v", err)
 		}
-		// Reconnect with capped backoff; reset on a clean run is handled by
-		// liveOnce blocking while healthy.
+		// A connection that survived a while was healthy — restart the backoff
+		// ladder so a one-off drop reconnects in ~1s, not 30s.
+		if time.Since(started) > time.Minute {
+			backoff = time.Second
+		}
 		if !sleep(ctx, backoff) {
 			return
 		}
@@ -50,21 +54,58 @@ func (m *Manager) RunLive(ctx context.Context, onChange func()) {
 
 func (m *Manager) liveOnce(ctx context.Context, onChange func()) error {
 	wsURL := toWS(m.ServerURL(ctx)) + "/live"
-	c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+	dctx, dcancel := context.WithTimeout(ctx, 15*time.Second)
+	c, _, err := websocket.Dial(dctx, wsURL, &websocket.DialOptions{
 		HTTPHeader: http.Header{"Authorization": {"Bearer " + m.get(ctx, keyToken)}},
 	})
+	dcancel()
 	if err != nil {
 		return err
 	}
 	defer c.Close(websocket.StatusNormalClosure, "")
+	log.Printf("[sync] live connected (%s)", wsURL)
+
+	// connCtx scopes the sync worker below to this connection's lifetime so
+	// reconnects don't accumulate workers.
+	connCtx, connCancel := context.WithCancel(ctx)
+	defer connCancel()
+
+	// Reconciliation runs on its own goroutine so a slow Sync (it can take tens
+	// of seconds) never blocks the read loop. If it did, sync_changed arriving
+	// as often as a Sync takes would starve the loop forever and every live
+	// event (chat, comments, …) would queue up minutes behind — which is
+	// exactly the "nothing is realtime" bug this replaced. requestSync
+	// coalesces: one Sync in flight, at most one queued.
+	syncReq := make(chan struct{}, 1)
+	requestSync := func() {
+		select {
+		case syncReq <- struct{}{}:
+		default: // one already queued — it will pick up our change too
+		}
+	}
+	go func() {
+		for {
+			select {
+			case <-connCtx.Done():
+				return
+			case <-syncReq:
+				if _, _, err := m.Sync(connCtx); err == nil && onChange != nil {
+					onChange()
+				}
+			}
+		}
+	}()
 
 	// On (re)connect, reconcile once to catch anything missed while offline.
-	if _, _, err := m.Sync(ctx); err == nil && onChange != nil {
-		onChange()
-	}
+	requestSync()
 
 	for {
-		_, data, err := c.Read(ctx)
+		// The server pings every 30s. If nothing arrives for 75s the connection
+		// is silently dead (NAT/proxy drop without FIN) — without this deadline
+		// Read blocks forever and realtime stays broken until process restart.
+		rctx, rcancel := context.WithTimeout(ctx, 75*time.Second)
+		_, data, err := c.Read(rctx)
+		rcancel()
 		if err != nil {
 			return err
 		}
@@ -74,9 +115,7 @@ func (m *Manager) liveOnce(ctx context.Context, onChange func()) error {
 		}
 		switch ev.Event {
 		case "sync_changed":
-			if _, _, err := m.Sync(ctx); err == nil && onChange != nil {
-				onChange()
-			}
+			requestSync()
 		case "role_changed":
 			if _, err := m.Me(ctx); err == nil && onChange != nil {
 				onChange()
