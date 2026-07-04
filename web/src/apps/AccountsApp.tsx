@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { shouldFlipUp } from "../components/Popover";
 import { Search, Trash2, Power, PowerOff, RefreshCw, Zap, Boxes, X, Copy, Check, Plus, Play, Loader2, MoreVertical, Download } from "lucide-react";
 import { AppShell } from "./shell";
 import { ProviderIcon } from "../components/ProviderIcon";
@@ -659,27 +659,39 @@ function AccountMenu({
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [up, setUp] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number; up: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const MENU_W = 176; // w-44
+  const MENU_H = 210; // approx height for flip decision
 
-  // Flip the menu upward when it would be clipped by the bottom of the viewport.
+  // Position the menu at the button, flipping up / clamping to the viewport.
+  // It's portaled to <body> so a later account row can't paint over it.
   useLayoutEffect(() => {
-    if (!open || !menuRef.current) return;
-    setUp(shouldFlipUp(menuRef.current));
+    if (!open || !ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    const up = r.bottom + MENU_H > window.innerHeight;
+    const left = Math.min(Math.max(8, r.right - MENU_W), window.innerWidth - MENU_W - 8);
+    const top = up ? r.top - 4 : r.bottom + 4;
+    setPos({ top, left, up });
   }, [open]);
 
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const onEsc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onScroll = () => setOpen(false);
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onEsc);
+    window.addEventListener("scroll", onScroll, true);
     return () => {
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onEsc);
+      window.removeEventListener("scroll", onScroll, true);
     };
   }, [open]);
 
@@ -701,8 +713,12 @@ function AccountMenu({
       >
         <MoreVertical className="h-3.5 w-3.5" />
       </button>
-      {open && (
-        <div ref={menuRef} className={`absolute right-0 z-30 w-44 overflow-hidden rounded-lg border border-white/10 bg-[#14161d] py-1 shadow-xl ${up ? "bottom-full mb-1" : "mt-1"}`}>
+      {open && pos && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: "fixed", top: pos.top, left: pos.left, width: MENU_W, transform: pos.up ? "translateY(-100%)" : undefined }}
+          className="z-[10700] overflow-hidden rounded-lg border border-white/10 bg-[#14161d] py-1 shadow-xl"
+        >
           <button className={item} onClick={run(onWarmup)}>
             <Zap className="h-3.5 w-3.5" /> Warm up
           </button>
@@ -727,7 +743,8 @@ function AccountMenu({
           <button className={`${item} text-red-300 hover:bg-red-500/20`} onClick={run(onDelete)}>
             <Trash2 className="h-3.5 w-3.5" /> Delete
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
