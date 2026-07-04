@@ -215,6 +215,7 @@ export interface PluginManifest {
   runtime: string; // go | python | node | static
   entry: string;
   ui: string;
+  version?: string; // semver from plugin.json (bump to re-publish an update)
   running?: boolean;
   port?: number;
   error?: string;
@@ -257,7 +258,7 @@ export interface MarketPlugin {
 }
 
 export const marketApi = {
-  publish: (id: string) => api.post<{ status: string; reason?: string; id?: number; file?: string }>("/api/market/publish", { id }),
+  publish: (id: string) => api.post<{ status: string; reason?: string; id?: number; file?: string; updated?: boolean }>("/api/market/publish", { id }),
   list: (q = "") => api.get<{ plugins: MarketPlugin[] }>(`/api/market/plugins${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   install: (id: number) => api.post<{ installed: boolean; id: string }>(`/api/market/install/${id}`),
 };

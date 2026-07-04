@@ -63,14 +63,19 @@ export function PluginsApp() {
   };
 
   const publish = async (p: PluginManifest) => {
-    const ok = await dialog.confirm({ title: "Publish to marketplace?", message: `${p.name} will be uploaded and security-scanned. If it passes, it's listed publicly for others to install.`, confirmLabel: "Publish" });
+    const ver = p.version || "1.0.0";
+    const ok = await dialog.confirm({
+      title: "Publish to marketplace?",
+      message: `${p.name} v${ver} will be uploaded and security-scanned. If it passes, it's listed publicly for others to install. Re-publishing an id you already own updates it in place — bump "version" in plugin.json first.`,
+      confirmLabel: "Publish",
+    });
     if (!ok) return;
     setBusy(p.id);
     setError("");
     try {
       const r = await marketApi.publish(p.id);
       if (r.status === "approved") {
-        await dialog.alert({ title: "Published", message: `${p.name} passed the scan and is now in the marketplace.` });
+        await dialog.alert({ title: r.updated ? "Updated" : "Published", message: `${p.name} v${ver} passed the scan and is now ${r.updated ? "updated in" : "listed in"} the marketplace.` });
       } else if (r.status === "pending") {
         await dialog.alert({ title: "Pending review", message: r.reason || `${p.name} is queued for manual moderator review and will be listed once approved.` });
       } else {
@@ -128,6 +133,7 @@ export function PluginsApp() {
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-sm font-medium text-white">{p.name}</span>
                   <span className="rounded bg-white/10 px-1 text-[9px] uppercase text-white/50">{p.runtime}</span>
+                  {p.version && <span className="rounded bg-white/10 px-1 text-[9px] text-white/50">v{p.version}</span>}
                   {p.running && <span className="rounded bg-emerald-500/20 px-1 text-[9px] text-emerald-300">running</span>}
                   {!runtimeOk(p.runtime) && <span className="rounded bg-red-500/20 px-1 text-[9px] text-red-300">{p.runtime} missing</span>}
                 </div>

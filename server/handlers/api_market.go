@@ -58,9 +58,13 @@ func (h *Market) Publish(w http.ResponseWriter, r *http.Request) {
 		writeAPIErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	version := man.Version
+	if version == "" {
+		version = "1.0.0"
+	}
 	fields := map[string]string{
 		"name": man.Name, "slug": man.ID, "description": man.Description,
-		"runtime": man.Runtime, "version": "1.0.0",
+		"runtime": man.Runtime, "version": version,
 	}
 	raw, err := h.sync.PublishPlugin(r.Context(), fields, zipBytes)
 	if err != nil {

@@ -22,6 +22,7 @@ type Manifest struct {
 	Runtime     string   `json:"runtime"` // go | python | node | static
 	Entry       string   `json:"entry"`   // command entry (ignored for static)
 	UI          string   `json:"ui"`      // path served at /plugins/<id>/ (default public/index.html)
+	Version     string   `json:"version"` // semver, bumped on each marketplace re-publish
 	Permissions []string `json:"permissions,omitempty"`
 }
 
@@ -50,6 +51,9 @@ func readManifest(dir string) (*Manifest, error) {
 	}
 	if m.UI == "" {
 		m.UI = "public/index.html"
+	}
+	if strings.TrimSpace(m.Version) == "" {
+		m.Version = "1.0.0" // plugins predating versioning start at 1.0.0
 	}
 	return &m, nil
 }

@@ -52,6 +52,7 @@ func (m *Manager) Create(id, name, runtime string, starter bool) (*Manifest, err
 	man := &Manifest{
 		ID: id, Name: nz(name, id), Description: "", Icon: "puzzle",
 		Runtime: runtime, Entry: entryFor[runtime], UI: "public/index.html",
+		Version: "1.0.0",
 	}
 	raw, _ := json.MarshalIndent(man, "", "  ")
 	if err := os.WriteFile(filepath.Join(dest, "plugin.json"), raw, 0o644); err != nil {
