@@ -276,6 +276,44 @@ export interface ProxySettings {
   providers: string[];
 }
 
+// --- OTP (Warpize SMS) ---
+export interface OtpConfig { has_key: boolean; preview?: string }
+export interface OtpService { code: string; name: string }
+export interface OtpCountry { code: string; name: string }
+export interface OtpPrice { price: number; currency: string; available?: boolean }
+export interface OtpOrder {
+  id: string;
+  service: string;
+  country: string;
+  number: string;
+  status: "waiting" | "received" | "finished" | "cancelled" | "expired";
+  code: string;
+  price: number;
+  currency: string;
+  eta_seconds?: number;
+  expires_at?: string;
+  created_at?: string;
+}
+export interface OtpStats { total_orders: number; successful_orders: number; spent_idr: number; revenue_share_idr: number }
+
+export const otpApi = {
+  getConfig: () => api.get<OtpConfig>("/api/otp/config"),
+  saveConfig: (key: string) => api.put<{ ok: boolean }>("/api/otp/config", { key }),
+  deleteConfig: () => api.del<{ ok: boolean }>("/api/otp/config"),
+  services: () => api.get<{ services: OtpService[] }>("/api/otp/services"),
+  countries: () => api.get<{ countries: OtpCountry[] }>("/api/otp/countries"),
+  prices: (service: string, country: string) =>
+    api.get<Record<string, OtpPrice>>(`/api/otp/prices?service=${encodeURIComponent(service)}&country=${encodeURIComponent(country)}`),
+  balance: () => api.get<{ balance: number; currency: string }>("/api/otp/balance"),
+  rent: (service: string, country: string) => api.post<OtpOrder>("/api/otp/numbers", { service, country }),
+  list: () => api.get<{ orders: OtpOrder[] }>("/api/otp/numbers"),
+  poll: (id: string) => api.get<OtpOrder>(`/api/otp/numbers/${id}`),
+  finish: (id: string) => api.post<OtpOrder>(`/api/otp/numbers/${id}/finish`),
+  another: (id: string) => api.post<OtpOrder>(`/api/otp/numbers/${id}/another`),
+  cancel: (id: string) => api.post<OtpOrder>(`/api/otp/numbers/${id}/cancel`),
+  stats: () => api.get<OtpStats>("/api/otp/stats"),
+};
+
 export const proxyApi = {
   list: () => api.get<{ proxies: ProxyItem[] }>("/api/proxies"),
   add: (text: string) => api.post<{ added: number; errors: string[] | null }>("/api/proxies", { text }),
