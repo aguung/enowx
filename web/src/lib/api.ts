@@ -257,6 +257,35 @@ export interface MarketPlugin {
   avatar_url: string;
 }
 
+export interface ProxyItem {
+  id: number;
+  label: string;
+  scheme: string;
+  host: string;
+  port: number;
+  username: string;
+  enabled: boolean;
+  status: string; // unknown | ok | dead
+  latency_ms: number;
+  last_checked?: string;
+}
+
+export interface ProxySettings {
+  enabled: boolean;
+  mode: string; // rotate | random | sticky
+  providers: string[];
+}
+
+export const proxyApi = {
+  list: () => api.get<{ proxies: ProxyItem[] }>("/api/proxies"),
+  add: (text: string) => api.post<{ added: number; errors: string[] | null }>("/api/proxies", { text }),
+  del: (id: number) => api.del<{ ok: boolean }>(`/api/proxies/${id}`),
+  toggle: (id: number, enabled: boolean) => api.patch<{ ok: boolean }>(`/api/proxies/${id}/enabled`, { enabled }),
+  test: (id: number) => api.post<{ status: string; latency_ms: number; error?: string }>(`/api/proxies/${id}/test`),
+  getSettings: () => api.get<ProxySettings>("/api/proxies/settings"),
+  saveSettings: (s: ProxySettings) => api.put<{ ok: boolean }>("/api/proxies/settings", s),
+};
+
 export const marketApi = {
   publish: (id: string) => api.post<{ status: string; reason?: string; id?: number; file?: string; updated?: boolean }>("/api/market/publish", { id }),
   list: (q = "") => api.get<{ plugins: MarketPlugin[] }>(`/api/market/plugins${q ? `?q=${encodeURIComponent(q)}` : ""}`),

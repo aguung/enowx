@@ -1,4 +1,4 @@
-import { KeyRound, ScrollText, Boxes, Settings, BarChart3, FolderOpen, Flame, KeySquare, Music, Globe, UserCircle, MessagesSquare, ShoppingBag, Newspaper, Puzzle, Shuffle } from "lucide-react";
+import { KeyRound, ScrollText, Boxes, Settings, BarChart3, FolderOpen, Flame, KeySquare, Music, Globe, UserCircle, MessagesSquare, ShoppingBag, Newspaper, Puzzle, Shuffle, Network } from "lucide-react";
 import type { DesktopApp } from "../os/types";
 import { AccountsApp } from "./AccountsApp";
 import { RequestsApp } from "./RequestsApp";
@@ -16,6 +16,7 @@ import { ShopApp } from "./ShopApp";
 import { PostsApp } from "./PostsApp";
 import { PluginsApp } from "./PluginsApp";
 import { FiltersApp } from "./FiltersApp";
+import { ProxyApp } from "./ProxyApp";
 
 // `home` is the default location: a dock side or the Apps drawer. The dock
 // starts minimal (core apps); everything else lives in the Apps drawer and the
@@ -39,6 +40,7 @@ export function buildApps(): DesktopApp[] {
     { id: "files", label: "Files", icon: <FolderOpen />, accent: "from-amber-500 to-orange-600", home: "drawer", render: () => <FilesApp /> },
     { id: "warmup-logs", label: "Warmup Logs", icon: <Flame />, accent: "from-orange-500 to-red-600", home: "drawer", render: () => <WarmupLogsApp /> },
     { id: "filters", label: "Filters", icon: <Shuffle />, accent: "from-teal-500 to-emerald-600", home: "drawer", render: () => <FiltersApp /> },
+    { id: "proxy", label: "Proxy", icon: <Network />, accent: "from-cyan-500 to-sky-700", home: "drawer", render: () => <ProxyApp /> },
     { id: "tunnel", label: "Tunnel", icon: <Globe />, accent: "from-blue-500 to-cyan-600", home: "drawer", render: () => <TunnelApp /> },
     { id: "shop", label: "Shop", icon: <ShoppingBag />, accent: "from-amber-500 to-yellow-600", home: "drawer", render: () => <ShopApp /> },
     // Admin is a moderator-only center view (see Desktop), not a docked app.
