@@ -41,6 +41,7 @@ interface Persisted {
   contextIndex: number;
   queue: Track[];
   volume: number;
+  position: number; // seconds into `current`, so a refresh resumes in place
 }
 
 function loadPersisted(): Persisted {
@@ -55,12 +56,13 @@ function loadPersisted(): Persisted {
         contextIndex: typeof p.contextIndex === "number" ? p.contextIndex : -1,
         queue: Array.isArray(p.queue) ? p.queue : [],
         volume: typeof p.volume === "number" ? p.volume : 1,
+        position: typeof p.position === "number" ? p.position : 0,
       };
     }
   } catch {
     // ignore
   }
-  return { current: null, source: "context", context: [], contextIndex: -1, queue: [], volume: 1 };
+  return { current: null, source: "context", context: [], contextIndex: -1, queue: [], volume: 1, position: 0 };
 }
 
 const persisted = loadPersisted();
@@ -71,8 +73,8 @@ let state: MusicState = {
   context: persisted.context,
   contextIndex: persisted.contextIndex,
   queue: persisted.queue,
-  playing: false, // don't auto-resume audio on load
-  position: 0,
+  playing: false, // don't auto-resume audio on load (browsers block autoplay)
+  position: persisted.position, // resume where the last session left off
   duration: 0,
   volume: persisted.volume,
   loading: false,
@@ -96,11 +98,47 @@ function savePersisted() {
       contextIndex: state.contextIndex,
       queue: state.queue,
       volume: state.volume,
+      position: state.position,
     };
     localStorage.setItem(LS, JSON.stringify(p));
   } catch {
     // ignore
   }
+}
+
+// timeupdate fires ~4x/sec; persist the position at most once/sec so a refresh
+// resumes near where we left off without hammering localStorage.
+let lastPositionSave = 0;
+function persistPositionThrottled() {
+  const now = Date.now();
+  if (now - lastPositionSave < 1000) return;
+  lastPositionSave = now;
+  savePersisted();
+}
+
+// restoreSession primes the audio element with the persisted track (paused) and
+// seeks to the saved position, so after a refresh the player shows the last song
+// ready to resume from where it stopped. Browsers block autoplay without a user
+// gesture, so we prepare but don't auto-play. Called once on first mount.
+let restored = false;
+function restoreSession() {
+  if (restored) return;
+  restored = true;
+  const track = state.current;
+  if (!track) return;
+  const a = getAudio();
+  const resumeAt = state.position;
+  a.src = musicApi.streamUrl(track.id);
+  a.load();
+  // Seek once metadata is ready (currentTime can't be set before then).
+  const seek = () => {
+    if (resumeAt > 0 && resumeAt < (isFinite(a.duration) ? a.duration : Infinity)) {
+      a.currentTime = resumeAt;
+    }
+    a.removeEventListener("loadedmetadata", seek);
+  };
+  a.addEventListener("loadedmetadata", seek);
+  recordedFor = track.id; // priming isn't a fresh play — don't log it
 }
 
 // The one audio element. Created lazily so SSR/build never touches it.
@@ -110,7 +148,10 @@ function getAudio(): HTMLAudioElement {
   const a = new Audio();
   a.preload = "auto";
   a.volume = state.volume;
-  a.addEventListener("timeupdate", () => set({ position: a.currentTime }));
+  a.addEventListener("timeupdate", () => {
+    set({ position: a.currentTime });
+    persistPositionThrottled();
+  });
   a.addEventListener("durationchange", () => set({ duration: isFinite(a.duration) ? a.duration : 0 }));
   a.addEventListener("loadedmetadata", () => set({ duration: isFinite(a.duration) ? a.duration : 0 }));
   a.addEventListener("playing", () => {
@@ -144,10 +185,20 @@ function recordCurrentPlay() {
 function load(track: Track, patch: Partial<MusicState>, autoplay: boolean) {
   const a = getAudio();
   recordedFor = "";
-  set({ current: track, error: "", position: 0, duration: 0, loading: true, ...patch });
+  const url = musicApi.streamUrl(track.id);
+  // Re-playing the track that is already loaded (e.g. clicking a finished song)
+  // must restart it. Assigning the identical src is a no-op in browsers, so the
+  // audio would sit at its ended position and play() wouldn't sound — the user
+  // had to pick a different song first. Rewind and play instead of reloading.
+  const sameSrc = a.src === url || a.currentSrc === url;
+  set({ current: track, error: "", position: 0, duration: sameSrc ? state.duration : 0, loading: !sameSrc, ...patch });
   savePersisted();
-  a.src = musicApi.streamUrl(track.id);
-  a.load();
+  if (sameSrc) {
+    a.currentTime = 0;
+  } else {
+    a.src = url;
+    a.load();
+  }
   if (autoplay) a.play().catch(() => set({ loading: false }));
 }
 
@@ -307,6 +358,7 @@ export function useMusic(): MusicState {
   useEffect(() => {
     const l = () => force((n) => n + 1);
     listeners.add(l);
+    restoreSession(); // prime last track + position (once) so refresh resumes in place
     return () => {
       listeners.delete(l);
     };
