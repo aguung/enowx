@@ -343,7 +343,7 @@ function MessageRow({
   }
 
   return (
-    <div className={`group relative flex gap-2.5 rounded-lg px-2 py-1 ${m.pending ? "opacity-60" : ""} ${pingsMe ? "border-l-2 border-amber-400/70 bg-amber-400/[0.07] hover:bg-amber-400/10" : "hover:bg-white/[0.03]"}`}>
+    <div className={`group relative flex gap-2.5 rounded-lg px-2 py-1 ${pingsMe ? "border-l-2 border-amber-400/70 bg-amber-400/[0.07] hover:bg-amber-400/10" : "hover:bg-white/[0.03]"}`}>
       {/* Hover action menu (top-right). Hidden for optimistic (pending/failed)
           messages — they have no real server id to act on yet. */}
       <div className={`absolute -top-2 right-2 items-center gap-0.5 rounded-lg border border-white/10 bg-[#16181f] px-1 py-0.5 shadow-lg ${m.pending || m.failed ? "hidden" : pickerOpen ? "flex" : "hidden group-hover:flex"}`}>
@@ -421,7 +421,6 @@ function MessageRow({
             )}
             {m.images && m.images.length > 0 && <ImageGrid images={m.images} />}
             {m.music && <MusicCard m={m.music} onOpen={() => m.music && handleMusicClick(m.music, dialog)} />}
-            {m.pending && <span className="text-[10px] text-white/30">sending…</span>}
             {m.failed && <span className="text-[10px] text-rose-400/80">failed to send</span>}
           </>
         )}
