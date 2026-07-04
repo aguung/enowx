@@ -40,6 +40,7 @@ func (p *Proxy) Forward(ctx context.Context, providerName string, req *model.Req
 	if err != nil {
 		return nil, err
 	}
+	ctx = transport.WithProvider(ctx, providerName)
 	// Content filters: rewrite blocked words before sending, restore them in the
 	// reply. No-op when no rules are configured.
 	deobfuscate := false
@@ -118,6 +119,7 @@ func (p *Proxy) GenerateImage(ctx context.Context, providerName string, req prov
 	if err != nil {
 		return nil, err
 	}
+	ctx = transport.WithProvider(ctx, providerName)
 	gen, ok := prov.(provider.ImageGenerator)
 	if !ok {
 		return nil, fmt.Errorf("provider %s does not support image generation", providerName)
@@ -152,6 +154,7 @@ func (p *Proxy) GenerateMusic(ctx context.Context, providerName string, req prov
 	if err != nil {
 		return nil, err
 	}
+	ctx = transport.WithProvider(ctx, providerName)
 	gen, ok := prov.(provider.MusicGenerator)
 	if !ok {
 		return nil, fmt.Errorf("provider %s does not support music generation", providerName)
@@ -209,6 +212,7 @@ func (p *Proxy) Probe(ctx context.Context, providerName string, acc provider.Acc
 	if err != nil {
 		return ProbeResult{Outcome: provider.OutcomeDead, Err: err}
 	}
+	ctx = transport.WithProvider(ctx, providerName)
 	hreq, err := prov.BuildRequest(req, acc)
 	if err != nil {
 		return ProbeResult{Outcome: provider.OutcomeDead, Err: err}

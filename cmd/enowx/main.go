@@ -93,7 +93,10 @@ func runServer() {
 	}
 	defer db.Close()
 
-	doer := transport.NewStandard(5 * time.Minute)
+	// Base transport, wrapped so upstream requests can be routed through the
+	// proxy pool (per the proxy_* settings + per-provider whitelist). Requests
+	// not tagged with a provider, or when routing is off, go direct.
+	doer := transport.Doer(transport.NewProxyDoer(transport.NewStandard(5*time.Minute), db.Proxies(), db.Settings()))
 	saveCreds := func(id int64, creds map[string]string) {
 		if err := db.Accounts().UpdateCreds(context.Background(), id, creds); err != nil {
 			log.Printf("kiro: persist creds for account %d: %v", id, err)
