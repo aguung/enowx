@@ -33,9 +33,20 @@ func (s *accountStore) List(ctx context.Context, provider string) ([]store.Accou
 }
 
 func (s *accountStore) Add(ctx context.Context, a store.Account) (int64, error) {
+	creds := encodeCreds(a.Creds)
+	// De-dupe: an account is identified by provider + secret + creds (the same
+	// identity the sync layer uses). If one already exists, return it instead of
+	// inserting a duplicate — this covers manual re-adds, OAuth re-auth, and
+	// re-imports across every add path.
+	var existing int64
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT id FROM accounts WHERE provider = ? AND secret = ? AND creds = ? LIMIT 1`,
+		a.Provider, a.Secret, creds).Scan(&existing); err == nil && existing != 0 {
+		return existing, nil
+	}
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO accounts (provider, label, secret, creds, status) VALUES (?, ?, ?, ?, ?)`,
-		a.Provider, a.Label, a.Secret, encodeCreds(a.Creds), nz(a.Status, "active"))
+		a.Provider, a.Label, a.Secret, creds, nz(a.Status, "active"))
 	if err != nil {
 		return 0, err
 	}
