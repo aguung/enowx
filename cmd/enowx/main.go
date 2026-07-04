@@ -25,6 +25,7 @@ import (
 	"github.com/enowdev/enowx/core/provider"
 	"github.com/enowdev/enowx/core/provider/antigravity"
 	"github.com/enowdev/enowx/core/provider/codebuddy"
+	"github.com/enowdev/enowx/core/provider/commandcode"
 	"github.com/enowdev/enowx/core/provider/custommgr"
 	"github.com/enowdev/enowx/core/provider/codex"
 	leonardoprovider "github.com/enowdev/enowx/core/provider/leonardo"
@@ -106,6 +107,7 @@ func runServer() {
 	reg := provider.NewRegistry()
 	reg.Register(codebuddy.New(doer))
 	reg.Register(codebuddy.NewCN(doer))
+	reg.Register(commandcode.New(doer))
 	reg.Register(kiro.New(doer, saveCreds))
 	reg.Register(codex.New(doer, saveCreds))
 	reg.Register(antigravity.New(doer, saveCreds))

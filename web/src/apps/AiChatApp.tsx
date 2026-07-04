@@ -60,7 +60,7 @@ const supportsTools = (model: string) => !NO_TOOLS_PREFIXES.some((p) => model.st
 
 // providerOf resolves a model's provider — from the model row when known, else
 // from its id prefix (ld/ → leonardo, cb/ → codebuddy, …).
-const PREFIX_PROVIDER: Record<string, string> = { ld: "leonardo", cb: "codebuddy", sn: "suno", cx: "codex", kr: "kiro", ag: "antigravity" };
+const PREFIX_PROVIDER: Record<string, string> = { ld: "leonardo", cb: "codebuddy", sn: "suno", cx: "codex", kr: "kiro", ag: "antigravity", cc: "commandcode" };
 function providerOf(m?: ProviderModel): string {
   if (m?.provider) return m.provider;
   const id = m?.model_id ?? "";
