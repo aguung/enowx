@@ -7,8 +7,9 @@ import { useProfile } from "../os/useProfile";
 import { useDialog } from "../os/dialog";
 import { FileSearch, X, Store, Check, Puzzle, ShoppingBag } from "lucide-react";
 import { Tooltip } from "../components/Tooltip";
-import { adminApi, modApi, searchApi, adminVipApi, couponAdminApi, redeemAdminApi, inboxAdminApi, subscriptionApi, bugAdminApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type Coupon, type RedeemCode, type InboxMessage, type InboxRole, type UserHit, type BugReport, type NickTier } from "../lib/api";
+import { adminApi, modApi, searchApi, adminVipApi, couponAdminApi, redeemAdminApi, inboxAdminApi, subscriptionApi, bugAdminApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type InboxMessage, type InboxRole, type UserHit, type NickTier } from "../lib/api";
 import { copyText } from "../os/clipboard";
+import { useCachedList, setCachedList } from "../os/useCachedList";
 
 type Tab = "stats" | "flags" | "users" | "models" | "market" | "store" | "scan" | "reviews" | "log" | "coupons" | "redeem" | "inbox" | "bugs";
 
@@ -235,15 +236,12 @@ type AdminUserRow = {
 
 function UsersTab() {
   const [q, setQ] = useState("");
-  const [users, setUsers] = useState<AdminUserRow[] | null>(null);
-
-  // Default list (moderators first), shown when the search box is empty.
-  const loadDefault = useCallback(() => {
-    adminApi.users().then((r) => setUsers(r.users ?? [])).catch(() => setUsers([]));
-  }, []);
-  useEffect(() => {
-    if (q.trim().length < 2) loadDefault();
-  }, [q, loadDefault]);
+  // Default list (moderators first) is cached so re-opening the tab is instant;
+  // it refreshes in the background. Search results override this local view.
+  const { data: cachedDefault, refresh: loadDefault } = useCachedList("admin:users", () => adminApi.users().then((r) => r.users ?? []));
+  const [searchResults, setSearchResults] = useState<AdminUserRow[] | null>(null);
+  const searching = q.trim().length >= 2;
+  const users = searching ? searchResults : cachedDefault;
   useAdminEvents(loadDefault);
 
   async function run(term: string) {
@@ -251,13 +249,16 @@ function UsersTab() {
     if (term.trim().length < 2) return; // effect reloads the default list
     try {
       const r = await searchApi.query(term.trim());
-      setUsers((r.users ?? []).map((u) => ({ ...u, is_moderator: !!u.is_moderator })));
+      setSearchResults((r.users ?? []).map((u) => ({ ...u, is_moderator: !!u.is_moderator })));
     } catch {
-      setUsers([]);
+      setSearchResults([]);
     }
   }
-  const patch = (id: string, p: Partial<AdminUserRow>) =>
-    setUsers((hs) => (hs ? hs.map((x) => (x.id === id ? { ...x, ...p } : x)) : hs));
+  const patch = (id: string, p: Partial<AdminUserRow>) => {
+    const apply = (hs: AdminUserRow[] | null) => (hs ? hs.map((x) => (x.id === id ? { ...x, ...p } : x)) : hs);
+    if (searching) setSearchResults(apply);
+    else if (cachedDefault) setCachedList("admin:users", apply(cachedDefault));
+  };
 
   return (
     <div className="space-y-2">
@@ -886,7 +887,7 @@ function AddProductModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
 
 // CouponsTab manages Premium discount coupons.
 function CouponsTab() {
-  const [rows, setRows] = useState<Coupon[] | null>(null);
+  const { data: rows, refresh: load } = useCachedList("admin:coupons", () => couponAdminApi.list().then((r) => r.coupons ?? []));
   const [code, setCode] = useState("");
   const [kind, setKind] = useState<"percent" | "amount">("percent");
   const [value, setValue] = useState("");
@@ -894,8 +895,7 @@ function CouponsTab() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  const load = () => couponAdminApi.list().then((r) => setRows(r.coupons ?? [])).catch(() => setRows([]));
-  useEffect(() => { load(); }, []);
+  useAdminEvents(load); // live: used_count bumps when a coupon is applied
 
   const create = async () => {
     if (!code.trim() || !value.trim()) { setErr("Code and value are required."); return; }
@@ -968,7 +968,7 @@ function CouponsTab() {
 
 // RedeemCodesTab mints codes that grant Premium directly (no payment).
 function RedeemCodesTab() {
-  const [rows, setRows] = useState<RedeemCode[] | null>(null);
+  const { data: rows, refresh: load } = useCachedList("admin:redeem", () => redeemAdminApi.list().then((r) => r.codes ?? []));
   const [code, setCode] = useState("");
   const [days, setDays] = useState("30");
   const [maxUses, setMaxUses] = useState("");
@@ -976,8 +976,7 @@ function RedeemCodesTab() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  const load = () => redeemAdminApi.list().then((r) => setRows(r.codes ?? [])).catch(() => setRows([]));
-  useEffect(() => { load(); }, []);
+  useAdminEvents(load); // live: used_count bumps when someone redeems
 
   const randomCode = () => setCode(Array.from({ length: 10 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join(""));
 
@@ -1054,7 +1053,7 @@ function RedeemCodesTab() {
 
 // InboxTab composes admin messages and lists sent ones.
 function InboxTab() {
-  const [rows, setRows] = useState<InboxMessage[] | null>(null);
+  const { data: rows, refresh: loadRows } = useCachedList("admin:inbox", () => inboxAdminApi.list().then((r) => r.messages ?? []));
   const [roles, setRoles] = useState<InboxRole[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -1067,8 +1066,8 @@ function InboxTab() {
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
 
-  const load = () => inboxAdminApi.list().then((r) => setRows(r.messages ?? [])).catch(() => setRows([]));
-  useEffect(() => { load(); inboxAdminApi.roles().then((r) => setRoles(r.roles ?? [])).catch(() => setRoles([])); }, []);
+  const load = loadRows;
+  useEffect(() => { inboxAdminApi.roles().then((r) => setRoles(r.roles ?? [])).catch(() => setRoles([])); }, []);
 
   useEffect(() => {
     if (audience !== "user" || userQ.trim().length < 2) { setUserHits([]); return; }
@@ -1172,13 +1171,14 @@ function InboxTab() {
 
 // BugReportsTab lists user bug reports and triages them (resolve/reopen/delete).
 function BugReportsTab() {
-  const [rows, setRows] = useState<BugReport[] | null>(null);
-  const [open, setOpen] = useState(0);
   const [filter, setFilter] = useState<"open" | "resolved" | "all">("open");
   const [zoom, setZoom] = useState<string | null>(null);
 
-  const load = () => bugAdminApi.list(filter === "all" ? undefined : filter).then((r) => { setRows(r.reports ?? []); setOpen(r.open ?? 0); }).catch(() => setRows([]));
-  useEffect(() => { load(); }, [filter]);
+  const { data, refresh: load } = useCachedList(`admin:bugs:${filter}`, () => bugAdminApi.list(filter === "all" ? undefined : filter));
+  const rows = data?.reports ?? null;
+  const open = data?.open ?? 0;
+
+  useAdminEvents(load); // live: new bug reports
 
   const relTime = (iso: string) => {
     const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);

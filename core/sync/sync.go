@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -1460,7 +1461,17 @@ func (m *Manager) do(ctx context.Context, method, path string, body any, out any
 	}
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		return fmt.Errorf("sync %s %s failed (%d): %s", method, path, resp.StatusCode, string(b))
+		msg := strings.TrimSpace(string(b))
+		// 4xx bodies are user-facing messages from the cloud ("you have
+		// already redeemed this code"). Surface them verbatim — no HTTP
+		// noise. 5xx are opaque server errors, so keep a little context.
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 && msg != "" {
+			return errors.New(msg)
+		}
+		if msg == "" {
+			msg = http.StatusText(resp.StatusCode)
+		}
+		return fmt.Errorf("the server had a problem (%d): %s", resp.StatusCode, msg)
 	}
 	if out != nil {
 		return json.NewDecoder(resp.Body).Decode(out)
