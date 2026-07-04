@@ -104,6 +104,7 @@ func New(addr string, d Deps) *Server {
 	// Proxy endpoints, guarded by the optional API key.
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Handler)
+		r.Get("/v1/models", models.V1Models) // OpenAI-standard model list for external clients
 		r.Post("/v1/chat/completions", v1.ChatCompletions)
 		r.Post("/v1/images/generations", v1.Images)
 		r.Post("/anthropic/v1/messages", anthropic.Messages)

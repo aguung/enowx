@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -96,6 +97,45 @@ func (h *Models) All(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeData(w, map[string]any{"models": out})
+}
+
+// V1Models serves the OpenAI-standard GET /v1/models: the list of model ids
+// this gateway accepts (same prefixed ids as /v1/chat/completions), in the
+// {"object":"list","data":[{"id","object":"model",...}]} shape OpenAI clients
+// (and tools like 9router) expect. Without this route the request fell through
+// to the SPA and returned HTML, so clients reported "failed to fetch models".
+func (h *Models) V1Models(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.store.List(r.Context(), "")
+	if err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	seen := map[string]bool{}
+	seenProvider := map[string]bool{}
+	data := []map[string]any{}
+	for _, acc := range rows {
+		if acc.Disabled || seenProvider[acc.Provider] {
+			continue
+		}
+		seenProvider[acc.Provider] = true
+		models, _ := h.modelsFor(r.Context(), acc)
+		for _, m := range models {
+			if m.ModelID == "" || seen[m.ModelID] {
+				continue
+			}
+			seen[m.ModelID] = true
+			owned := m.OwnedBy
+			if owned == "" {
+				owned = acc.Provider
+			}
+			data = append(data, map[string]any{
+				"id": m.ModelID, "object": "model", "created": 0, "owned_by": owned,
+			})
+		}
+	}
+	// Bare OpenAI shape (not wrapped in {"data":...} like the dashboard API).
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data})
 }
 
 // modelDTO is the per-account model list item (model_id carries the provider
