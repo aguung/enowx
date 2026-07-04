@@ -1375,6 +1375,29 @@ func (m *Manager) call(ctx context.Context, method, path string, body any, out a
 	return m.do(ctx, method, path, body, out, true)
 }
 
+// OTPProxy forwards an authed request to the cloud's /otp/* API and returns the
+// upstream status + raw body verbatim (the OTP endpoints return bare JSON and
+// may relay non-2xx from Warpize, so we don't decode or wrap here).
+func (m *Manager) OTPProxy(ctx context.Context, method, path string, body []byte) (int, []byte, error) {
+	var rdr io.Reader
+	if len(body) > 0 {
+		rdr = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, m.ServerURL(ctx)+path, rdr)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+m.get(ctx, keyToken))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := m.http.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	return resp.StatusCode, b, err
+}
+
 // callNoAuth is for the public OAuth endpoints (no token yet).
 func (m *Manager) callNoAuth(ctx context.Context, method, path string, body any, out any) error {
 	return m.do(ctx, method, path, body, out, false)

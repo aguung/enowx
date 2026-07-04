@@ -97,6 +97,7 @@ func New(addr string, d Deps) *Server {
 	market := handlers.NewMarket(dash, d.Sync, d.Plugins)
 	customProv := handlers.NewCustomProviders(dash, d.CustomProv, d.Accounts)
 	filters := handlers.NewFilters(dash, d.Filters, d.Sync)
+	otp := handlers.NewOTP(dash, d.Sync)
 	proxies := handlers.NewProxy(d.Proxies, d.SettingsKV)
 	if d.Sync != nil {
 		proxies.SetSyncPush(func() { _, _, _ = d.Sync.Sync(context.Background()) })
@@ -213,6 +214,9 @@ func New(addr string, d Deps) *Server {
 		r.Get("/files", files.List)
 		r.Get("/files/read", files.Read)
 		r.Get("/files/raw", files.Raw)
+
+		// OTP (Warpize SMS): everything under /api/otp/* forwards to the cloud.
+		r.HandleFunc("/otp/*", otp.Proxy)
 
 		// Outbound proxy pool.
 		r.Get("/proxies", proxies.List)
