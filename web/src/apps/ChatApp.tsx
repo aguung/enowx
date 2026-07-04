@@ -144,6 +144,7 @@ function ChatRoom() {
     // via the temp entry) instead of blocking the input on the round-trip.
     const images = img.images.length ? img.images : undefined;
     const replyId = reply?.id;
+    const replyPreview = reply ? { author: reply.author, content: reply.content } : undefined;
     const me = profile.user
       ? { username: profile.user.username, display_name: profile.user.display_name, avatar_url: profile.user.avatar_url }
       : undefined;
@@ -153,7 +154,7 @@ function ChatRoom() {
     setTimeout(scrollToBottom, 50); // jump to my just-sent message
     setSending(true);
     try {
-      await sendChat(text, replyId, images, me);
+      await sendChat(text, replyId, images, me, replyPreview);
     } catch {
       /* optimistic message is marked failed in the store */
     } finally {

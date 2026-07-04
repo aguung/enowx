@@ -261,6 +261,7 @@ export async function sendChat(
   replyTo?: number,
   images?: string[],
   me?: { username: string; display_name?: string; avatar_url?: string },
+  replyPreview?: { author: string; content: string },
 ) {
   // Optimistic: show the message immediately with a temp id, then reconcile with
   // the server's real message (or mark it failed). The SSE echo also reconciles
@@ -276,6 +277,11 @@ export async function sendChat(
     avatar_url: me?.avatar_url,
     channel,
     reply_to: replyTo ?? null,
+    // Show the quoted reply on the optimistic bubble immediately (the server
+    // populates these on echo; without them the reply preview only appears
+    // after a reload).
+    reply_author: replyPreview?.author,
+    reply_content: replyPreview?.content,
     images: images ?? [],
     pending: true,
   };
