@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { postsApi, type Post, type PostCategory, type Reaction } from "../lib/api";
+import { subscribeLive } from "./liveBus";
 
 // postsBus is the shared community-feed store. It loads a page, applies live
-// post events (created/edited/deleted/upvote/reaction) from the same SSE stream
-// chat uses, and exposes actions. Sort/category drive what's loaded.
+// post events (created/edited/deleted/upvote/reaction) from the shared live
+// stream (liveBus), and exposes actions. Sort/category drive what's loaded.
 let posts: Post[] = [];
 let categories: PostCategory[] = [];
 let sort = "hot";
@@ -11,7 +12,7 @@ let category = "";
 let loading = false;
 let loadingMore = false;
 let hasMore = true;
-let es: EventSource | null = null;
+let subscribed = false;
 const PAGE = 25; // matches the server's postPageSize
 const listeners = new Set<() => void>();
 
@@ -86,70 +87,65 @@ export async function loadMoreFeed() {
   }
 }
 
+// ensureStream wires post + comment events from the shared live stream. Safe to
+// call repeatedly; only subscribes once.
 function ensureStream() {
-  if (es) return;
-  es = new EventSource("/api/chat/stream");
-  es.onmessage = (e) => {
-    try {
-      const ev = JSON.parse(e.data) as { event: string; data: any };
-      switch (ev.event) {
+  if (subscribed) return;
+  subscribed = true;
+  subscribeLive(
+    [
+      "post_created", "post_edited", "post_deleted", "post_upvote_changed", "post_reaction_changed",
+      "comment_added", "comment_deleted", "comment_edited", "comment_reaction_changed",
+    ],
+    (event, data) => {
+      switch (event) {
         case "post_created":
-          // Only prepend when it matches the current view; hot view will reorder
-          // on next refresh anyway.
-          if (!posts.some((p) => p.id === ev.data.id) && (!category || ev.data.category === category)) {
-            posts = [ev.data as Post, ...posts];
+          if (!posts.some((p) => p.id === data.id) && (!category || data.category === category)) {
+            posts = [data as Post, ...posts];
             emit();
           }
           break;
         case "post_edited":
-          posts = posts.map((p) => (p.id === ev.data.id ? { ...p, title: ev.data.title, body: ev.data.body } : p));
+          posts = posts.map((p) => (p.id === data.id ? { ...p, title: data.title, body: data.body } : p));
           emit();
           break;
         case "post_deleted":
-          posts = posts.filter((p) => p.id !== ev.data.id);
+          posts = posts.filter((p) => p.id !== data.id);
           emit();
           break;
         case "post_upvote_changed":
-          posts = posts.map((p) => (p.id === ev.data.id ? { ...p, upvotes: ev.data.count } : p));
+          posts = posts.map((p) => (p.id === data.id ? { ...p, upvotes: data.count } : p));
           emit();
           break;
         case "post_reaction_changed": {
-          const incoming: Reaction[] = ev.data.reactions ?? [];
+          const incoming: Reaction[] = data.reactions ?? [];
           posts = posts.map((p) => {
-            if (p.id !== ev.data.id) return p;
+            if (p.id !== data.id) return p;
             const mine = new Set((p.reactions ?? []).filter((r) => r.me).map((r) => r.emoji));
             return { ...p, reactions: incoming.map((r) => ({ ...r, me: mine.has(r.emoji) })) };
           });
           emit();
           break;
         }
-        case "comment_added": {
-          // Bump the parent post's comment count live (was only correct after a
-          // manual refresh before).
-          const pid = ev.data.post_id;
-          posts = posts.map((p) => (p.id === pid ? { ...p, comment_count: (p.comment_count ?? 0) + 1 } : p));
+        case "comment_added":
+          posts = posts.map((p) => (p.id === data.post_id ? { ...p, comment_count: (p.comment_count ?? 0) + 1 } : p));
           emit();
-          emitComment(ev.event, ev.data);
+          emitComment(event, data);
           break;
-        }
-        case "comment_deleted": {
-          const pid = ev.data.post_id;
+        case "comment_deleted":
           posts = posts.map((p) =>
-            p.id === pid ? { ...p, comment_count: Math.max(0, (p.comment_count ?? 0) - 1) } : p,
+            p.id === data.post_id ? { ...p, comment_count: Math.max(0, (p.comment_count ?? 0) - 1) } : p,
           );
           emit();
-          emitComment(ev.event, ev.data);
+          emitComment(event, data);
           break;
-        }
         case "comment_edited":
         case "comment_reaction_changed":
-          emitComment(ev.event, ev.data);
+          emitComment(event, data);
           break;
       }
-    } catch {
-      /* ignore */
-    }
-  };
+    },
+  );
 }
 
 // findPost returns an already-loaded post by id (for notification routing).

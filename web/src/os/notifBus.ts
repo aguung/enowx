@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { notifApi, type Notification } from "../lib/api";
+import { subscribeLive } from "./liveBus";
 
 // notifBus is the shared notifications store: loads recent notifications + the
 // unread count, and applies live `notification` events from the SSE stream.
 let items: Notification[] = [];
 let unread = 0;
 let loaded = false;
-let es: EventSource | null = null;
+let subscribed = false;
 const listeners = new Set<() => void>();
 
 // Banner emitter: a separate channel so a macOS-style banner can pop for any
@@ -45,20 +46,14 @@ export async function markNotificationsRead() {
 }
 
 function ensureStream() {
-  if (es) return;
-  es = new EventSource("/api/chat/stream");
-  es.addEventListener("message", (e) => {
-    try {
-      const ev = JSON.parse((e as MessageEvent).data) as { event: string; data: Notification };
-      if (ev.event === "notification" && ev.data) {
-        items = [ev.data, ...items].slice(0, 50);
-        unread += 1;
-        emit();
-        showBanner(ev.data); // pop a macOS-style card
-      }
-    } catch {
-      /* ignore */
-    }
+  if (subscribed) return;
+  subscribed = true;
+  subscribeLive(["notification"], (_event, data: Notification) => {
+    if (!data) return;
+    items = [data, ...items].slice(0, 50);
+    unread += 1;
+    emit();
+    showBanner(data); // pop a macOS-style card
   });
 }
 

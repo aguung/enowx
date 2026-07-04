@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { inboxApi, type InboxMessage } from "../lib/api";
+import { subscribeLive } from "./liveBus";
 
 // inboxBus is the shared inbox store: loads admin messages + unread count, and
 // bumps on live `inbox` events from the SSE stream (persistence is authoritative).
 let items: InboxMessage[] = [];
 let unread = 0;
 let loaded = false;
-let es: EventSource | null = null;
+let subscribed = false;
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -38,16 +39,9 @@ export async function markInboxRead(id?: number) {
 }
 
 function ensureStream() {
-  if (es) return;
-  es = new EventSource("/api/chat/stream");
-  es.addEventListener("message", (e) => {
-    try {
-      const ev = JSON.parse((e as MessageEvent).data) as { event: string };
-      if (ev.event === "inbox") loadInbox(); // re-fetch to get the new message
-    } catch {
-      /* ignore */
-    }
-  });
+  if (subscribed) return;
+  subscribed = true;
+  subscribeLive(["inbox"], () => loadInbox()); // re-fetch to get the new message
 }
 
 export interface InboxState {

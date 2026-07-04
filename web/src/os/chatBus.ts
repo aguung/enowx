@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { chatApi, type ChatMessage, type Reaction, type ChatChannel } from "../lib/api";
+import { subscribeLive, onStreamStatus } from "./liveBus";
 
 // chatBus is the shared community-chat store: it loads history for the active
 // channel, holds the live message list, and keeps a single SSE connection
@@ -10,7 +11,7 @@ let channel = "indonesia";
 let loading = false;
 let loadingOlder = false;
 let hasMore = true;
-let es: EventSource | null = null;
+let subscribed = false;
 let connected = false;
 // firstUnreadId is the id of the first message the user hasn't read for the
 // current channel — the "New" divider is drawn above it. Snapshotted on channel
@@ -122,49 +123,37 @@ export async function loadOlderMessages() {
 }
 
 function ensureStream() {
-  if (es) return;
-  es = new EventSource("/api/chat/stream");
-  es.onopen = () => {
-    connected = true;
+  if (subscribed) return;
+  subscribed = true;
+  onStreamStatus((open) => {
+    connected = open;
     emit();
-  };
-  es.onerror = () => {
-    connected = false;
-    emit();
-    // EventSource auto-reconnects; nothing else to do.
-  };
-  es.onmessage = (e) => {
-    try {
-      const ev = JSON.parse(e.data) as { event: string; data: any };
-      if (ev.event === "chat_message" && ev.data) {
-        // Only show messages for the channel we're viewing; de-dupe by id.
-        if (ev.data.channel && ev.data.channel !== channel) return;
-        if (!messages.some((m) => m.id === ev.data.id)) {
-          messages = [...messages, ev.data as ChatMessage];
-          emit();
-        }
-      } else if (ev.event === "message_edited" && ev.data) {
-        messages = messages.map((m) =>
-          m.id === ev.data.id ? { ...m, content: ev.data.content, edited_at: ev.data.edited_at } : m,
-        );
-        emit();
-      } else if (ev.event === "message_deleted" && ev.data) {
-        messages = messages.filter((m) => m.id !== ev.data.id);
-        emit();
-      } else if (ev.event === "reaction_changed" && ev.data) {
-        // Broadcast carries counts; `me` is per-viewer, so preserve our own.
-        const incoming: Reaction[] = ev.data.reactions ?? [];
-        messages = messages.map((m) => {
-          if (m.id !== ev.data.message_id) return m;
-          const mine = new Set((m.reactions ?? []).filter((rx) => rx.me).map((rx) => rx.emoji));
-          return { ...m, reactions: incoming.map((rx) => ({ ...rx, me: mine.has(rx.emoji) })) };
-        });
+  });
+  subscribeLive(["chat_message", "message_edited", "message_deleted", "reaction_changed"], (event, data) => {
+    if (event === "chat_message" && data) {
+      // Only show messages for the channel we're viewing; de-dupe by id.
+      if (data.channel && data.channel !== channel) return;
+      if (!messages.some((m) => m.id === data.id)) {
+        messages = [...messages, data as ChatMessage];
         emit();
       }
-    } catch {
-      /* ignore malformed frames */
+    } else if (event === "message_edited" && data) {
+      messages = messages.map((m) => (m.id === data.id ? { ...m, content: data.content, edited_at: data.edited_at } : m));
+      emit();
+    } else if (event === "message_deleted" && data) {
+      messages = messages.filter((m) => m.id !== data.id);
+      emit();
+    } else if (event === "reaction_changed" && data) {
+      // Broadcast carries counts; `me` is per-viewer, so preserve our own.
+      const incoming: Reaction[] = data.reactions ?? [];
+      messages = messages.map((m) => {
+        if (m.id !== data.message_id) return m;
+        const mine = new Set((m.reactions ?? []).filter((rx) => rx.me).map((rx) => rx.emoji));
+        return { ...m, reactions: incoming.map((rx) => ({ ...rx, me: mine.has(rx.emoji) })) };
+      });
+      emit();
     }
-  };
+  });
 }
 
 export async function sendChat(content: string, replyTo?: number, images?: string[]) {
