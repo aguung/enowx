@@ -16,8 +16,45 @@ let subscribed = false;
 const PAGE = 25; // matches the server's postPageSize
 const listeners = new Set<() => void>();
 
+// --- feed cache (localStorage, keyed by sort+category) ---
+// Cache the loaded feed so reopening Posts renders instantly instead of blocking
+// on a ~1s fetch every time. The fresh fetch still runs in the background and
+// reconciles; the cache just kills the spinner on open.
+const CACHE_KEY = "enowx-posts-cache";
+
+function cacheKey(): string {
+  return `${sort}::${category}`;
+}
+function cacheMap(): Record<string, Post[]> {
+  try {
+    return JSON.parse(localStorage.getItem(CACHE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+function getCached(): Post[] {
+  const arr = cacheMap()[cacheKey()];
+  return Array.isArray(arr) ? arr : [];
+}
+function setCached(list: Post[]) {
+  try {
+    const m = cacheMap();
+    m[cacheKey()] = list.slice(0, PAGE);
+    localStorage.setItem(CACHE_KEY, JSON.stringify(m));
+  } catch {
+    /* quota — cache is best-effort */
+  }
+}
+
 function emit() {
   listeners.forEach((l) => l());
+}
+
+// emitAndCache is emit() plus persisting the current feed, used after a live
+// event mutates `posts` so a refresh reflects the latest state instantly.
+function emitAndCache() {
+  setCached(posts);
+  emit();
 }
 
 // Live comment events, fanned out to open CommentThreads (which subscribe by
@@ -42,16 +79,26 @@ export function subscribeComments(handler: (event: CommentEvent, data: any) => v
 export async function loadFeed(opts?: { sort?: string; category?: string }) {
   if (opts?.sort !== undefined) sort = opts.sort;
   if (opts?.category !== undefined) category = opts.category;
-  loading = true;
   hasMore = true;
+  // Hydrate from cache instantly so the feed renders without a spinner; only
+  // show the loading state when there's nothing cached for this sort+category.
+  const cached = getCached();
+  if (cached.length > 0) {
+    posts = cached;
+    loading = false;
+  } else {
+    posts = [];
+    loading = true;
+  }
   emit();
   try {
     const r = await postsApi.list({ sort, category });
     posts = r.posts ?? [];
     hasMore = (r.posts?.length ?? 0) >= PAGE;
     if (r.categories) categories = r.categories;
+    setCached(posts);
   } catch {
-    /* keep old */
+    /* keep whatever we have (cache or prior posts) */
   } finally {
     loading = false;
     emit();
@@ -102,20 +149,20 @@ function ensureStream() {
         case "post_created":
           if (!posts.some((p) => p.id === data.id) && (!category || data.category === category)) {
             posts = [data as Post, ...posts];
-            emit();
+            emitAndCache();
           }
           break;
         case "post_edited":
           posts = posts.map((p) => (p.id === data.id ? { ...p, title: data.title, body: data.body } : p));
-          emit();
+          emitAndCache();
           break;
         case "post_deleted":
           posts = posts.filter((p) => p.id !== data.id);
-          emit();
+          emitAndCache();
           break;
         case "post_upvote_changed":
           posts = posts.map((p) => (p.id === data.id ? { ...p, upvotes: data.count } : p));
-          emit();
+          emitAndCache();
           break;
         case "post_reaction_changed": {
           const incoming: Reaction[] = data.reactions ?? [];
@@ -124,19 +171,19 @@ function ensureStream() {
             const mine = new Set((p.reactions ?? []).filter((r) => r.me).map((r) => r.emoji));
             return { ...p, reactions: incoming.map((r) => ({ ...r, me: mine.has(r.emoji) })) };
           });
-          emit();
+          emitAndCache();
           break;
         }
         case "comment_added":
           posts = posts.map((p) => (p.id === data.post_id ? { ...p, comment_count: (p.comment_count ?? 0) + 1 } : p));
-          emit();
+          emitAndCache();
           emitComment(event, data);
           break;
         case "comment_deleted":
           posts = posts.map((p) =>
             p.id === data.post_id ? { ...p, comment_count: Math.max(0, (p.comment_count ?? 0) - 1) } : p,
           );
-          emit();
+          emitAndCache();
           emitComment(event, data);
           break;
         case "comment_edited":
