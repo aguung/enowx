@@ -96,6 +96,7 @@ function FileBrowser({ path, onPath }: { path: string | null; onPath: (p: string
   const [loading, setLoading] = useState(true);
   const [viewing, setViewing] = useState<Viewing | null>(null);
   const [copiedDir, setCopiedDir] = useState(false);
+  const [pathEdit, setPathEdit] = useState<string | null>(null); // null = showing dir.path; string = user is typing
   const menu = useContextMenu();
 
   // Build the copy menu for an entry (or the current dir when full == dir.path).
@@ -137,12 +138,27 @@ function FileBrowser({ path, onPath }: { path: string | null; onPath: (p: string
         <IconBtn onClick={() => dir?.parent && onPath(dir.parent)} title="Up" disabled={!dir?.parent}>
           <ArrowUp className="h-3.5 w-3.5" />
         </IconBtn>
-        <div
-          className="ml-1 min-w-0 flex-1 truncate rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 font-mono text-[11px] text-white/60"
+        <input
+          value={pathEdit ?? dir?.path ?? ""}
+          placeholder="Type or paste a path… (Enter to go)"
+          spellCheck={false}
+          onChange={(e) => setPathEdit(e.target.value)}
+          onFocus={(e) => e.currentTarget.select()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const p = (pathEdit ?? "").trim();
+              if (p) onPath(p);
+              setPathEdit(null);
+              e.currentTarget.blur();
+            } else if (e.key === "Escape") {
+              setPathEdit(null);
+              e.currentTarget.blur();
+            }
+          }}
+          onBlur={() => setPathEdit(null)}
           onContextMenu={(e) => dir && menu.show(e, pathMenu(dir.path))}
-        >
-          {dir?.path ?? "…"}
-        </div>
+          className="ml-1 min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-2.5 py-1.5 font-mono text-[11px] text-white/70 outline-none focus:border-amber-500/40 focus:text-white"
+        />
         <IconBtn
           onClick={() => {
             if (!dir) return;

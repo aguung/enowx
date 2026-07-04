@@ -42,7 +42,7 @@ func (h *Files) List(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		path = home
 	}
-	path = filepath.Clean(path)
+	path = expandHome(path, home)
 
 	items, err := os.ReadDir(path)
 	if err != nil {
@@ -84,7 +84,8 @@ func (h *Files) Read(w http.ResponseWriter, r *http.Request) {
 		writeAPIErr(w, http.StatusForbidden, "file browser requires the dashboard login when accessed remotely")
 		return
 	}
-	path := filepath.Clean(strings.TrimSpace(r.URL.Query().Get("path")))
+	home, _ := os.UserHomeDir()
+	path := expandHome(strings.TrimSpace(r.URL.Query().Get("path")), home)
 	if path == "" || path == "." {
 		writeAPIErr(w, http.StatusBadRequest, "path is required")
 		return
@@ -126,7 +127,8 @@ func (h *Files) Raw(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "localhost only", http.StatusForbidden)
 		return
 	}
-	path := filepath.Clean(strings.TrimSpace(r.URL.Query().Get("path")))
+	home, _ := os.UserHomeDir()
+	path := expandHome(strings.TrimSpace(r.URL.Query().Get("path")), home)
 	if path == "" || path == "." {
 		http.Error(w, "path required", http.StatusBadRequest)
 		return
@@ -137,4 +139,19 @@ func (h *Files) Raw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.ServeFile(w, r, path)
+}
+
+// expandHome resolves a leading "~" (or "~/…") to the user's home dir and cleans
+// the result, so a typed path like "~/Downloads" navigates correctly. An empty
+// input returns "".
+func expandHome(path, home string) string {
+	if path == "" {
+		return ""
+	}
+	if path == "~" {
+		path = home
+	} else if strings.HasPrefix(path, "~/") && home != "" {
+		path = filepath.Join(home, path[2:])
+	}
+	return filepath.Clean(path)
 }
