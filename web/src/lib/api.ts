@@ -274,6 +274,8 @@ export interface ProxySettings {
   enabled: boolean;
   mode: string; // rotate | random | sticky
   providers: string[];
+  autocheck_enabled: boolean;
+  autocheck_minutes: number;
 }
 
 // --- OTP (Warpize SMS) ---

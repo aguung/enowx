@@ -281,6 +281,34 @@ function SettingsModal({
               {settings.providers.length === 0 && <p className="mt-1 text-[10px] text-white/30">None selected = all providers routed.</p>}
             </div>
           </div>
+
+          {/* Auto health-check: re-test every proxy on a schedule. Independent of routing. */}
+          <div className="mt-4 border-t border-white/5 pt-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs font-medium text-white/85">Auto health-check</div>
+                <div className="text-[10px] text-white/40">Re-test every proxy on a schedule and update its status.</div>
+              </div>
+              <button
+                onClick={() => onSave({ autocheck_enabled: !settings.autocheck_enabled })}
+                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${settings.autocheck_enabled ? "bg-emerald-500/80" : "bg-white/15"}`}
+              >
+                <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${settings.autocheck_enabled ? "left-[18px]" : "left-0.5"}`} />
+              </button>
+            </div>
+            <div className={`mt-2 flex items-center gap-2 ${settings.autocheck_enabled ? "" : "pointer-events-none opacity-40"}`}>
+              <span className="text-[11px] text-white/50">Every</span>
+              <input
+                type="number"
+                min={1}
+                max={1440}
+                value={settings.autocheck_minutes}
+                onChange={(e) => onSave({ autocheck_minutes: Math.min(1440, Math.max(1, Number(e.target.value) || 30)) })}
+                className="w-16 rounded-md border border-white/10 bg-black/25 px-2 py-1 text-xs text-white/80 outline-none focus:border-white/25"
+              />
+              <span className="text-[11px] text-white/50">minutes</span>
+            </div>
+          </div>
         </div>
         <div className="flex justify-end border-t border-white/5 px-4 py-3">
           <button onClick={onClose} className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90">Done</button>

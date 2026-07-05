@@ -103,6 +103,7 @@ func New(addr string, d Deps) *Server {
 	if d.Sync != nil {
 		proxies.SetSyncPush(func() { _, _, _ = d.Sync.Sync(context.Background()) })
 	}
+	go proxies.RunAutoCheck(context.Background()) // periodic proxy health checks (opt-in via settings)
 	music := handlers.NewMusic(d.Music)
 	sunoMusic := handlers.NewSuno(d.Accounts, d.Proxy, suno.New(d.Doer))
 	tun := handlers.NewTunnel(d.Tunnel, d.Keys)

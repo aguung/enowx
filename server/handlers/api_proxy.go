@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -19,6 +20,9 @@ const (
 	setProxyEnabled   = "proxy_enabled"   // "true" to route through the pool
 	setProxyMode      = "proxy_mode"      // rotate | random | sticky
 	setProxyProviders = "proxy_providers" // JSON array of provider names ([] = all)
+
+	setProxyAutoCheck    = "proxy_autocheck_enabled" // "true" to periodically re-test every proxy
+	setProxyAutoCheckMin = "proxy_autocheck_minutes" // interval in minutes (default 30)
 )
 
 // Proxy is the management API over the outbound proxy pool.
@@ -155,6 +159,57 @@ func (h *Proxy) Test(w http.ResponseWriter, r *http.Request) {
 	writeData(w, out)
 }
 
+// RunAutoCheck periodically re-tests every proxy when auto-check is enabled,
+// updating each proxy's status + latency. It re-reads the interval each tick so
+// changing the setting takes effect without a restart. Launch once at startup.
+func (h *Proxy) RunAutoCheck(ctx context.Context) {
+	// Check at a fixed 30s cadence whether it's time to run; this lets the
+	// configurable interval change live without recreating the ticker.
+	t := time.NewTicker(30 * time.Second)
+	defer t.Stop()
+	var last time.Time
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if v, _ := h.settings.Get(ctx, setProxyAutoCheck); v != "true" {
+				continue
+			}
+			interval := time.Duration(h.autoCheckMinutes(ctx)) * time.Minute
+			if time.Since(last) < interval {
+				continue
+			}
+			last = time.Now()
+			h.checkAll(ctx)
+		}
+	}
+}
+
+// checkAll probes every proxy in the pool (bounded concurrency) and records the
+// result. Best-effort; individual failures just mark that proxy dead.
+func (h *Proxy) checkAll(ctx context.Context) {
+	list, err := h.store.List(ctx)
+	if err != nil || len(list) == 0 {
+		return
+	}
+	sem := make(chan struct{}, 8) // don't hammer all proxies at once
+	var wg sync.WaitGroup
+	for i := range list {
+		p := list[i]
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			status, latency, _ := probeProxy(ctx, p)
+			_ = h.store.SetStatus(ctx, p.ID, status, latency)
+		}()
+	}
+	wg.Wait()
+	h.pushSoon() // reflect updated statuses to the cloud
+}
+
 // GetSettings returns the proxy routing config (mode + provider whitelist).
 func (h *Proxy) GetSettings(w http.ResponseWriter, r *http.Request) {
 	enabled, _ := h.settings.Get(r.Context(), setProxyEnabled)
@@ -164,19 +219,38 @@ func (h *Proxy) GetSettings(w http.ResponseWriter, r *http.Request) {
 	if provRaw != "" {
 		_ = json.Unmarshal([]byte(provRaw), &providers)
 	}
+	autoCheck, _ := h.settings.Get(r.Context(), setProxyAutoCheck)
 	writeData(w, map[string]any{
-		"enabled":   enabled == "true",
-		"mode":      nzStr(mode, "rotate"),
-		"providers": providers,
+		"enabled":           enabled == "true",
+		"mode":              nzStr(mode, "rotate"),
+		"providers":         providers,
+		"autocheck_enabled": autoCheck == "true",
+		"autocheck_minutes": h.autoCheckMinutes(r.Context()),
 	})
+}
+
+// autoCheckMinutes reads the stored interval, defaulting to 30 and clamping to
+// a sane [1, 1440] range.
+func (h *Proxy) autoCheckMinutes(ctx context.Context) int {
+	raw, _ := h.settings.Get(ctx, setProxyAutoCheckMin)
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		return 30
+	}
+	if n > 1440 {
+		n = 1440
+	}
+	return n
 }
 
 // SaveSettings updates the proxy routing config.
 func (h *Proxy) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Enabled   bool     `json:"enabled"`
-		Mode      string   `json:"mode"`
-		Providers []string `json:"providers"`
+		Enabled          bool     `json:"enabled"`
+		Mode             string   `json:"mode"`
+		Providers        []string `json:"providers"`
+		AutoCheckEnabled bool     `json:"autocheck_enabled"`
+		AutoCheckMinutes int      `json:"autocheck_minutes"`
 	}
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 64<<10))
 	if json.Unmarshal(body, &in) != nil {
@@ -187,10 +261,18 @@ func (h *Proxy) SaveSettings(w http.ResponseWriter, r *http.Request) {
 	if mode != "rotate" && mode != "random" && mode != "sticky" {
 		mode = "rotate"
 	}
+	mins := in.AutoCheckMinutes
+	if mins < 1 {
+		mins = 30
+	} else if mins > 1440 {
+		mins = 1440
+	}
 	provJSON, _ := json.Marshal(in.Providers)
 	_ = h.settings.Set(r.Context(), setProxyEnabled, boolStr(in.Enabled))
 	_ = h.settings.Set(r.Context(), setProxyMode, mode)
 	_ = h.settings.Set(r.Context(), setProxyProviders, string(provJSON))
+	_ = h.settings.Set(r.Context(), setProxyAutoCheck, boolStr(in.AutoCheckEnabled))
+	_ = h.settings.Set(r.Context(), setProxyAutoCheckMin, strconv.Itoa(mins))
 	writeData(w, map[string]any{"ok": true})
 }
 
