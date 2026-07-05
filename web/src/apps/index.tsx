@@ -38,7 +38,7 @@ export function buildApps(): DesktopApp[] {
     { id: "music", label: "Music", icon: <Music />, accent: "from-pink-500 to-rose-600", home: "right", render: () => <MusicApp /> },
     { id: "chat", label: "Community", icon: <MessagesSquare />, accent: "from-fuchsia-500 to-purple-600", home: "right", render: () => <ChatApp /> },
     { id: "otp", label: "OTP", icon: <Smartphone />, accent: "from-cyan-500 to-teal-600", home: "right", render: () => <OtpApp /> },
-    { id: "skills", label: "Skills", icon: <Sparkles />, accent: "from-indigo-500 to-blue-600", home: "right", render: () => <SkillApp /> },
+    { id: "skills", label: "Skills", icon: <Sparkles />, accent: "from-indigo-500 to-blue-600", home: "left", render: () => <SkillApp /> },
     { id: "settings", label: "Settings", icon: <Settings />, accent: "from-slate-500 to-slate-700", home: "right", render: () => <SettingsApp /> },
     // Drawer: everything situational (open from the Apps drawer or drag onto a dock).
     { id: "files", label: "Files", icon: <FolderOpen />, accent: "from-amber-500 to-orange-600", home: "drawer", render: () => <FilesApp /> },
