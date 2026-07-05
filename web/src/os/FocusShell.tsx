@@ -50,39 +50,41 @@ export function FocusShell({
 
   return (
     <>
-      {/* Main area: widget board with the active app overlaid full (edge to edge). */}
+      {/* Home: widget board, kept clear of the bottom dock. */}
       <div className="pointer-events-none absolute inset-x-0 top-7 bottom-[4.5rem]">
         <div className="pointer-events-auto absolute inset-0">{home}</div>
         {board}
-        <AnimatePresence>
-          {active && (
-            <motion.div
-              key={active.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.16 }}
-              className="pointer-events-auto absolute inset-0 z-30 flex flex-col px-2"
-            >
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[var(--window-bg)]/95 shadow-2xl backdrop-blur">
-                {/* App header with title + close. */}
-                <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
-                  <span className={`flex h-5 w-5 items-center justify-center rounded bg-gradient-to-br ${active.accent} text-white`}>
-                    <span className="[&>svg]:h-3 [&>svg]:w-3">{active.icon}</span>
-                  </span>
-                  <span className="text-sm font-medium text-white">{active.label}</span>
-                  <button onClick={onCloseApp} className="ml-auto rounded-lg p-1 text-white/40 hover:bg-white/10 hover:text-white" title="Close">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <div className="min-h-0 flex-1 overflow-auto">{active.render()}</div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
-      {/* Bottom app dock. */}
+      {/* Active app: fills the whole area under the top bar, edge to edge
+          (down to the very bottom; the dock floats above it). No padding/border. */}
+      <AnimatePresence>
+        {active && (
+          <motion.div
+            key={active.id}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.16 }}
+            className="pointer-events-auto absolute inset-x-0 bottom-0 top-7 z-30 flex flex-col bg-[var(--window-bg)]"
+          >
+            {/* App header with title + close. */}
+            <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
+              <span className={`flex h-5 w-5 items-center justify-center rounded bg-gradient-to-br ${active.accent} text-white`}>
+                <span className="[&>svg]:h-3 [&>svg]:w-3">{active.icon}</span>
+              </span>
+              <span className="text-sm font-medium text-white">{active.label}</span>
+              <button onClick={onCloseApp} className="ml-auto rounded-lg p-1 text-white/40 hover:bg-white/10 hover:text-white" title="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {/* Leave room at the bottom for the floating dock so content isn't hidden behind it. */}
+            <div className="min-h-0 flex-1 overflow-auto pb-16">{active.render()}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bottom app dock (floats above the app). */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center pb-2">
         <div className="pointer-events-auto flex max-w-[92vw] flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-white/10 bg-[var(--window-bg)]/85 px-2 py-1.5 shadow-xl backdrop-blur" {...dropProps((id) => onDropApp(id, "right"))}>
           {apps.map((a) => (
