@@ -16,6 +16,19 @@ export function useShortcuts(run: (key: string) => void): boolean {
   useEffect(() => {
     const isMod = (e: KeyboardEvent) => e.key === "Control" || e.key === "Alt";
 
+    // Standard editing / browser chords we must never swallow, or Ctrl+C/V/X/…
+    // stop working on Windows/Linux (where Ctrl is the clipboard modifier, unlike
+    // macOS which uses Cmd). When Ctrl is held, let the browser handle these.
+    const RESERVED = new Set(["c", "v", "x", "a", "z", "y", "s", "f", "p", "r", "w", "t", "n"]);
+
+    // Don't hijack keys while the user is typing in a field.
+    const inEditable = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+    };
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (isMod(e)) {
         setHolding(true);
@@ -25,6 +38,12 @@ export function useShortcuts(run: (key: string) => void): boolean {
       // and ignore plain typing (multi-char keys like Shift/Arrow).
       if (!(e.ctrlKey || e.altKey) || e.metaKey) return;
       if (e.key.length !== 1) return; // letters/digits only
+      // Never override native editing/browser shortcuts when Ctrl is held (copy,
+      // paste, cut, select-all, save, find, …) — Alt still triggers every
+      // shortcut, so the leader keys keep working via Alt on all platforms.
+      if (e.ctrlKey && !e.altKey && RESERVED.has(e.key.toLowerCase())) return;
+      // Also leave typing in inputs alone.
+      if (inEditable(e.target)) return;
       e.preventDefault();
       e.stopPropagation();
       runRef.current(e.key.toLowerCase());
