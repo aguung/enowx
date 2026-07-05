@@ -48,9 +48,11 @@ func (s *logStore) Clear(ctx context.Context) error {
 	return err
 }
 
-func (s *logStore) SummaryToday(ctx context.Context) (store.LogSummary, error) {
+// summary aggregates stats_rollup (a persistent hourly rollup, not the purgeable
+// request_logs) with an optional WHERE clause.
+func (s *logStore) summary(ctx context.Context, where string) (store.LogSummary, error) {
 	var sum store.LogSummary
-	var reqs, latSum int64
+	var latSum int64
 	err := s.db.QueryRowContext(ctx,
 		`SELECT
 		   COALESCE(SUM(requests), 0),
@@ -59,14 +61,22 @@ func (s *logStore) SummaryToday(ctx context.Context) (store.LogSummary, error) {
 		   COALESCE(SUM(in_tokens), 0),
 		   COALESCE(SUM(out_tokens), 0),
 		   COALESCE(SUM(latency_sum), 0)
-		 FROM stats_rollup
-		 WHERE hour >= strftime('%Y-%m-%d 00:00', 'now')`,
+		 FROM stats_rollup `+where,
 	).Scan(&sum.Total, &sum.OK, &sum.Errors, &sum.InTokens, &sum.OutTokens, &latSum)
-	reqs = sum.Total
-	if reqs > 0 {
-		sum.AvgMS = latSum / reqs
+	if sum.Total > 0 {
+		sum.AvgMS = latSum / sum.Total
 	}
 	return sum, err
+}
+
+func (s *logStore) SummaryToday(ctx context.Context) (store.LogSummary, error) {
+	return s.summary(ctx, `WHERE hour >= strftime('%Y-%m-%d 00:00', 'now')`)
+}
+
+// SummaryAll is the lifetime summary from the persistent rollup (survives log
+// purges), so widget totals like tokens-out don't reset.
+func (s *logStore) SummaryAll(ctx context.Context) (store.LogSummary, error) {
+	return s.summary(ctx, "")
 }
 
 // TotalOutTokens returns the all-time cumulative output tokens from successful
@@ -140,7 +150,6 @@ func (s *logStore) TopModels(ctx context.Context, limit int) ([]store.ModelStat,
 		        COALESCE(SUM(in_tokens), 0),
 		        COALESCE(SUM(out_tokens), 0)
 		 FROM stats_rollup
-		 WHERE hour >= strftime('%Y-%m-%d 00:00', 'now')
 		 GROUP BY model ORDER BY reqs DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err

@@ -61,7 +61,13 @@ func (h *Requests) Clear(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Requests) Summary(w http.ResponseWriter, r *http.Request) {
-	sum, err := h.store.SummaryToday(r.Context())
+	// All-time by default (from the persistent rollup, so totals don't reset when
+	// request logs are purged). ?range=today narrows to the current day.
+	summary := h.store.SummaryAll
+	if r.URL.Query().Get("range") == "today" {
+		summary = h.store.SummaryToday
+	}
+	sum, err := summary(r.Context())
 	if err != nil {
 		writeAPIErr(w, http.StatusInternalServerError, err.Error())
 		return

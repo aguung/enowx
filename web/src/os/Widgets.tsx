@@ -64,7 +64,7 @@ export function Widgets({ onOpen }: { onOpen: (id: AppId) => void }) {
     let alive = true;
     const load = () => {
       requestsApi.summary().then((s) => alive && setSummary(s)).catch(() => {});
-      requestsApi.series().then((s) => alive && setSeries(s ?? [])).catch(() => {});
+      requestsApi.series("all").then((s) => alive && setSeries(s ?? [])).catch(() => {});
       requestsApi.topModels().then((m) => alive && setModels(m ?? [])).catch(() => {});
       settingsApi.get().then((s) => alive && setSettings(s)).catch(() => {});
       fetch("/health").then((r) => alive && setHealthy(r.ok)).catch(() => alive && setHealthy(false));
@@ -319,9 +319,9 @@ function ThroughputWidget({ series }: { series: SeriesPoint[] }) {
   const values = series.map((p) => p.requests);
   const total = values.reduce((a, b) => a + b, 0);
   return (
-    <Widget icon={<Activity />} title="Throughput (24h)">
+    <Widget icon={<Activity />} title="Throughput">
       <Sparkline values={values} />
-      <div className="mt-2 text-[11px] text-white/40">{fmt(total)} requests over 24h</div>
+      <div className="mt-2 text-[11px] text-white/40">{fmt(total)} requests total</div>
     </Widget>
   );
 }
@@ -335,7 +335,7 @@ function RequestsWidget({
 }) {
   const okRate = summary && summary.total > 0 ? Math.round((summary.ok / summary.total) * 100) : 0;
   return (
-    <Widget icon={<Activity />} title="Requests today" onOpen={() => onOpen("requests")}>
+    <Widget icon={<Activity />} title="Requests" onOpen={() => onOpen("requests")}>
       {summary === null ? (
         <Loading />
       ) : (
