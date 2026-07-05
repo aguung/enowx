@@ -47,7 +47,7 @@ export function AppsDrawer({
           All apps are on the docks. Drag one here to remove it from a dock.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))" }}>
           {apps.map((app) => (
             <button
               key={app.id}
@@ -57,10 +57,10 @@ export function AppsDrawer({
                 e.dataTransfer.effectAllowed = "move";
               }}
               onClick={() => onOpen(app.id)}
-              className="flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-3 transition-colors hover:bg-white/[0.07]"
+              className="flex flex-col items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-2 transition-colors hover:bg-white/[0.07]"
             >
               <span className="relative">
-                <span className={"flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-md [&>svg]:!h-5 [&>svg]:!w-5 " + app.accent}>
+                <span className={"flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br text-white shadow-md [&>svg]:!h-5 [&>svg]:!w-5 " + app.accent}>
                   {app.icon}
                 </span>
                 {app.badge && (
@@ -72,7 +72,7 @@ export function AppsDrawer({
                   <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-rose-500 shadow ring-2 ring-[var(--window-bg)]" />
                 )}
               </span>
-              <span className="text-[11px] text-white/70">{app.label}</span>
+              <span className="w-full truncate text-center text-[10px] text-white/70">{app.label}</span>
             </button>
           ))}
         </div>
