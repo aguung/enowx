@@ -336,11 +336,22 @@ export interface RegistryPublishResult {
   slug?: string;
   download_url?: string;
 }
+export interface RegistryFile {
+  path: string; // relative to the skill root
+  content: string; // base64
+}
+export interface RegistryPublishBody {
+  kind: RegistryKind;
+  name: string;
+  description: string;
+  version: string;
+  files: RegistryFile[];
+}
 export const registryApi = {
   list: (kind: RegistryKind, q = "") =>
     api.get<{ items: RegistryItem[] }>(`/api/registry?kind=${kind}${q ? `&q=${encodeURIComponent(q)}` : ""}`),
   get: (id: number) => api.get<RegistryItem>(`/api/registry/${id}`),
-  publish: (form: FormData) => postForm<RegistryPublishResult>("/api/registry/publish", form),
+  publish: (body: RegistryPublishBody) => api.post<RegistryPublishResult>("/api/registry/publish", body),
   remove: (id: number) => api.del<{ ok: boolean }>(`/api/admin/registry/${id}`),
 };
 

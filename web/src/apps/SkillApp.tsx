@@ -1,10 +1,58 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Upload, Download, Search, X, Check, Copy } from "lucide-react";
+import { Loader2, Upload, Download, Search, X, Check, Copy, FolderOpen, FileText } from "lucide-react";
 import { AppShell } from "./shell";
 import { useDialog } from "../os/dialog";
 import { copyText } from "../os/clipboard";
 import { useProfile } from "../os/useProfile";
-import { registryApi, type RegistryItem } from "../lib/api";
+import { registryApi, type RegistryItem, type RegistryFile } from "../lib/api";
+
+// --- helpers: read a picked skill directory + parse SKILL.md frontmatter ---
+
+interface PickedSkill {
+  root: string; // the top folder name (used as fallback slug/name)
+  files: RegistryFile[]; // base64, paths relative to the skill root
+  meta: { name?: string; description?: string; version?: string };
+}
+
+// bytesToBase64 encodes bytes without blowing the call stack on large files.
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+// parseFrontmatter pulls name/description/version out of a SKILL.md YAML header.
+function parseFrontmatter(md: string): { name?: string; description?: string; version?: string } {
+  const m = md.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!m) return {};
+  const out: Record<string, string> = {};
+  for (const line of m[1].split(/\r?\n/)) {
+    const kv = line.match(/^([A-Za-z_]+)\s*:\s*(.*)$/);
+    if (kv) out[kv[1].toLowerCase()] = kv[2].trim().replace(/^["']|["']$/g, "");
+  }
+  return { name: out.name, description: out.description, version: out.version };
+}
+
+// readSkillDir reads a picked directory (webkitdirectory) into base64 files with
+// paths relative to the skill root, and auto-detects metadata from SKILL.md.
+async function readSkillDir(fileList: FileList): Promise<PickedSkill> {
+  const all = Array.from(fileList);
+  // webkitRelativePath is like "<root>/sub/file"; strip the leading root folder.
+  const root = all[0]?.webkitRelativePath.split("/")[0] ?? "skill";
+  const files: RegistryFile[] = [];
+  let skillMd = "";
+  for (const f of all) {
+    const rel = f.webkitRelativePath.split("/").slice(1).join("/");
+    if (!rel || f.size > 2 * 1024 * 1024) continue; // skip empty paths + huge files
+    const buf = new Uint8Array(await f.arrayBuffer());
+    files.push({ path: rel, content: bytesToBase64(buf) });
+    if (rel.toLowerCase() === "skill.md") skillMd = new TextDecoder().decode(buf);
+  }
+  return { root, files, meta: parseFrontmatter(skillMd) };
+}
 
 // SkillApp: a community registry where anyone can upload + browse Skills. A
 // searchable grid + an upload button. Uploads are scanned server-side, then
@@ -99,22 +147,33 @@ function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [version, setVersion] = useState("1.0.0");
-  const [file, setFile] = useState<File | null>(null);
+  const [picked, setPicked] = useState<PickedSkill | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
+  const dirRef = useRef<HTMLInputElement>(null);
+
+  const onPick = async (fl: FileList | null) => {
+    if (!fl || fl.length === 0) return;
+    setErr("");
+    const skill = await readSkillDir(fl);
+    setPicked(skill);
+    // Auto-fill from SKILL.md (still editable). Fall back to the folder name.
+    setName(skill.meta.name?.trim() || skill.root);
+    setDesc(skill.meta.description?.trim() || "");
+    setVersion(skill.meta.version?.trim() || "1.0.0");
+  };
 
   const submit = async () => {
-    if (!name.trim() || !file || busy) return;
+    if (!name.trim() || !picked || busy) return;
     setBusy(true); setErr("");
     try {
-      const fd = new FormData();
-      fd.append("kind", "skill");
-      fd.append("name", name.trim());
-      fd.append("description", desc.trim());
-      fd.append("version", version.trim() || "1.0.0");
-      fd.append("file", file);
-      const r = await registryApi.publish(fd);
+      const r = await registryApi.publish({
+        kind: "skill",
+        name: name.trim(),
+        description: desc.trim(),
+        version: version.trim() || "1.0.0",
+        files: picked.files,
+      });
       if (r.status === "rejected") {
         setErr(r.reason || "Rejected by the security scan.");
         return;
@@ -137,20 +196,34 @@ function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
           <div className="p-6 text-center text-xs text-white/50">Sign in to the cloud to upload.</div>
         ) : (
           <div className="space-y-3 p-4">
-            <p className="text-[11px] text-white/40">Uploads are scanned before they go live, then published to the community registry.</p>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
-            <textarea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Short description" rows={2} className="w-full resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-white/25" />
-            <div className="flex gap-2">
-              <input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="Version" className="w-28 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-white/25" />
-              <button onClick={() => fileRef.current?.click()} className="flex flex-1 items-center gap-2 truncate rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white/70 hover:bg-white/5">
-                <Upload className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{file ? file.name : "Choose bundle (.zip)"}</span>
-              </button>
-              <input ref={fileRef} type="file" accept=".zip" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-            </div>
+            <p className="text-[11px] text-white/40">Pick your skill folder — name, description and version are read from its <code className="text-white/60">SKILL.md</code>. Files are scanned, then published to the community registry.</p>
+
+            {/* Folder picker. webkitdirectory selects the whole folder. */}
+            <button onClick={() => dirRef.current?.click()} className="flex w-full items-center gap-2 rounded-lg border border-dashed border-white/15 bg-black/20 px-3 py-3 text-xs text-white/70 hover:bg-white/5">
+              <FolderOpen className="h-4 w-4 shrink-0 text-white/40" />
+              {picked ? (
+                <span className="flex items-center gap-1.5 truncate"><span className="font-medium text-white">{picked.root}</span><span className="text-white/40">· {picked.files.length} files</span></span>
+              ) : (
+                <span>Choose skill folder…</span>
+              )}
+            </button>
+            {/* @ts-expect-error webkitdirectory is a valid non-standard attr */}
+            <input ref={dirRef} type="file" webkitdirectory="" directory="" multiple className="hidden" onChange={(e) => onPick(e.target.files)} />
+
+            {picked && (
+              <>
+                {picked.meta.name && (
+                  <p className="flex items-center gap-1 text-[10px] text-emerald-300/80"><FileText className="h-3 w-3" /> Detected from SKILL.md</p>
+                )}
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-white/25" />
+                <textarea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Short description" rows={2} className="w-full resize-none rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-white/25" />
+                <input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="Version" className="w-28 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-white outline-none focus:border-white/25" />
+              </>
+            )}
             {err && <p className="text-[11px] text-red-300">{err}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs text-white/50 hover:bg-white/5">Cancel</button>
-              <button onClick={submit} disabled={busy || !name.trim() || !file} className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90 disabled:opacity-40">
+              <button onClick={submit} disabled={busy || !name.trim() || !picked} className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90 disabled:opacity-40">
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />} Publish
               </button>
             </div>

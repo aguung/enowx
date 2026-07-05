@@ -433,30 +433,21 @@ func (m *Manager) PublishPlugin(ctx context.Context, fields map[string]string, z
 
 // --- MCP & Skill registry ---
 
-// RegistryPublish uploads an MCP/Skill bundle (zip) + fields; the cloud scans it
-// and, if it passes, commits it to the enowX-Skill repo.
-func (m *Manager) RegistryPublish(ctx context.Context, fields map[string]string, zipBytes []byte) (string, error) {
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	for k, v := range fields {
-		_ = mw.WriteField(k, v)
-	}
-	fw, _ := mw.CreateFormFile("file", "bundle.zip")
-	_, _ = fw.Write(zipBytes)
-	_ = mw.Close()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.ServerURL(ctx)+"/registry/publish", &buf)
+// RegistryPublish forwards a skill's JSON body ({kind,name,description,version,
+// files[]}) to the cloud, which scans it and commits the files to enowX-Skill.
+func (m *Manager) RegistryPublish(ctx context.Context, body []byte) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.ServerURL(ctx)+"/registry/publish", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+m.get(ctx, keyToken))
-	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := m.http.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode >= 400 {
 		return "", errors.New(strings.TrimSpace(string(raw)))
 	}

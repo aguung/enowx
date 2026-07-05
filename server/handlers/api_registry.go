@@ -56,30 +56,18 @@ func (h *Registry) Get(w http.ResponseWriter, r *http.Request) {
 	h.rawJSON(w, raw)
 }
 
-// POST /api/registry/publish — multipart: kind, name, description, version, file.
+// POST /api/registry/publish — JSON {kind, name, description, version, files[]}.
 func (h *Registry) Publish(w http.ResponseWriter, r *http.Request) {
 	if !h.dash.Authorized(r) {
 		writeAPIErr(w, http.StatusForbidden, "requires the dashboard login when accessed remotely")
 		return
 	}
-	if err := r.ParseMultipartForm(6 << 20); err != nil {
-		writeAPIErr(w, http.StatusBadRequest, "bad upload")
-		return
-	}
-	f, _, err := r.FormFile("file")
+	body, err := io.ReadAll(io.LimitReader(r.Body, 12<<20))
 	if err != nil {
-		writeAPIErr(w, http.StatusBadRequest, "a bundle file is required")
+		writeAPIErr(w, http.StatusBadRequest, "bad request")
 		return
 	}
-	defer f.Close()
-	zipBytes, _ := io.ReadAll(io.LimitReader(f, 6<<20))
-	fields := map[string]string{
-		"kind":        r.FormValue("kind"),
-		"name":        r.FormValue("name"),
-		"description": r.FormValue("description"),
-		"version":     r.FormValue("version"),
-	}
-	raw, err := h.sync.RegistryPublish(r.Context(), fields, zipBytes)
+	raw, err := h.sync.RegistryPublish(r.Context(), body)
 	if err != nil {
 		writeAPIErr(w, http.StatusBadGateway, err.Error())
 		return
