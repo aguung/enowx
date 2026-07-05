@@ -284,6 +284,7 @@ Usage:
   enx tunnel start      expose the dashboard via a public URL
   enx tunnel stop       tear the tunnel down
   enx tunnel status     show the current tunnel URL
+  enx skill install <slug> [-g]  install a skill (-g = global, else project)
   enx version           print the version
 `)
 }

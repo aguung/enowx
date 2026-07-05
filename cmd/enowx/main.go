@@ -70,6 +70,8 @@ func main() {
 		updateCmd(rest)
 	case "tunnel":
 		tunnelCmd(rest)
+	case "skill":
+		skillCmd(rest)
 	case "version", "-v", "--version":
 		versionCmd()
 	case "help", "-h", "--help":
