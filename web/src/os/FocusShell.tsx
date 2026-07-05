@@ -84,7 +84,7 @@ export function FocusShell({
 
       {/* Bottom app dock. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center pb-2">
-        <div className="pointer-events-auto flex max-w-[92vw] items-center gap-1.5 overflow-x-auto rounded-2xl border border-white/10 bg-[var(--window-bg)]/85 px-2 py-1.5 shadow-xl backdrop-blur" {...dropProps((id) => onDropApp(id, "right"))}>
+        <div className="pointer-events-auto flex max-w-[92vw] flex-wrap items-center justify-center gap-1.5 rounded-2xl border border-white/10 bg-[var(--window-bg)]/85 px-2 py-1.5 shadow-xl backdrop-blur" {...dropProps((id) => onDropApp(id, "right"))}>
           {apps.map((a) => (
             <DockButton key={a.id} app={a} active={a.id === activeApp} onClick={() => onOpenApp(a.id)} />
           ))}
