@@ -211,14 +211,37 @@ export function Desktop() {
     ...(isMod ? [{ id: "view:admin" as AppId, label: "Admin", icon: <ShieldCheck />, accent: "from-red-500 to-rose-700", home: "drawer" as Location, render: () => <AdminApp /> }] : []),
   ];
   const openFocusApp = (id: AppId) => setFocusApp((cur) => (cur === id ? null : id));
-  // Same location system as Classic (drag-and-drop from the Apps page):
-  //   left  → the Workspace vertical dock
-  //   right → the bottom app dock (+ the view apps)
-  // Drawer apps live in the Apps drawer; drag one to a dock to pin it.
-  const workspaceApps = apps.filter((a) => locationOf(a.id) === "left");
-  const focusBottomApps: DesktopApp[] = [
-    ...apps.filter((a) => locationOf(a.id) === "right"),
-    ...viewApps,
+  // In Focus there's no Workspace dock — every real app + view app is reachable
+  // from the "Apps" launcher (a full-screen grid). The bottom dock shows the
+  // apps pinned to a dock (left or right, set by drag-and-drop), plus an always-
+  // present "Apps" button to reach everything else.
+  const focusAllApps: DesktopApp[] = [...apps, ...viewApps];
+  const appsLauncher: DesktopApp = {
+    id: "view:apps",
+    label: "Apps",
+    icon: <Grid3x3 />,
+    accent: "from-slate-500 to-slate-700",
+    home: "drawer",
+    render: () => (
+      <div className="p-4">
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6">
+          {focusAllApps.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => setFocusApp(a.id)}
+              className="flex flex-col items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.02] p-3 hover:bg-white/[0.06]"
+            >
+              <span className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br text-white shadow [&>svg]:!h-6 [&>svg]:!w-6 ${a.accent}`}>{a.icon}</span>
+              <span className="truncate text-[11px] text-white/70">{a.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    ),
+  };
+  const focusDockApps: DesktopApp[] = [
+    appsLauncher,
+    ...apps.filter((a) => locationOf(a.id) === "left" || locationOf(a.id) === "right"),
   ];
 
   if (layoutMode === "focus") {
@@ -226,8 +249,8 @@ export function Desktop() {
       <div className="wallpaper fixed inset-0 select-none overflow-hidden">
         <TopBar nav={null} />
         <FocusShell
-          apps={focusBottomApps}
-          workspace={workspaceApps}
+          apps={focusDockApps}
+          allApps={[...focusAllApps, appsLauncher]}
           activeApp={focusApp}
           onOpenApp={openFocusApp}
           onCloseApp={() => setFocusApp(null)}

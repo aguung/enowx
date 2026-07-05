@@ -29,7 +29,7 @@ function dropProps(onDrop: (id: AppId) => void) {
 // still lives in Desktop.
 export function FocusShell({
   apps,
-  workspace,
+  allApps,
   home,
   board,
   activeApp,
@@ -37,42 +37,32 @@ export function FocusShell({
   onCloseApp,
   onDropApp,
 }: {
-  apps: DesktopApp[]; // apps shown in the bottom dock (already filtered)
-  workspace: DesktopApp[]; // apps shown in the left vertical Workspace dock
+  apps: DesktopApp[]; // apps shown in the bottom dock
+  allApps: DesktopApp[]; // every openable app (for resolving the active one, incl. ones not pinned)
   home: React.ReactNode; // the Widget board shown when no app is open
   board?: React.ReactNode; // extra full-view nodes to keep mounted (e.g. terminal host)
   activeApp: AppId | null;
   onOpenApp: (id: AppId) => void; // toggles: same id closes
   onCloseApp: () => void;
-  onDropApp: (id: AppId, side: Side) => void; // drag an app between the Workspace (left) and app (right/bottom) docks
+  onDropApp: (id: AppId, side: Side) => void; // drag an app onto the bottom dock to pin it
 }) {
-  const all = [...workspace, ...apps];
-  const active = all.find((a) => a.id === activeApp) ?? null;
+  const active = allApps.find((a) => a.id === activeApp) ?? null;
 
   return (
     <>
-      {/* Left Workspace dock (stays visible; covered by an open app). */}
-      <div className="pointer-events-none absolute left-2 top-1/2 z-20 -translate-y-1/2">
-        <div className="pointer-events-auto flex flex-col items-center gap-1.5 rounded-2xl border border-white/10 bg-[var(--window-bg)]/85 px-1.5 py-2 shadow-xl backdrop-blur" {...dropProps((id) => onDropApp(id, "left"))}>
-          {workspace.map((a) => (
-            <DockButton key={a.id} app={a} active={a.id === activeApp} onClick={() => onOpenApp(a.id)} />
-          ))}
-        </div>
-      </div>
-
-      {/* Main area: widget board with the active app overlaid full. */}
-      <div className="pointer-events-none absolute inset-x-0 top-7 bottom-[4.75rem]">
-        <div className="pointer-events-auto absolute inset-0 left-16">{home}</div>
+      {/* Main area: widget board with the active app overlaid full (edge to edge). */}
+      <div className="pointer-events-none absolute inset-x-0 top-7 bottom-[4.5rem]">
+        <div className="pointer-events-auto absolute inset-0">{home}</div>
         {board}
         <AnimatePresence>
           {active && (
             <motion.div
               key={active.id}
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
+              exit={{ opacity: 0, y: 10 }}
               transition={{ duration: 0.16 }}
-              className="pointer-events-auto absolute inset-0 z-30 mx-auto flex max-w-5xl flex-col px-4"
+              className="pointer-events-auto absolute inset-0 z-30 flex flex-col px-2"
             >
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[var(--window-bg)]/95 shadow-2xl backdrop-blur">
                 {/* App header with title + close. */}
@@ -94,7 +84,7 @@ export function FocusShell({
 
       {/* Bottom app dock. */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center pb-2">
-        <div className="pointer-events-auto flex items-center gap-1.5 rounded-2xl border border-white/10 bg-[var(--window-bg)]/85 px-2 py-1.5 shadow-xl backdrop-blur" {...dropProps((id) => onDropApp(id, "right"))}>
+        <div className="pointer-events-auto flex max-w-[92vw] items-center gap-1.5 overflow-x-auto rounded-2xl border border-white/10 bg-[var(--window-bg)]/85 px-2 py-1.5 shadow-xl backdrop-blur" {...dropProps((id) => onDropApp(id, "right"))}>
           {apps.map((a) => (
             <DockButton key={a.id} app={a} active={a.id === activeApp} onClick={() => onOpenApp(a.id)} />
           ))}
