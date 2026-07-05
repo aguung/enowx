@@ -259,6 +259,29 @@ var groups = []docGroup{
 		},
 	},
 	{
+		Name: "OTP",
+		Desc: "Rent disposable SMS numbers for OTP codes via Warpize. Bring your own Warpize key (wz_live_…) — get one at https://warpize.com. Your key is stored encrypted; enowX proxies to Warpize and never sees the codes.",
+		Endpoints: []docEndpoint{
+			{Method: "GET", Path: "/api/otp/config", Desc: "Whether a Warpize key is set (+ a masked preview)."},
+			{Method: "POST", Path: "/api/otp/config", Desc: "Save/replace your Warpize API key.", Params: []docParam{{Name: "api_key", In: "body", Desc: "wz_live_… key"}}},
+			{Method: "DELETE", Path: "/api/otp/config", Desc: "Remove the stored Warpize key."},
+			{Method: "GET", Path: "/api/otp/balance", Desc: "Your Warpize account balance."},
+			{Method: "GET", Path: "/api/otp/services", Desc: "Available services + countries + prices.", Params: []docParam{{Name: "q", In: "query", Desc: "search (optional)"}}},
+			{Method: "POST", Path: "/api/otp/rent", Desc: "Rent a number for a service/country.", Params: []docParam{{Name: "service", In: "body", Desc: "service id"}, {Name: "country", In: "body", Desc: "country id"}}},
+			{Method: "GET", Path: "/api/otp/orders/{id}", Desc: "Poll a rented order for its SMS code.", Params: []docParam{{Name: "id", In: "path", Desc: "order id"}}},
+			{Method: "POST", Path: "/api/otp/orders/{id}/cancel", Desc: "Cancel an order.", Params: []docParam{{Name: "id", In: "path", Desc: "order id"}}},
+		},
+	},
+	{
+		Name: "Skills",
+		Desc: "Community Skill registry. Browse + publish Skills; every upload is security-scanned then committed to the enowdev/enowX-Skill GitHub repo. Install with the CLI: `enx skill install <slug>` (into ./.agents/skill/<slug>) or `enx skill install <slug> -g` (into ~/.agents/skill/<slug>).",
+		Endpoints: []docEndpoint{
+			{Method: "GET", Path: "/api/registry", Desc: "Browse published skills.", Params: []docParam{{Name: "kind", In: "query", Desc: "skill (or mcp)"}, {Name: "q", In: "query", Desc: "search (optional)"}}},
+			{Method: "GET", Path: "/api/registry/{id}", Desc: "One skill's detail + its GitHub folder URL (counts a download).", Params: []docParam{{Name: "id", In: "path", Desc: "registry item id"}}},
+			{Method: "POST", Path: "/api/registry/publish", Desc: "Publish a skill. Send its files (auto-read from the picked folder); scanned, then committed. Returns {status: approved|rejected, reason}.", Params: []docParam{{Name: "kind", In: "body", Desc: "skill"}, {Name: "name", In: "body", Desc: "skill name"}, {Name: "description", In: "body", Desc: "auto-detected from SKILL.md"}, {Name: "version", In: "body", Desc: "version"}, {Name: "files", In: "body", Desc: "[{path, content(base64)}]"}}},
+		},
+	},
+	{
 		Name: "System",
 		Desc: "Gateway info, process debug, and local tools (loopback only where noted).",
 		Endpoints: []docEndpoint{

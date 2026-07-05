@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, KeyRound, Phone, RefreshCw, Copy, Check, X, Wallet, Trash2, ChevronDown, Search } from "lucide-react";
+import { Loader2, KeyRound, Phone, RefreshCw, Copy, Check, X, Wallet, Trash2, ChevronDown, Search, ExternalLink } from "lucide-react";
 import { AppShell } from "./shell";
 import { useDialog } from "../os/dialog";
 import { copyText } from "../os/clipboard";
@@ -69,8 +69,16 @@ function KeyConfig({ config, onSaved, onDelete, onCancel }: {
           <KeyRound className="h-4 w-4 text-cyan-300" /> Warpize API key
         </div>
         <p className="mb-3 text-[11px] text-white/45">
-          Rent disposable SMS numbers for OTP codes. Bring your own Warpize key (<span className="font-mono">wz_live_…</span>) — get one at warpize.com. Your key is stored encrypted; enowX never sees the codes.
+          Rent disposable SMS numbers for OTP codes. Bring your own Warpize key (<span className="font-mono">wz_live_…</span>). Your key is stored encrypted; enowX never sees the codes.
         </p>
+        <a
+          href="https://warpize.com"
+          target="_blank"
+          rel="noreferrer"
+          className="mb-3 flex items-center justify-center gap-1.5 rounded-lg border border-cyan-400/25 bg-cyan-400/[0.06] px-3 py-2 text-[11px] font-medium text-cyan-200 hover:bg-cyan-400/10"
+        >
+          <ExternalLink className="h-3.5 w-3.5" /> Get your API key at warpize.com
+        </a>
         {config.has_key && config.preview && (
           <p className="mb-2 text-[11px] text-white/40">Current key: <span className="font-mono text-white/60">{config.preview}</span></p>
         )}
