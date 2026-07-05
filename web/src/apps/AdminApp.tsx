@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search, MoreHorizontal, Ban, VolumeX, AlertTriangle, Plus, Minus, Boxes, Trash2, Pencil, RefreshCw, Ticket, Mail, Send, Bug, CheckCircle2, RotateCcw, Crown, Coins, Gift, Info } from "lucide-react";
+import { Loader2, Users, Copy, ScrollText, BarChart3, ShieldCheck, ShieldOff, Search, MoreHorizontal, Ban, VolumeX, AlertTriangle, Plus, Minus, Boxes, Trash2, Pencil, RefreshCw, Ticket, Mail, Send, Bug, CheckCircle2, RotateCcw, Crown, Coins, Gift, Info, Sparkles } from "lucide-react";
 import { openProfile } from "../os/profileViewer";
 import { tierClass, tierVars } from "../os/tier";
 import { useAdminEvents } from "../os/adminBus";
@@ -7,11 +7,11 @@ import { useProfile } from "../os/useProfile";
 import { useDialog } from "../os/dialog";
 import { FileSearch, X, Store, Check, Puzzle, ShoppingBag } from "lucide-react";
 import { Tooltip } from "../components/Tooltip";
-import { adminApi, modApi, searchApi, adminVipApi, couponAdminApi, redeemAdminApi, inboxAdminApi, subscriptionApi, bugAdminApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type InboxMessage, type InboxRole, type UserHit, type NickTier, type UserDetail } from "../lib/api";
+import { adminApi, modApi, searchApi, adminVipApi, couponAdminApi, redeemAdminApi, registryApi, inboxAdminApi, subscriptionApi, bugAdminApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type InboxMessage, type InboxRole, type UserHit, type NickTier, type UserDetail, type RegistryItem } from "../lib/api";
 import { copyText } from "../os/clipboard";
 import { useCachedList, setCachedList } from "../os/useCachedList";
 
-type Tab = "stats" | "flags" | "users" | "models" | "market" | "store" | "scan" | "reviews" | "log" | "coupons" | "redeem" | "inbox" | "bugs";
+type Tab = "stats" | "flags" | "users" | "models" | "market" | "store" | "scan" | "reviews" | "log" | "coupons" | "redeem" | "skills" | "inbox" | "bugs";
 
 // AdminApp is the moderator-only Admin Tools app. It only appears in the dock
 // for moderators (see apps registry), and every endpoint it calls is role-gated
@@ -32,6 +32,7 @@ export function AdminApp() {
     { id: "reviews", label: "Review log", icon: FileSearch },
     { id: "coupons", label: "Coupons", icon: Ticket, admin: true },
     { id: "redeem", label: "Redeem codes", icon: Gift, admin: true },
+    { id: "skills", label: "Skills", icon: Sparkles },
     { id: "inbox", label: "Inbox", icon: Mail },
     { id: "bugs", label: "Bug reports", icon: Bug },
     { id: "log", label: "Mod log", icon: ScrollText },
@@ -75,6 +76,7 @@ export function AdminApp() {
         {tab === "reviews" && <ReviewLogTab />}
         {tab === "coupons" && <CouponsTab />}
         {tab === "redeem" && <RedeemCodesTab />}
+        {tab === "skills" && <SkillsAdminTab />}
         {tab === "inbox" && <InboxTab />}
         {tab === "bugs" && <BugReportsTab />}
         {tab === "log" && <LogTab />}
@@ -945,6 +947,37 @@ function AddProductModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// SkillsAdminTab lists community skills and lets a moderator remove abusive ones.
+function SkillsAdminTab() {
+  const { data: items, refresh } = useCachedList("admin:skills", () => registryApi.list("skill").then((r) => r.items ?? []));
+  const dialog = useDialog();
+  useAdminEvents(refresh);
+  const remove = async (it: RegistryItem) => {
+    const ok = await dialog.confirm({ title: `Delete "${it.name}"?`, message: "Removes it from the registry and the GitHub repo.", confirmLabel: "Delete", danger: true });
+    if (ok) { await registryApi.remove(it.id).catch(() => {}); refresh(); }
+  };
+  return (
+    <div>
+      <h2 className="mb-3 text-sm font-bold text-white">Community skills</h2>
+      {!items ? (
+        <div className="flex justify-center py-8"><Loader2 className="h-4 w-4 animate-spin text-white/40" /></div>
+      ) : items.length === 0 ? (
+        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4 text-center text-xs text-white/40">No skills yet.</div>
+      ) : (
+        <div className="space-y-1.5">
+          {items.map((it) => (
+            <div key={it.id} className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs">
+              <span className="font-semibold text-white">{it.name}</span>
+              <span className="text-white/40">by {it.author} · v{it.version} · {it.downloads} ↓</span>
+              <button onClick={() => remove(it)} className="ml-auto text-white/30 hover:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
