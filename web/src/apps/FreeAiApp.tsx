@@ -6,11 +6,8 @@ import { freeAiApi, type DonatedAccount } from "../lib/api";
 
 // Provider templates: pre-fill the endpoint so donors only paste key + model.
 const TEMPLATES: { id: string; label: string; endpoint: string }[] = [
-  { id: "custom", label: "Custom (any OpenAI-compatible)", endpoint: "" },
-  { id: "openai", label: "OpenAI", endpoint: "https://api.openai.com/v1" },
-  { id: "deepseek", label: "DeepSeek", endpoint: "https://api.deepseek.com/v1" },
-  { id: "groq", label: "Groq", endpoint: "https://api.groq.com/openai/v1" },
   { id: "openrouter", label: "OpenRouter", endpoint: "https://openrouter.ai/api/v1" },
+  { id: "custom", label: "Custom (any OpenAI-compatible)", endpoint: "" },
 ];
 
 // FreeAiApp lets users donate an AI account to the community Free AI pool. The
