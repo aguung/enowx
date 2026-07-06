@@ -107,18 +107,30 @@ function FileBrowser({ path, onPath }: { path: string | null; onPath: (p: string
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    filesApi
-      .list(path ?? undefined)
-      .then((d) => {
-        if (!alive) return;
-        setDir(d);
-        setError("");
-      })
-      .catch((e) => alive && setError(e instanceof Error ? e.message : "failed to read"))
-      .finally(() => alive && setLoading(false));
+    // reload re-lists the directory without toggling the loading spinner (used by
+    // the live watcher so external changes don't flash the whole view).
+    const reload = (spin: boolean) => {
+      if (spin) setLoading(true);
+      filesApi
+        .list(path ?? undefined)
+        .then((d) => {
+          if (!alive) return;
+          setDir(d);
+          setError("");
+        })
+        .catch((e) => alive && setError(e instanceof Error ? e.message : "failed to read"))
+        .finally(() => alive && spin && setLoading(false));
+    };
+    reload(true);
+
+    // Live-refresh: subscribe to filesystem changes for this directory so folders
+    // created/removed externally (e.g. from a terminal) appear without a manual
+    // refresh. Debounced server-side; we just re-list on each "change".
+    const es = new EventSource(filesApi.watchUrl(path ?? undefined));
+    es.addEventListener("change", () => reload(false));
     return () => {
       alive = false;
+      es.close();
     };
   }, [path]);
 

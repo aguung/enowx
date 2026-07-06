@@ -233,6 +233,7 @@ func New(addr string, d Deps) *Server {
 		r.Post("/local-sources/import", local.Import)
 
 		r.Get("/files", files.List)
+		r.Get("/files/watch", files.Watch)
 		r.Get("/files/read", files.Read)
 		r.Get("/files/raw", files.Raw)
 

@@ -451,6 +451,8 @@ export const filesApi = {
   list: (path?: string) =>
     api.get<DirListing>(`/api/files${path ? `?path=${encodeURIComponent(path)}` : ""}`),
   read: (path: string) => api.get<FileContent>(`/api/files/read?path=${encodeURIComponent(path)}`),
+  // SSE URL that emits a "change" event whenever the directory changes on disk.
+  watchUrl: (path?: string) => `/api/files/watch${path ? `?path=${encodeURIComponent(path)}` : ""}`,
 };
 
 export interface RequestSummary {
