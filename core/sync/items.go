@@ -128,7 +128,7 @@ func (m *Manager) fullSyncItems(ctx context.Context, out map[string]item) {
 					continue
 				}
 				id := typeAPIKey + ":" + shortHash(k.Secret)
-				out[id] = item{ItemID: id, Type: typeAPIKey, Version: 1, UpdatedAt: nowMillis(), Encrypted: true, Payload: payload, Nonce: nonce, KeyHash: fullHash(k.Secret)}
+				out[id] = item{ItemID: id, Type: typeAPIKey, Version: 1, UpdatedAt: nowMillis(), Encrypted: true, Payload: payload, Nonce: nonce}
 			}
 		}
 	}

@@ -488,6 +488,25 @@ func (m *Manager) FreeAIDonations(ctx context.Context) (string, error) {
 	return string(raw), nil
 }
 
+// RegisterKeyHashes sends non-secret sha256 hashes of the user's gateway API
+// keys to the cloud so they can be used to authenticate Free-AI requests. Works
+// for all users (ungated) — it's just hashes, not the key payload. Best-effort.
+func (m *Manager) RegisterKeyHashes(ctx context.Context) {
+	if m.keys == nil || !m.Enabled(ctx) {
+		return
+	}
+	list, err := m.keys.List(ctx)
+	if err != nil || len(list) == 0 {
+		return
+	}
+	hashes := make([]string, 0, len(list))
+	for _, k := range list {
+		hashes = append(hashes, fullHash(k.Secret))
+	}
+	var out json.RawMessage
+	_ = m.call(ctx, http.MethodPost, "/free-ai/register-keys", map[string]any{"hashes": hashes}, &out)
+}
+
 // FreeAIModels lists the models the pool can currently serve (with Kleos prices).
 func (m *Manager) FreeAIModels(ctx context.Context) (string, error) {
 	var raw json.RawMessage
@@ -1330,10 +1349,6 @@ type item struct {
 	Encrypted bool   `json:"encrypted"`
 	Payload   string `json:"payload,omitempty"`
 	Nonce     string `json:"nonce,omitempty"`
-	// KeyHash is a non-secret sha256 of a gateway API key's secret, sent for
-	// apikey items so the cloud can authenticate Free-AI requests by matching the
-	// bearer's hash — without ever seeing the key (the payload stays E2E-encrypted).
-	KeyHash string `json:"key_hash,omitempty"`
 }
 
 type manifestEntry struct {
@@ -1447,6 +1462,8 @@ func (m *Manager) Sync(ctx context.Context) (pushed, pulled int, err error) {
 	if pull.Now > 0 {
 		_ = m.settings.Set(ctx, keyCursor, fmt.Sprint(pull.Now))
 	}
+	// Register API-key hashes for Free-AI auth (ungated; all users). Best-effort.
+	m.RegisterKeyHashes(ctx)
 	return pushed, pulled, nil
 }
 
