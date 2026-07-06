@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Gift, Trash2, Plus, X, Check, Sparkles, Copy } from "lucide-react";
+import { Loader2, Gift, Trash2, Plus, X, Check, Sparkles, Copy, Eye, EyeOff } from "lucide-react";
 import { AppShell } from "./shell";
 import { useProfile } from "../os/useProfile";
 import { copyText } from "../os/clipboard";
-import { freeAiApi, accountsApi, type DonatedAccount, type FreeAiModel } from "../lib/api";
+import { freeAiApi, accountsApi, keysApi, type DonatedAccount, type FreeAiModel } from "../lib/api";
 
 // CopyBtn is a small inline copy button that flips to a check for a moment.
 function CopyBtn({ text, title }: { text: string; title: string }) {
@@ -19,22 +19,53 @@ function CopyBtn({ text, title }: { text: string; title: string }) {
   );
 }
 
-// EndpointBox shows how to call Free AI: the OpenAI-compatible endpoint + auth.
+// EndpointBox shows how to call Free AI: the endpoint + the user's actual API
+// key to authenticate with (or a button to create one if they have none).
 function EndpointBox() {
   const url = `${location.origin}/api/ai/v1/chat/completions`;
+  const [keys, setKeys] = useState<{ id: number; secret?: string }[] | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [reveal, setReveal] = useState(false);
+
+  const loadKeys = () => keysApi.list().then((ks) => setKeys(ks ?? [])).catch(() => setKeys([]));
+  useEffect(() => { loadKeys(); }, []);
+
+  const createKey = async () => {
+    setCreating(true);
+    try { await keysApi.add({ label: "Free AI" }); await loadKeys(); setReveal(true); }
+    finally { setCreating(false); }
+  };
+
+  const key = keys?.find((k) => k.secret)?.secret ?? "";
+  const masked = key ? key.slice(0, 8) + "…" + key.slice(-4) : "";
+
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-[11px]">
       <div className="mb-1.5 font-medium text-white/70">How to use</div>
-      <p className="mb-2 text-white/45">OpenAI-compatible. Send a chat completion to this endpoint from your gateway, authenticated with one of your gateway API keys (from the API keys app). You're charged Kleos per request based on the model.</p>
+      <p className="mb-2 text-white/45">OpenAI-compatible. POST a chat completion to this endpoint with your gateway API key as the Bearer token. You're charged Kleos per request based on the model.</p>
       <div className="flex items-center gap-2 rounded-lg bg-black/30 px-2.5 py-1.5">
         <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-emerald-300">POST</span>
         <code className="flex-1 truncate font-mono text-white/80">{url}</code>
         <CopyBtn text={url} title="Copy endpoint" />
       </div>
-      <div className="mt-1.5 flex items-center gap-2 rounded-lg bg-black/30 px-2.5 py-1.5">
-        <code className="flex-1 truncate font-mono text-white/55">Authorization: Bearer &lt;your-api-key&gt;</code>
-        <CopyBtn text="Authorization: Bearer <your-api-key>" title="Copy header" />
-      </div>
+
+      <div className="mt-2 mb-1 text-white/50">Your API key</div>
+      {keys === null ? (
+        <div className="flex h-8 items-center px-1"><Loader2 className="h-3.5 w-3.5 animate-spin text-white/30" /></div>
+      ) : key ? (
+        <div className="flex items-center gap-2 rounded-lg bg-black/30 px-2.5 py-1.5">
+          <code className="flex-1 truncate font-mono text-white/80">{reveal ? key : masked}</code>
+          <button onClick={() => setReveal((v) => !v)} className="shrink-0 rounded p-1 text-white/40 hover:bg-white/10 hover:text-white/80" title={reveal ? "Hide" : "Reveal"}>
+            {reveal ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+          </button>
+          <CopyBtn text={key} title="Copy API key" />
+        </div>
+      ) : (
+        <button onClick={createKey} disabled={creating} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white/75 hover:bg-white/10 disabled:opacity-40">
+          {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Create an API key for Free AI
+        </button>
+      )}
+      <p className="mt-1 text-[10px] text-white/30">Send it as <code className="text-white/45">Authorization: Bearer &lt;key&gt;</code>. Manage keys in the API keys app.</p>
     </div>
   );
 }
