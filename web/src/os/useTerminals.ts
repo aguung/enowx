@@ -8,6 +8,9 @@ export interface Term {
   id: number;
   title: string;
   location: TermLocation;
+  // Optional terminal-profile slug: the shell runs under that profile's isolated
+  // HOME (separate tool credentials). Undefined = default (real home).
+  profile?: string;
 }
 
 const DEFAULT: Term[] = [{ id: 0, title: "terminal", location: "center" }];
@@ -22,9 +25,9 @@ export function useTerminals() {
   const [activeCenter, setActiveCenter] = usePersisted<number>("terminals-active", 0);
   const nextId = useRef(Math.max(0, ...terms.map((t) => t.id)) + 1);
 
-  const add = useCallback(() => {
+  const add = useCallback((profile?: string) => {
     const id = nextId.current++;
-    setTerms((t) => [...t, { id, title: `terminal ${id + 1}`, location: "center" }]);
+    setTerms((t) => [...t, { id, title: `terminal ${id + 1}`, location: "center", profile }]);
     setActiveCenter(id);
   }, [setTerms, setActiveCenter]);
 

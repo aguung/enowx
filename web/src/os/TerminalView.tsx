@@ -6,7 +6,7 @@ import "@xterm/xterm/css/xterm.css";
 // TerminalView attaches xterm.js to the PTY WebSocket at /api/terminal. The
 // sessionId keys a server-side PTY that survives refreshes: on reconnect the
 // server replays this session's scrollback so the shell resumes as it was.
-export function TerminalView({ sessionId }: { sessionId: number }) {
+export function TerminalView({ sessionId, profile }: { sessionId: number; profile?: string }) {
   const host = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -31,7 +31,8 @@ export function TerminalView({ sessionId }: { sessionId: number }) {
     fit.fit();
 
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${window.location.host}/api/terminal?id=${sessionId}`);
+    const q = `id=${sessionId}${profile ? `&profile=${encodeURIComponent(profile)}` : ""}`;
+    const ws = new WebSocket(`${proto}://${window.location.host}/api/terminal?${q}`);
     ws.binaryType = "arraybuffer";
 
     const sendResize = () => {
@@ -70,7 +71,7 @@ export function TerminalView({ sessionId }: { sessionId: number }) {
       ws.close();
       term.dispose();
     };
-  }, [sessionId]);
+  }, [sessionId, profile]);
 
   return (
     <div className="h-full w-full overflow-hidden bg-[#0b0c10] p-2">

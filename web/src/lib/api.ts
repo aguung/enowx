@@ -450,6 +450,20 @@ export interface FileContent {
   content: string;
 }
 
+export interface TermProfile {
+  slug: string;
+  name: string;
+  color?: string;
+  created_at: string;
+}
+
+export const termProfilesApi = {
+  list: () => api.get<{ profiles: TermProfile[] }>("/api/term-profiles"),
+  create: (name: string, color?: string) =>
+    api.post<TermProfile>("/api/term-profiles", { name, color }),
+  remove: (slug: string) => api.del<{ ok: boolean }>(`/api/term-profiles/${slug}`),
+};
+
 export const filesApi = {
   list: (path?: string) =>
     api.get<DirListing>(`/api/files${path ? `?path=${encodeURIComponent(path)}` : ""}`),
