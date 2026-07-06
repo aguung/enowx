@@ -149,3 +149,19 @@ func TestForwardChain_RoundRobinStartsAtGivenIndex(t *testing.T) {
 		t.Errorf("expected only fakeB to be called, got %v", doer.called)
 	}
 }
+
+func TestForwardChain_EmptyTargets(t *testing.T) {
+	p, _ := newTestProxy(t, nil)
+	req := &model.Request{Model: "combo"}
+
+	stream, served, err := p.ForwardChain(context.Background(), testRoute, []string{}, 0, req)
+	if err == nil {
+		t.Fatal("expected an error for empty targets")
+	}
+	if stream != nil {
+		t.Error("expected a nil stream for empty targets")
+	}
+	if served != "" {
+		t.Errorf("served = %q, want empty string", served)
+	}
+}
