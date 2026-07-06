@@ -22,13 +22,17 @@ function CopyBtn({ text, title }: { text: string; title: string }) {
 // EndpointBox shows how to call Free AI: the endpoint + the user's actual API
 // key to authenticate with (or a button to create one if they have none).
 function EndpointBox() {
-  const url = `${location.origin}/api/ai/v1/chat/completions`;
+  const [url, setUrl] = useState("");
   const [keys, setKeys] = useState<{ id: number; secret?: string }[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [reveal, setReveal] = useState(false);
 
   const loadKeys = () => keysApi.list().then((ks) => setKeys(ks ?? [])).catch(() => setKeys([]));
-  useEffect(() => { loadKeys(); }, []);
+  useEffect(() => {
+    loadKeys();
+    // The inference endpoint is on the cloud (dev or prod per the gateway config).
+    freeAiApi.info().then((i) => setUrl(i.endpoint)).catch(() => {});
+  }, []);
 
   const createKey = async () => {
     setCreating(true);

@@ -245,6 +245,7 @@ func New(addr string, d Deps) *Server {
 		r.Post("/registry/publish", registryH.Publish)
 
 		// Free AI — account donation + available models.
+		r.Get("/ai/info", freeAI.Info)
 		r.Get("/ai/models", freeAI.Models)
 		r.Post("/free-ai/donate", freeAI.Donate)
 		r.Get("/free-ai/donations", freeAI.List)

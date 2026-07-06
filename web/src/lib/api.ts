@@ -917,6 +917,8 @@ export interface FreeAiModel {
   kleos_per_1m_out: number;
 }
 export const freeAiApi = {
+  // Where to send Free-AI requests (cloud endpoint per the gateway's config).
+  info: () => api.get<{ endpoint: string; base: string }>("/api/ai/info"),
   // Models the pool can currently serve (only models with a live donated account).
   models: () => api.get<{ data: FreeAiModel[] }>("/api/ai/models"),
   fetchModels: (creds: { endpoint: string; api_key: string }) =>
