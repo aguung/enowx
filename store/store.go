@@ -157,6 +157,42 @@ type AliasStore interface {
 	Map(ctx context.Context) map[string]string // alias→target, for the resolver
 }
 
+// ComboStrategy selects how a combo picks among its ordered targets.
+type ComboStrategy int16
+
+const (
+	ComboFailover   ComboStrategy = 0
+	ComboRoundRobin ComboStrategy = 1
+)
+
+// ModelCombo is a per-user local virtual model that resolves to an ordered list
+// of real provider-prefixed targets (e.g. "kr/claude-sonnet-4-5"), tried in
+// order (failover) or starting from a rotating position (round_robin).
+type ModelCombo struct {
+	ID       int64         `json:"id"`
+	Name     string        `json:"name"`
+	Targets  []string      `json:"targets"`
+	Strategy ComboStrategy `json:"strategy"`
+}
+
+// ComboStore holds the user's local model combos.
+type ComboStore interface {
+	List(ctx context.Context) ([]ModelCombo, error)
+	Add(ctx context.Context, c ModelCombo) (int64, error)
+	Update(ctx context.Context, c ModelCombo) error // by ID: rename / reorder targets / change strategy
+	Delete(ctx context.Context, id int64) error
+	Map(ctx context.Context) map[string]ModelCombo // name -> combo, for the resolver cache
+	// NextIndex reads the combo's persisted round-robin cursor and advances it,
+	// returning the PRE-advance value to use as this request's start index. No
+	// cursor is held in memory — every call is a fresh read+write on the row.
+	NextIndex(ctx context.Context, id int64, mod int) (int, error)
+	// SetByName upserts and DeleteByName removes a combo keyed by name (not id)
+	// — used by the sync layer, where name is the only identity stable across
+	// devices (ids are local auto-increments).
+	SetByName(ctx context.Context, name string, targets []string, strategy ComboStrategy) error
+	DeleteByName(ctx context.Context, name string) error
+}
+
 // CustomModel is one model exposed by a custom provider.
 type CustomModel struct {
 	ID   string `json:"id"`

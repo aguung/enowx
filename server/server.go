@@ -38,6 +38,7 @@ type Deps struct {
 	Music      store.MusicStore
 	SettingsKV store.SettingsStore
 	Aliases    store.AliasStore
+	Combos     store.ComboStore
 	ApiTest    store.ApiTestStore
 	Tunnel     *tunnel.Manager
 	Plugins    *plugins.Manager
@@ -58,6 +59,11 @@ func New(addr string, d Deps) *Server {
 		v1.SetAliasResolver(resolver)
 		anthropic.SetAliasResolver(resolver)
 	}
+	if d.Combos != nil {
+		comboResolver := proxy.NewComboResolver(d.Combos.Map, 30*time.Second)
+		v1.SetCombos(comboResolver, d.Combos)
+		anthropic.SetCombos(comboResolver, d.Combos)
+	}
 	providers := handlers.NewProviders(d.Registry)
 	accounts := handlers.NewAccounts(d.Accounts)
 	requests := handlers.NewRequests(d.Logs)
@@ -71,8 +77,9 @@ func New(addr string, d Deps) *Server {
 	leonardoAcc := handlers.NewLeonardo(d.Accounts, d.Doer)
 	local := handlers.NewLocal(d.Accounts)
 	usage := handlers.NewUsage(d.Registry, d.Accounts)
-	models := handlers.NewModels(d.Registry, d.Accounts, d.Sync)
-	aliases := handlers.NewAliases(d.Aliases)
+	models := handlers.NewModels(d.Registry, d.Accounts, d.Sync, d.Combos)
+	aliases := handlers.NewAliases(d.Aliases, d.Combos)
+	combos := handlers.NewCombos(d.Combos, d.Aliases)
 	apitest := handlers.NewApiTest(d.ApiTest)
 	warmup := handlers.NewWarmup(d.Proxy, d.Registry, d.Accounts, d.Warmups, d.Logs)
 	apply := handlers.NewApply(d.Accounts)
@@ -158,6 +165,10 @@ func New(addr string, d Deps) *Server {
 		r.Get("/model-aliases", aliases.List)
 		r.Post("/model-aliases", aliases.Set)
 		r.Delete("/model-aliases/{alias}", aliases.Delete)
+		r.Get("/model-combos", combos.List)
+		r.Post("/model-combos", combos.Create)
+		r.Put("/model-combos/{id}", combos.Update)
+		r.Delete("/model-combos/{id}", combos.Delete)
 
 		r.Get("/apitest", apitest.All)
 		r.Post("/apitest/collections", apitest.AddCollection)

@@ -1,4 +1,4 @@
-import { KeyRound, ScrollText, Boxes, Settings, BarChart3, FolderOpen, Flame, KeySquare, Music, Globe, UserCircle, MessagesSquare, ShoppingBag, Newspaper, Puzzle, Shuffle, Network, Smartphone, Sparkles } from "lucide-react";
+import { KeyRound, ScrollText, Boxes, Settings, BarChart3, FolderOpen, Flame, KeySquare, Music, Globe, UserCircle, MessagesSquare, ShoppingBag, Newspaper, Puzzle, Shuffle, Network, Smartphone, Sparkles, Layers } from "lucide-react";
 import type { DesktopApp } from "../os/types";
 import { AccountsApp } from "./AccountsApp";
 import { RequestsApp } from "./RequestsApp";
@@ -18,6 +18,7 @@ import { PluginsApp } from "./PluginsApp";
 import { FiltersApp } from "./FiltersApp";
 import { ProxyApp } from "./ProxyApp";
 import { OtpApp } from "./OtpApp";
+import { CombosApp } from "./CombosApp";
 import { SkillApp } from "./SkillApp";
 
 // `home` is the default location: a dock side or the Apps drawer. The dock
@@ -45,6 +46,7 @@ export function buildApps(): DesktopApp[] {
     { id: "warmup-logs", label: "Warmup Logs", icon: <Flame />, accent: "from-orange-500 to-red-600", home: "drawer", render: () => <WarmupLogsApp /> },
     { id: "filters", label: "Filters", icon: <Shuffle />, accent: "from-teal-500 to-emerald-600", home: "drawer", render: () => <FiltersApp /> },
     { id: "proxy", label: "Proxy", icon: <Network />, accent: "from-cyan-500 to-sky-700", home: "drawer", render: () => <ProxyApp /> },
+    { id: "combos", label: "Combos", icon: <Layers />, accent: "from-fuchsia-500 to-indigo-600", home: "drawer", render: () => <CombosApp /> },
     { id: "tunnel", label: "Tunnel", icon: <Globe />, accent: "from-blue-500 to-cyan-600", home: "drawer", render: () => <TunnelApp /> },
     { id: "shop", label: "Shop", icon: <ShoppingBag />, accent: "from-amber-500 to-yellow-600", home: "drawer", render: () => <ShopApp /> },
     // Admin is a moderator-only center view (see Desktop), not a docked app.

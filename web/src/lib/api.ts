@@ -367,6 +367,22 @@ export const proxyApi = {
   saveSettings: (s: ProxySettings) => api.put<{ ok: boolean }>("/api/proxies/settings", s),
 };
 
+export interface ComboItem {
+  id: number;
+  name: string;
+  targets: string[];
+  strategy: number; /* 0 = failover, 1 = round_robin */
+}
+
+export const combosApi = {
+  list: () => api.get<{ combos: ComboItem[] }>("/api/model-combos"),
+  create: (name: string, targets: string[], strategy: number) =>
+    api.post<{ id: number }>("/api/model-combos", { name, targets, strategy }),
+  update: (id: number, name: string, targets: string[], strategy: number) =>
+    api.put<{ ok: boolean }>(`/api/model-combos/${id}`, { name, targets, strategy }),
+  del: (id: number) => api.del<{ deleted: number }>(`/api/model-combos/${id}`),
+};
+
 export const marketApi = {
   publish: (id: string) => api.post<{ status: string; reason?: string; id?: number; file?: string; updated?: boolean }>("/api/market/publish", { id }),
   list: (q = "") => api.get<{ plugins: MarketPlugin[] }>(`/api/market/plugins${q ? `?q=${encodeURIComponent(q)}` : ""}`),

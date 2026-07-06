@@ -17,11 +17,13 @@ import (
 // Anthropic serves the Messages API at /anthropic/v1/messages. Inbound is
 // decoded into the single model.Request; the reply is encoded as Anthropic SSE.
 type Anthropic struct {
-	proxy    *proxy.Proxy
-	route    func(string) string
-	logs     store.LogStore
-	keys     store.KeyStore
-	resolver *proxy.AliasResolver
+	proxy      *proxy.Proxy
+	route      func(string) string
+	logs       store.LogStore
+	keys       store.KeyStore
+	resolver   *proxy.AliasResolver
+	combos     *proxy.ComboResolver
+	comboStore store.ComboStore
 }
 
 func NewAnthropic(p *proxy.Proxy, route func(string) string, logs store.LogStore, keys store.KeyStore) *Anthropic {
@@ -30,6 +32,12 @@ func NewAnthropic(p *proxy.Proxy, route func(string) string, logs store.LogStore
 
 // SetAliasResolver enables alias resolution on incoming model ids.
 func (h *Anthropic) SetAliasResolver(r *proxy.AliasResolver) { h.resolver = r }
+
+// SetCombos enables combo resolution (virtual multi-target models) on incoming
+// model ids.
+func (h *Anthropic) SetCombos(r *proxy.ComboResolver, s store.ComboStore) {
+	h.combos, h.comboStore = r, s
+}
 
 func (h *Anthropic) Messages(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
@@ -42,6 +50,12 @@ func (h *Anthropic) Messages(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request")
 		return
+	}
+	if h.combos != nil {
+		if combo, ok := h.combos.Lookup(r.Context(), req.Model); ok {
+			h.serveCombo(w, r, req, combo, start)
+			return
+		}
 	}
 	orig := req.Model
 	if h.resolver != nil {
@@ -64,6 +78,27 @@ func (h *Anthropic) Messages(w http.ResponseWriter, r *http.Request) {
 	us := wrapUsage(stream)
 	sse.WriteAnthropic(w, us, req.Model)
 	h.log(providerName, req.Model, "success", start, us.usage, trace)
+	chargeKey(r, h.keys, us.usage)
+}
+
+// serveCombo dispatches a request whose model id matched a combo definition:
+// picks a start index per the combo's strategy, walks the target chain via
+// ForwardChain, and logs/serves like a direct request would.
+func (h *Anthropic) serveCombo(w http.ResponseWriter, r *http.Request, req *model.Request, combo store.ModelCombo, start time.Time) {
+	startIdx := 0
+	if combo.Strategy == store.ComboRoundRobin && h.comboStore != nil {
+		startIdx, _ = h.comboStore.NextIndex(r.Context(), combo.ID, len(combo.Targets))
+	}
+	ctx, trace := transport.WithTrace(r.Context())
+	stream, served, err := h.proxy.ForwardChain(ctx, h.route, combo.Targets, startIdx, req)
+	if err != nil {
+		h.log("combo", req.Model, "error", start, model.Usage{}, trace)
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	us := wrapUsage(stream)
+	sse.WriteAnthropic(w, us, served)
+	h.log(h.route(served), served, "success", start, us.usage, trace)
 	chargeKey(r, h.keys, us.usage)
 }
 
