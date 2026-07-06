@@ -143,7 +143,14 @@ function Rental({ onEditKey }: { onEditKey: () => void }) {
   const rent = async () => {
     if (!service || !country || renting) return;
     setRenting(true); setError("");
-    try { await otpApi.rent(service, country); loadOrders(); loadBalance(); }
+    try {
+      // rent() returns the new order — show it immediately (optimistic) instead of
+      // relying on loadOrders(), which can miss it if the cloud hasn't indexed it
+      // yet (the number would appear to "not show up"). Then reconcile via list.
+      const order = await otpApi.rent(service, country);
+      if (order?.id) setOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
+      loadOrders(); loadBalance();
+    }
     catch (e) { setError(e instanceof Error ? e.message : "failed to rent"); }
     finally { setRenting(false); }
   };
