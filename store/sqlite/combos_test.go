@@ -60,6 +60,12 @@ func TestComboStore(t *testing.T) {
 	if err := combos.SetByName(ctx, "synced", []string{"kr/y"}, store.ComboFailover); err != nil {
 		t.Fatalf("SetByName: %v", err)
 	}
+	if err := combos.SetByName(ctx, "synced", []string{"kr/y", "cc/z"}, store.ComboRoundRobin); err != nil {
+		t.Fatalf("SetByName (upsert): %v", err)
+	}
+	if c, ok := combos.Map(ctx)["synced"]; !ok || len(c.Targets) != 2 || c.Targets[1] != "cc/z" || c.Strategy != store.ComboRoundRobin {
+		t.Errorf("SetByName did not upsert in place: %+v (ok=%v)", c, ok)
+	}
 	if err := combos.DeleteByName(ctx, "synced"); err != nil {
 		t.Fatalf("DeleteByName: %v", err)
 	}

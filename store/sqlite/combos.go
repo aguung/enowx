@@ -84,13 +84,20 @@ func (s *comboStore) NextIndex(ctx context.Context, id int64, mod int) (int, err
 	if mod <= 0 {
 		return 0, nil
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
 	var cur int
-	if err := s.db.QueryRowContext(ctx, `SELECT last_index FROM model_combos WHERE id = ?`, id).Scan(&cur); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT last_index FROM model_combos WHERE id = ?`, id).Scan(&cur); err != nil {
 		return 0, err
 	}
 	next := (cur + 1) % mod
-	_, err := s.db.ExecContext(ctx, `UPDATE model_combos SET last_index = ? WHERE id = ?`, next, id)
-	return cur, err
+	if _, err := tx.ExecContext(ctx, `UPDATE model_combos SET last_index = ? WHERE id = ?`, next, id); err != nil {
+		return 0, err
+	}
+	return cur, tx.Commit()
 }
 
 func (s *comboStore) SetByName(ctx context.Context, name string, targets []string, strategy store.ComboStrategy) error {
