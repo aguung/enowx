@@ -19,13 +19,14 @@ import (
 // with the account's credentials; the rest fall back to the cloud-managed
 // catalog (GET /models?provider=), editable from the admin panel.
 type Models struct {
-	reg   *provider.Registry
-	store store.AccountStore
-	mgr   *sync.Manager
+	reg    *provider.Registry
+	store  store.AccountStore
+	mgr    *sync.Manager
+	combos store.ComboStore
 }
 
-func NewModels(reg *provider.Registry, s store.AccountStore, mgr *sync.Manager) *Models {
-	return &Models{reg: reg, store: s, mgr: mgr}
+func NewModels(reg *provider.Registry, s store.AccountStore, mgr *sync.Manager, combos store.ComboStore) *Models {
+	return &Models{reg: reg, store: s, mgr: mgr, combos: combos}
 }
 
 func (h *Models) Get(w http.ResponseWriter, r *http.Request) {
@@ -94,6 +95,17 @@ func (h *Models) All(w http.ResponseWriter, r *http.Request) {
 			}
 			seen[m.ModelID] = true
 			out = append(out, m)
+		}
+	}
+	if h.combos != nil {
+		if combos, err := h.combos.List(r.Context()); err == nil {
+			for _, c := range combos {
+				if c.Name == "" || seen[c.Name] {
+					continue
+				}
+				seen[c.Name] = true
+				out = append(out, modelDTO{ID: c.Name, ModelID: c.Name, Name: c.Name, Type: "chat", OwnedBy: "combo"})
+			}
 		}
 	}
 	writeData(w, map[string]any{"models": out})

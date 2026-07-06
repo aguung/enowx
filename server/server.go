@@ -77,7 +77,7 @@ func New(addr string, d Deps) *Server {
 	leonardoAcc := handlers.NewLeonardo(d.Accounts, d.Doer)
 	local := handlers.NewLocal(d.Accounts)
 	usage := handlers.NewUsage(d.Registry, d.Accounts)
-	models := handlers.NewModels(d.Registry, d.Accounts, d.Sync)
+	models := handlers.NewModels(d.Registry, d.Accounts, d.Sync, d.Combos)
 	aliases := handlers.NewAliases(d.Aliases, d.Combos)
 	combos := handlers.NewCombos(d.Combos, d.Aliases)
 	apitest := handlers.NewApiTest(d.ApiTest)
