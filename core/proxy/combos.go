@@ -5,35 +5,35 @@ import (
 	"sync"
 	"time"
 
-	"github.com/enowdev/enowx/store"
+	"github.com/enowdev/enowx/core/pooltypes"
 )
 
 // ComboResolver looks up a model id against the user's local combo definitions
 // (name -> ordered targets + strategy). Definitions are cached with a lazy TTL
 // refresh, the same shape as AliasResolver — this cache is small and bounded
 // by however many combos exist. It does NOT cache round-robin state; that is
-// always read fresh from the store (see store.ComboStore.NextIndex).
+// always read fresh from the store (see pooltypes.ComboStore.NextIndex).
 type ComboResolver struct {
-	source func(ctx context.Context) map[string]store.ModelCombo
+	source func(ctx context.Context) map[string]pooltypes.ModelCombo
 	ttl    time.Duration
 
 	mu      sync.RWMutex
-	combos  map[string]store.ModelCombo
+	combos  map[string]pooltypes.ModelCombo
 	fetched time.Time
 }
 
 // NewComboResolver builds a resolver over a local combo-map source (e.g. the
 // SQLite combo store's Map method).
-func NewComboResolver(source func(ctx context.Context) map[string]store.ModelCombo, ttl time.Duration) *ComboResolver {
+func NewComboResolver(source func(ctx context.Context) map[string]pooltypes.ModelCombo, ttl time.Duration) *ComboResolver {
 	if ttl <= 0 {
 		ttl = 30 * time.Second
 	}
-	return &ComboResolver{source: source, ttl: ttl, combos: map[string]store.ModelCombo{}}
+	return &ComboResolver{source: source, ttl: ttl, combos: map[string]pooltypes.ModelCombo{}}
 }
 
 // Lookup returns the combo definition for a model id, if one exists. The
 // cached map is refreshed lazily when stale.
-func (r *ComboResolver) Lookup(ctx context.Context, modelID string) (store.ModelCombo, bool) {
+func (r *ComboResolver) Lookup(ctx context.Context, modelID string) (pooltypes.ModelCombo, bool) {
 	r.mu.RLock()
 	stale := time.Since(r.fetched) > r.ttl
 	c, ok := r.combos[modelID]

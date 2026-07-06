@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/enowdev/enowx/core/proxypool"
-	"github.com/enowdev/enowx/store"
+	"github.com/enowdev/enowx/core/pooltypes"
 )
 
 // ctxKey carries the target provider name through the request context so the
@@ -62,8 +62,8 @@ const (
 // bad proxy never hard-fails a request.
 type ProxyDoer struct {
 	inner    Doer
-	proxies  store.ProxyStore
-	settings store.SettingsStore
+	proxies  pooltypes.ProxyStore
+	settings pooltypes.SettingsStore
 
 	mu     sync.Mutex
 	rr     int                        // round-robin cursor
@@ -72,7 +72,7 @@ type ProxyDoer struct {
 }
 
 // NewProxyDoer wraps inner with proxy routing driven by the given stores.
-func NewProxyDoer(inner Doer, proxies store.ProxyStore, settings store.SettingsStore) *ProxyDoer {
+func NewProxyDoer(inner Doer, proxies pooltypes.ProxyStore, settings pooltypes.SettingsStore) *ProxyDoer {
 	return &ProxyDoer{
 		inner: inner, proxies: proxies, settings: settings,
 		sticky: map[string]int64{}, rtc: map[int64]http.RoundTripper{},
@@ -151,7 +151,7 @@ func (d *ProxyDoer) pick(ctx context.Context, prov string) (http.RoundTripper, i
 }
 
 // choose selects a proxy from the live set per mode (rotate | random | sticky).
-func (d *ProxyDoer) choose(prov, mode string, live []store.Proxy) store.Proxy {
+func (d *ProxyDoer) choose(prov, mode string, live []pooltypes.Proxy) pooltypes.Proxy {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	switch mode {
@@ -182,7 +182,7 @@ func (d *ProxyDoer) choose(prov, mode string, live []store.Proxy) store.Proxy {
 }
 
 // transportFor returns (and caches) the RoundTripper for a proxy id.
-func (d *ProxyDoer) transportFor(p store.Proxy) (http.RoundTripper, error) {
+func (d *ProxyDoer) transportFor(p pooltypes.Proxy) (http.RoundTripper, error) {
 	d.mu.Lock()
 	if rt, ok := d.rtc[p.ID]; ok {
 		d.mu.Unlock()

@@ -5,19 +5,14 @@ package store
 import (
 	"context"
 	"time"
+
+	"github.com/enowdev/enowx/core/pooltypes"
 )
 
 // Account is one upstream credential (a provider's key/token set).
-type Account struct {
-	ID        int64
-	Provider  string
-	Label     string
-	Secret    string            // single-token case (opaque here)
-	Creds     map[string]string // multi-field credentials (opaque here)
-	Status    string            // active | exhausted | banned (from upstream)
-	Disabled  bool              // turned off by the user (independent of status)
-	CreatedAt time.Time
-}
+// Account / AccountStore live in core/pooltypes (decoupled from this store
+// package); aliased so call-sites keep using store.Account / store.AccountStore.
+type Account = pooltypes.Account
 
 // RequestLog is one served request record.
 type RequestLog struct {
@@ -157,41 +152,19 @@ type AliasStore interface {
 	Map(ctx context.Context) map[string]string // alias→target, for the resolver
 }
 
-// ComboStrategy selects how a combo picks among its ordered targets.
-type ComboStrategy int16
-
-const (
-	ComboFailover   ComboStrategy = 0
-	ComboRoundRobin ComboStrategy = 1
+// Combo types live in core/pooltypes (so the transport/provider layers don't
+// depend on this store package). Aliased here so call-sites keep using
+// store.ModelCombo / store.ComboStore / store.ComboStrategy unchanged.
+type (
+	ComboStrategy = pooltypes.ComboStrategy
+	ModelCombo    = pooltypes.ModelCombo
+	ComboStore    = pooltypes.ComboStore
 )
 
-// ModelCombo is a per-user local virtual model that resolves to an ordered list
-// of real provider-prefixed targets (e.g. "kr/claude-sonnet-4-5"), tried in
-// order (failover) or starting from a rotating position (round_robin).
-type ModelCombo struct {
-	ID       int64         `json:"id"`
-	Name     string        `json:"name"`
-	Targets  []string      `json:"targets"`
-	Strategy ComboStrategy `json:"strategy"`
-}
-
-// ComboStore holds the user's local model combos.
-type ComboStore interface {
-	List(ctx context.Context) ([]ModelCombo, error)
-	Add(ctx context.Context, c ModelCombo) (int64, error)
-	Update(ctx context.Context, c ModelCombo) error // by ID: rename / reorder targets / change strategy
-	Delete(ctx context.Context, id int64) error
-	Map(ctx context.Context) map[string]ModelCombo // name -> combo, for the resolver cache
-	// NextIndex reads the combo's persisted round-robin cursor and advances it,
-	// returning the PRE-advance value to use as this request's start index. No
-	// cursor is held in memory — every call is a fresh read+write on the row.
-	NextIndex(ctx context.Context, id int64, mod int) (int, error)
-	// SetByName upserts and DeleteByName removes a combo keyed by name (not id)
-	// — used by the sync layer, where name is the only identity stable across
-	// devices (ids are local auto-increments).
-	SetByName(ctx context.Context, name string, targets []string, strategy ComboStrategy) error
-	DeleteByName(ctx context.Context, name string) error
-}
+const (
+	ComboFailover   = pooltypes.ComboFailover
+	ComboRoundRobin = pooltypes.ComboRoundRobin
+)
 
 // CustomModel is one model exposed by a custom provider.
 type CustomModel struct {
@@ -253,10 +226,8 @@ type CustomProviderStore interface {
 
 // SettingsStore is a tiny key/value store for gateway settings (e.g. the
 // dashboard password hash). Values are opaque strings.
-type SettingsStore interface {
-	Get(ctx context.Context, key string) (string, error) // "" if unset
-	Set(ctx context.Context, key, value string) error
-}
+// SettingsStore lives in core/pooltypes (decoupled); aliased here.
+type SettingsStore = pooltypes.SettingsStore
 
 // MusicTrack is one song stored in a playlist or returned from a playlist read.
 type MusicTrack struct {
@@ -345,39 +316,15 @@ type KeyStore interface {
 	Count(ctx context.Context) (int, error)
 }
 
-type AccountStore interface {
-	List(ctx context.Context, provider string) ([]Account, error)
-	Add(ctx context.Context, a Account) (int64, error)
-	SetStatus(ctx context.Context, id int64, status string) error
-	SetDisabled(ctx context.Context, id int64, disabled bool) error
-	SetLabel(ctx context.Context, id int64, label string) error
-	UpdateCreds(ctx context.Context, id int64, creds map[string]string) error
-	Delete(ctx context.Context, id int64) error
-}
+type AccountStore = pooltypes.AccountStore
 
 // Proxy is one outbound proxy in the pool.
-type Proxy struct {
-	ID          int64  `json:"id"`
-	Label       string `json:"label"`
-	Scheme      string `json:"scheme"` // http | https | socks5 | socks5h
-	Host        string `json:"host"`
-	Port        int    `json:"port"`
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	Enabled     bool   `json:"enabled"`
-	Status      string `json:"status"` // unknown | ok | dead
-	LatencyMS   int    `json:"latency_ms"`
-	LastChecked string `json:"last_checked,omitempty"`
-	CreatedAt   string `json:"created_at"`
-}
-
-type ProxyStore interface {
-	List(ctx context.Context) ([]Proxy, error)
-	Add(ctx context.Context, p Proxy) (int64, error)
-	Delete(ctx context.Context, id int64) error
-	SetEnabled(ctx context.Context, id int64, enabled bool) error
-	SetStatus(ctx context.Context, id int64, status string, latencyMS int) error
-}
+// Proxy / ProxyStore live in core/pooltypes (decoupled from this store package);
+// aliased so call-sites keep using store.Proxy / store.ProxyStore.
+type (
+	Proxy      = pooltypes.Proxy
+	ProxyStore = pooltypes.ProxyStore
+)
 
 // LogSummary aggregates request_logs for the current day (server-local).
 type LogSummary struct {

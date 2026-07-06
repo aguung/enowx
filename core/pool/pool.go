@@ -6,14 +6,14 @@ import (
 	"errors"
 
 	"github.com/enowdev/enowx/core/provider"
-	"github.com/enowdev/enowx/store"
+	"github.com/enowdev/enowx/core/pooltypes"
 )
 
 var ErrNoAccount = errors.New("no usable account")
 
-type Pool struct{ accounts store.AccountStore }
+type Pool struct{ accounts pooltypes.AccountStore }
 
-func New(a store.AccountStore) *Pool { return &Pool{accounts: a} }
+func New(a pooltypes.AccountStore) *Pool { return &Pool{accounts: a} }
 
 // Pick returns the first active account for a provider.
 func (p *Pool) Pick(ctx context.Context, providerName string) (provider.Account, error) {
