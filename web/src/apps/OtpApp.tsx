@@ -116,9 +116,29 @@ function Rental({ onEditKey }: { onEditKey: () => void }) {
   const [orders, setOrders] = useState<OtpOrder[]>([]);
   const [renting, setRenting] = useState(false);
   const [error, setError] = useState("");
+  // When each local-only (just-rented) order was first seen, so loadOrders can
+  // keep it briefly until the cloud list catches up.
+  const localSeen = useRef<Record<string, number>>({});
   const dialog = useDialog();
 
-  const loadOrders = () => otpApi.list().then((r) => setOrders(r.orders ?? [])).catch(() => {});
+  // loadOrders merges the cloud list with local state instead of replacing it, so
+  // a just-rented order the cloud hasn't indexed yet isn't wiped out (which made
+  // the number flash then disappear). Local-only orders are kept until they either
+  // show up in the list or age out (~30s).
+  const loadOrders = () =>
+    otpApi
+      .list()
+      .then((r) => {
+        const list = r.orders ?? [];
+        const ids = new Set(list.map((o) => o.id));
+        setOrders((prev) => {
+          const pending = prev.filter(
+            (o) => !ids.has(o.id) && Date.now() - (localSeen.current[o.id] ?? 0) < 30_000,
+          );
+          return [...pending, ...list];
+        });
+      })
+      .catch(() => {});
   const loadBalance = () => otpApi.balance().then(setBalance).catch(() => {});
 
   useEffect(() => {
@@ -148,7 +168,10 @@ function Rental({ onEditKey }: { onEditKey: () => void }) {
       // relying on loadOrders(), which can miss it if the cloud hasn't indexed it
       // yet (the number would appear to "not show up"). Then reconcile via list.
       const order = await otpApi.rent(service, country);
-      if (order?.id) setOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
+      if (order?.id) {
+        localSeen.current[order.id] = Date.now();
+        setOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
+      }
       loadOrders(); loadBalance();
     }
     catch (e) { setError(e instanceof Error ? e.message : "failed to rent"); }
