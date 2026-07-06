@@ -35,8 +35,8 @@ export function FilesApp() {
   const { tabs, activeId, setActive, add, close, setPath } = useFileTabs();
 
   return (
-    <AppShell title="Files" subtitle="Local file browser">
-      <div className="flex h-full flex-col">
+    <AppShell title="Files" subtitle="Local file browser" flush>
+      <div className="flex h-full flex-col p-4">
         <div className="mb-2 flex shrink-0 items-stretch rounded-xl border border-white/10 bg-black/30">
           <div className="term-tabs flex min-w-0 flex-1 items-stretch gap-0.5 overflow-x-auto p-1">
             {tabs.map((tab) => {
@@ -74,11 +74,15 @@ export function FilesApp() {
           </button>
         </div>
 
-        {tabs.map((tab) =>
-          tab.id === activeId ? (
-            <FileBrowser key={tab.id} path={tab.path} onPath={(p) => setPath(tab.id, p)} />
-          ) : null,
-        )}
+        {/* min-h-0 flex-1 gives the active browser/viewer a real height to fill
+            (the Monaco editor uses height:100%). */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          {tabs.map((tab) =>
+            tab.id === activeId ? (
+              <FileBrowser key={tab.id} path={tab.path} onPath={(p) => setPath(tab.id, p)} />
+            ) : null,
+          )}
+        </div>
       </div>
     </AppShell>
   );

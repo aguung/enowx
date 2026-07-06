@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { ArrowLeft } from "lucide-react";
 import { filesApi } from "../lib/api";
-import { AppShell } from "./shell";
 
 const langByExt: Record<string, string> = {
   ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
@@ -55,10 +54,7 @@ export function FileViewer({
   }, [path, kind]);
 
   return (
-    // flush + h-full so the Monaco editor (height:100%) has a real height to fill;
-    // rendered standalone (outside the Files list), it needs its own shell.
-    <AppShell title="Files" subtitle="Local file browser" flush>
-    <div className="flex h-full min-h-0 flex-1 flex-col p-3">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <div className="mb-3 flex items-center gap-2">
         <button
           onClick={onBack}
@@ -89,6 +85,5 @@ export function FileViewer({
         )}
       </div>
     </div>
-    </AppShell>
   );
 }
