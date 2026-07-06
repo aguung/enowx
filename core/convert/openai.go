@@ -83,6 +83,11 @@ func ToOpenAIChat(req *model.Request) []byte {
 		"model":  req.Model,
 		"stream": req.Stream,
 	}
+	// Ask the upstream to include a usage block in the final SSE chunk so token
+	// counts are available when streaming (needed for accurate accounting).
+	if req.Stream {
+		out["stream_options"] = map[string]any{"include_usage": true}
+	}
 	if req.MaxTokens > 0 {
 		out["max_tokens"] = req.MaxTokens
 	}
