@@ -16,9 +16,23 @@ import (
 
 // Keys manages gateway API keys. Keys are stored as-is (re-viewable), so the
 // secret is returned on list too.
-type Keys struct{ store store.KeyStore }
+type Keys struct {
+	store store.KeyStore
+	// onChange re-registers the user's API-key hashes with the cloud (for Free-AI
+	// auth) after a key is added or removed. Nil if not syncing.
+	onChange func()
+}
 
 func NewKeys(s store.KeyStore) *Keys { return &Keys{store: s} }
+
+// SetOnChange wires the Free-AI key-hash re-registration hook.
+func (h *Keys) SetOnChange(f func()) { h.onChange = f }
+
+func (h *Keys) changed() {
+	if h.onChange != nil {
+		go h.onChange()
+	}
+}
 
 type keyDTO struct {
 	ID            int64   `json:"id"`
@@ -99,6 +113,7 @@ func (h *Keys) Add(w http.ResponseWriter, r *http.Request) {
 		writeAPIErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.changed() // register the new key's hash with the cloud (Free-AI auth)
 	writeData(w, map[string]any{"id": id, "secret": secret})
 }
 
@@ -119,6 +134,7 @@ func (h *Keys) Delete(w http.ResponseWriter, r *http.Request) {
 		writeAPIErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	h.changed() // re-register remaining key hashes with the cloud
 	writeData(w, map[string]any{"ok": true})
 }
 

@@ -1462,8 +1462,6 @@ func (m *Manager) Sync(ctx context.Context) (pushed, pulled int, err error) {
 	if pull.Now > 0 {
 		_ = m.settings.Set(ctx, keyCursor, fmt.Sprint(pull.Now))
 	}
-	// Register API-key hashes for Free-AI auth (ungated; all users). Best-effort.
-	m.RegisterKeyHashes(ctx)
 	return pushed, pulled, nil
 }
 

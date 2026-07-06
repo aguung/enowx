@@ -90,6 +90,10 @@ func New(addr string, d Deps) *Server {
 	if d.Sync != nil {
 		accounts.SetSyncPush(func() { _, _, _ = d.Sync.Sync(context.Background()) })
 		accounts.SetDonate(d.Sync.DonateLocalAccount)
+		// Keep the cloud's Free-AI key-hash registry in sync: on key add/remove,
+		// and once at startup (covers free users who don't auto-sync).
+		keys.SetOnChange(func() { d.Sync.RegisterKeyHashes(context.Background()) })
+		go d.Sync.RegisterKeyHashes(context.Background())
 	}
 	kiro.SetWarmer(warmup)
 	codex.SetWarmer(warmup)
