@@ -880,6 +880,18 @@ export interface ShopState {
   equipped: Equipped;
 }
 
+export interface DailyClaim {
+  claimed_today: number;
+  reclaimed: number;
+  date_reclaimed: string;
+  total_awarded: number;
+  balance: number;
+  already_claimed: boolean;
+}
+export const kleosApi = {
+  daily: () => api.post<DailyClaim>("/api/kleos/daily", {}),
+};
+
 export const shopApi = {
   get: () => api.get<ShopState>("/api/shop"),
   buy: (item_id: string) => api.post<{ kleos: number; owned: string[] }>("/api/shop/buy", { item_id }),
