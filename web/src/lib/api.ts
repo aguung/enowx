@@ -371,7 +371,7 @@ export interface ComboItem {
   id: number;
   name: string;
   targets: string[];
-  strategy: number;
+  strategy: number; /* 0 = failover, 1 = round_robin */
 }
 
 export const combosApi = {

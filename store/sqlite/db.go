@@ -154,19 +154,19 @@ func seedApiTest(db *sql.DB) {
 	db.Exec(`INSERT INTO apitest_environments (name, vars, active) VALUES ('Local', ?, 1)`, vars)
 }
 
-func (d *DB) Accounts() store.AccountStore  { return d.acct }
-func (d *DB) Logs() store.LogStore          { return d.logs }
-func (d *DB) Keys() store.KeyStore          { return d.keys }
-func (d *DB) Warmups() store.WarmupStore    { return d.warmups }
-func (d *DB) Music() store.MusicStore       { return d.music }
-func (d *DB) Settings() store.SettingsStore { return d.settings }
-func (d *DB) Aliases() store.AliasStore     { return d.aliases }
-func (d *DB) ApiTest() store.ApiTestStore   { return d.apitest }
+func (d *DB) Accounts() store.AccountStore               { return d.acct }
+func (d *DB) Logs() store.LogStore                       { return d.logs }
+func (d *DB) Keys() store.KeyStore                       { return d.keys }
+func (d *DB) Warmups() store.WarmupStore                 { return d.warmups }
+func (d *DB) Music() store.MusicStore                    { return d.music }
+func (d *DB) Settings() store.SettingsStore              { return d.settings }
+func (d *DB) Aliases() store.AliasStore                  { return d.aliases }
+func (d *DB) ApiTest() store.ApiTestStore                { return d.apitest }
 func (d *DB) CustomProviders() store.CustomProviderStore { return d.custom }
 func (d *DB) Filters() store.FilterStore                 { return d.filters }
 func (d *DB) Proxies() store.ProxyStore                  { return d.proxies }
-func (d *DB) Combos() store.ComboStore                    { return d.combos }
-func (d *DB) Close() error                  { return d.db.Close() }
+func (d *DB) Combos() store.ComboStore                   { return d.combos }
+func (d *DB) Close() error                               { return d.db.Close() }
 
 func migrate(db *sql.DB) error {
 	files, err := fs.Glob(migrations, "migrations/*.sql")
