@@ -7,7 +7,7 @@ import { useProfile } from "../os/useProfile";
 import { useDialog } from "../os/dialog";
 import { FileSearch, X, Store, Check, Puzzle, ShoppingBag } from "lucide-react";
 import { Tooltip } from "../components/Tooltip";
-import { adminApi, modApi, searchApi, adminVipApi, couponAdminApi, redeemAdminApi, registryApi, inboxAdminApi, subscriptionApi, bugAdminApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type InboxMessage, type InboxRole, type UserHit, type NickTier, type UserDetail, type RegistryItem } from "../lib/api";
+import { adminApi, gmailAdminApi, modApi, searchApi, adminVipApi, couponAdminApi, redeemAdminApi, registryApi, inboxAdminApi, subscriptionApi, bugAdminApi, type FlaggedLink, type ModAction, type AdminStats, type ProviderModel, type PluginReview, type PluginReviewDetail, type AdminMarketPlugin, type VIPProduct, type VIPService, type InboxMessage, type InboxRole, type UserHit, type NickTier, type UserDetail, type RegistryItem, type GmailStockRow, type GmailOrderRow } from "../lib/api";
 import { copyText } from "../os/clipboard";
 import { useCachedList, setCachedList } from "../os/useCachedList";
 
@@ -839,6 +839,7 @@ function OfficialStoreTab() {
 
   return (
     <div className="space-y-4">
+      <GmailStockPanel />
       <div className="flex items-center justify-between">
         <div className="text-xs text-white/60">VIP balance: <span className="font-semibold text-emerald-300">{balance === null ? "—" : "Rp " + balance.toLocaleString("id-ID")}</span></div>
         <div className="flex gap-1.5">
@@ -1337,6 +1338,75 @@ function BugReportsTab() {
       {zoom && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-6" onClick={() => setZoom(null)}>
           <img src={zoom} alt="" className="max-h-full max-w-full rounded-lg" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// GmailStockPanel manages the Gmail store stock (GOD-only; server enforces).
+function GmailStockPanel() {
+  const [data, setData] = useState<{ counts: { available: number; reserved: number; sold: number }; price_per_account: number; stock: GmailStockRow[] } | null>(null);
+  const [text, setText] = useState("");
+  const [price, setPrice] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [orders, setOrders] = useState<GmailOrderRow[] | null>(null);
+
+  const load = () => gmailAdminApi.stock().then((d) => { setData(d); setPrice(String(d.price_per_account)); }).catch(() => setData(null));
+  useEffect(() => { load(); }, []);
+
+  const add = async () => {
+    if (!text.trim()) return;
+    setBusy(true); setMsg("");
+    try { const r = await gmailAdminApi.add(text); setMsg(`Added ${r.added} of ${r.submitted}.`); setText(""); load(); }
+    catch (e) { setMsg(e instanceof Error ? e.message : "failed"); }
+    finally { setBusy(false); }
+  };
+  const savePrice = async () => {
+    const n = Number(price);
+    if (!n || n < 1) return;
+    try { await gmailAdminApi.setPrice(n); setMsg(`Price set to Rp${n.toLocaleString()}/account.`); load(); } catch { /* ignore */ }
+  };
+  const showOrders = () => gmailAdminApi.orders().then((r) => setOrders(r.orders ?? [])).catch(() => setOrders([]));
+
+  return (
+    <div className="rounded-xl border border-sky-400/20 bg-sky-400/[0.03] p-3.5">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-xs font-semibold text-sky-200">Gmail stock</span>
+        {data && (
+          <span className="text-[11px] text-white/45">
+            {data.counts.available} available · {data.counts.reserved} reserved · {data.counts.sold} sold
+          </span>
+        )}
+        <button onClick={showOrders} className="ml-auto text-[11px] text-white/40 hover:text-white/70">View orders</button>
+      </div>
+
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[11px] text-white/50">Price per account (Rp)</span>
+        <input value={price} onChange={(e) => setPrice(e.target.value)} className="w-24 rounded-md border border-white/10 bg-black/25 px-2 py-1 text-xs text-white/80 outline-none" />
+        <button onClick={savePrice} className="rounded-md bg-white/10 px-2 py-1 text-[11px] text-white/80 hover:bg-white/15">Save</button>
+      </div>
+
+      <textarea
+        value={text} onChange={(e) => setText(e.target.value)} rows={4}
+        placeholder="Paste accounts, one per line:&#10;email@gmail.com:password&#10;email2@gmail.com:password:recovery@x.com"
+        className="w-full rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 font-mono text-[11px] text-white/80 outline-none focus:border-white/25"
+      />
+      <div className="mt-2 flex items-center gap-2">
+        <button onClick={add} disabled={busy || !text.trim()} className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black hover:opacity-90 disabled:opacity-40">Add to stock</button>
+        <button onClick={load} className="rounded-lg border border-white/10 px-2 py-1.5 text-[11px] text-white/50 hover:bg-white/5">Refresh</button>
+        {msg && <span className="text-[11px] text-emerald-300">{msg}</span>}
+      </div>
+
+      {orders && (
+        <div className="mt-3 max-h-40 overflow-auto rounded-lg border border-white/10 bg-black/20 p-2 text-[11px]">
+          {orders.length === 0 ? <div className="text-white/35">No orders yet.</div> : orders.map((o) => (
+            <div key={o.id} className="flex items-center gap-2 py-0.5 text-white/60">
+              <span className="flex-1 truncate">{o.username ?? "?"} · {o.quantity}× · Rp{o.price_idr.toLocaleString()}</span>
+              <span className={o.status === "delivered" ? "text-emerald-300" : o.status === "pending" ? "text-amber-300" : "text-white/40"}>{o.status}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>

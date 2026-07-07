@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Loader2, Coins, Check, Lock, Gift } from "lucide-react";
+import { Loader2, Coins, Check, Lock, Gift, Mail, ExternalLink, Copy } from "lucide-react";
 import { AppShell } from "./shell";
 import { useProfile, refreshProfile } from "../os/useProfile";
-import { shopApi, kleosApi, type ShopState, type CosmeticItem, type Equipped } from "../lib/api";
+import { shopApi, kleosApi, gmailStoreApi, type ShopState, type CosmeticItem, type Equipped, type GmailAccount } from "../lib/api";
+import { copyText } from "../os/clipboard";
 import { effectClass } from "../os/tier";
 
 // equippedPayload reads the equipped payload for a cosmetic kind.
@@ -115,6 +116,9 @@ export function ShopApp() {
       </div>
       {dailyMsg && <div className="mb-3 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-xs text-emerald-200">{dailyMsg}</div>}
 
+      {/* Official store: real products bought with money (IDR/Duitku). */}
+      <GmailStoreCard />
+
       {!shop ? (
         <div className="flex h-32 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-white/30" /></div>
       ) : (
@@ -191,5 +195,94 @@ function Preview({ item }: { item: CosmeticItem }) {
     <div className={`flex h-10 items-center justify-center rounded-lg bg-black/20 text-[11px] text-white/70 ${effectClass(item.payload)}`}>
       {item.name}
     </div>
+  );
+}
+
+// GmailStoreCard sells Gmail accounts from stock, paid with Duitku (IDR).
+function GmailStoreCard() {
+  const [info, setInfo] = useState<{ price_per_account: number; available: number } | null>(null);
+  const [qty, setQty] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [ref, setRef] = useState<string | null>(null);
+  const [status, setStatus] = useState<string>("");
+  const [accounts, setAccounts] = useState<GmailAccount[] | null>(null);
+  const [err, setErr] = useState("");
+
+  const load = () => gmailStoreApi.info().then(setInfo).catch(() => setInfo(null));
+  useEffect(() => { load(); }, []);
+
+  // Poll a pending order until paid/delivered.
+  useEffect(() => {
+    if (!ref || accounts) return;
+    const id = setInterval(async () => {
+      try {
+        const s = await gmailStoreApi.orderStatus(ref);
+        setStatus(s.status);
+        if (s.status === "delivered") {
+          const a = await gmailStoreApi.accounts(ref);
+          setAccounts(a.accounts ?? []);
+          load();
+        } else if (s.status === "failed" || s.status === "expired") {
+          setErr("Payment wasn't completed.");
+          setRef(null);
+        }
+      } catch { /* keep polling */ }
+    }, 4000);
+    return () => clearInterval(id);
+  }, [ref, accounts]);
+
+  const buy = async () => {
+    setErr(""); setBusy(true);
+    try {
+      const r = await gmailStoreApi.buy(qty);
+      setRef(r.order_ref); setStatus("pending");
+      window.open(r.checkout_url, "_blank", "noreferrer");
+    } catch (e) { setErr(e instanceof Error ? e.message : "failed to start order"); }
+    finally { setBusy(false); }
+  };
+
+  if (!info || info.available === 0) return null; // hide when out of stock or unavailable
+
+  return (
+    <section className="mb-5">
+      <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-white/40">Official store</h2>
+      <div className="rounded-xl border border-sky-400/20 bg-sky-400/[0.04] p-3.5">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-400/15"><Mail className="h-4.5 w-4.5 text-sky-300" /></span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-white">Gmail account</p>
+            <p className="text-[11px] text-white/40">Rp{info.price_per_account.toLocaleString()} each · {info.available} in stock</p>
+          </div>
+        </div>
+
+        {accounts ? (
+          <div className="mt-3 space-y-1.5">
+            <p className="text-[11px] font-medium text-emerald-300">Delivered — save these now:</p>
+            {accounts.map((a) => (
+              <div key={a.email} className="flex items-center gap-2 rounded-lg bg-black/30 px-2.5 py-1.5 text-[11px]">
+                <code className="flex-1 truncate font-mono text-white/80">{a.email} : {a.password}</code>
+                <button onClick={() => copyText(`${a.email}:${a.password}`)} className="shrink-0 rounded p-1 text-white/40 hover:bg-white/10 hover:text-white/80"><Copy className="h-3 w-3" /></button>
+              </div>
+            ))}
+          </div>
+        ) : ref ? (
+          <div className="mt-3 flex items-center gap-2 rounded-lg bg-black/25 px-3 py-2 text-[11px] text-white/60">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Waiting for payment… ({status}). Complete it in the opened tab.
+          </div>
+        ) : (
+          <div className="mt-3 flex items-center gap-2">
+            <input type="number" min={1} max={Math.min(info.available, 100)} value={qty}
+              onChange={(e) => setQty(Math.max(1, Math.min(info.available, Number(e.target.value) || 1)))}
+              className="w-16 rounded-lg border border-white/10 bg-black/25 px-2 py-1.5 text-sm text-white/80 outline-none" />
+            <button onClick={buy} disabled={busy}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-sky-400 px-3 py-1.5 text-xs font-semibold text-sky-950 hover:bg-sky-300 disabled:opacity-50">
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+              Buy for Rp{(info.price_per_account * qty).toLocaleString()}
+            </button>
+          </div>
+        )}
+        {err && <p className="mt-2 text-[11px] text-red-300">{err}</p>}
+      </div>
+    </section>
   );
 }

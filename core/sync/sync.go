@@ -910,6 +910,81 @@ func (m *Manager) Subscription(ctx context.Context) (string, error) {
 	return string(raw), nil
 }
 
+// --- Gmail store proxies ---
+
+func (m *Manager) GmailStoreInfo(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/store/gmail", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) GmailBuy(ctx context.Context, body any) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPost, "/store/gmail/order", body, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) GmailOrderStatus(ctx context.Context, ref string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/store/gmail/order/"+url.PathEscape(ref), nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) GmailOrderAccounts(ctx context.Context, ref string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/store/gmail/order/"+url.PathEscape(ref)+"/accounts", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// Admin (GOD-only, enforced server-side).
+func (m *Manager) AdminGmailStock(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/gmail/stock", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) AdminGmailAddStock(ctx context.Context, body any) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPost, "/admin/gmail/stock", body, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) AdminGmailDeleteStock(ctx context.Context, id string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodDelete, "/admin/gmail/stock/"+url.PathEscape(id), nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) AdminGmailOrders(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/gmail/orders", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) AdminGmailSetPrice(ctx context.Context, body any) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPut, "/admin/gmail/price", body, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // SubscriptionOrderStatus proxies a poll of a subscription order's status.
 func (m *Manager) SubscriptionOrderStatus(ctx context.Context, ref string) (string, error) {
 	var raw json.RawMessage
