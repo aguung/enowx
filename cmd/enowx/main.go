@@ -10,6 +10,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -122,6 +123,17 @@ func runServer() {
 	tun := tunnel.New(cfg.RuntimeDir, cfg.Port)
 	pluginMgr := plugins.New(cfg.PluginsDir(), cfg.Port)
 	syncMgr := syncpkg.New(db.Settings(), db.Music(), db.Logs())
+
+	// Plugins are premium-only: a plugin can only run/serve when the signed-in
+	// user has the entitlement (checked before the sidecar spawns and before the
+	// UI is served), so sharing a plugin and installing it manually doesn't bypass
+	// the paywall.
+	pluginMgr.SetGate(func() error {
+		if syncMgr.HasEntitlement(context.Background(), "plugins.use") {
+			return nil
+		}
+		return errors.New("plugins are a Premium feature — upgrade to use them")
+	})
 
 	// User-defined (custom) providers: register the stored ones live, then keep
 	// the registry/prefix/catalog in sync on change.

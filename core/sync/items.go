@@ -61,14 +61,26 @@ func (m *Manager) cachedMe(ctx context.Context) cachedMe {
 	return me
 }
 
-// hasFullSync reports whether the logged-in user may sync the gated types.
-func (m *Manager) hasFullSync(ctx context.Context) bool {
+// hasEntitlement reports whether the logged-in user has a capability, per the
+// cached /me. The cloud is the source of truth; this is its last synced value.
+func (m *Manager) hasEntitlement(ctx context.Context, cap string) bool {
 	for _, e := range m.cachedMe(ctx).Entitlements {
-		if e == "cloud.sync.full" {
+		if e == cap {
 			return true
 		}
 	}
 	return false
+}
+
+// hasFullSync reports whether the logged-in user may sync the gated types.
+func (m *Manager) hasFullSync(ctx context.Context) bool {
+	return m.hasEntitlement(ctx, "cloud.sync.full")
+}
+
+// HasEntitlement is the exported check other packages use to gate features on the
+// user's cloud entitlements (e.g. plugins.use for premium-only plugins).
+func (m *Manager) HasEntitlement(ctx context.Context, cap string) bool {
+	return m.hasEntitlement(ctx, cap)
 }
 
 // credKey derives the AES key for sealing credentials, or nil if unavailable.

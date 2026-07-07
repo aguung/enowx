@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Square, Trash2, Plus, X, ScrollText, ExternalLink, Puzzle, AlertTriangle, RefreshCw, FolderOpen, UploadCloud, Store, Download, Loader2 } from "lucide-react";
+import { Play, Square, Trash2, Plus, X, ScrollText, ExternalLink, Puzzle, AlertTriangle, RefreshCw, FolderOpen, UploadCloud, Store, Download, Loader2, Crown } from "lucide-react";
 import { AppShell, Empty } from "./shell";
 import { Tooltip } from "../components/Tooltip";
 import { useDialog } from "../os/dialog";
@@ -25,6 +25,7 @@ export function PluginsApp() {
   const [logsFor, setLogsFor] = useState<string | null>(null);
   const [openFor, setOpenFor] = useState<PluginManifest | null>(null);
   const dialog = useDialog();
+  const isPremium = useProfile().has("plugins.use");
 
   const load = async () => {
     try {
@@ -92,6 +93,14 @@ export function PluginsApp() {
 
   return (
     <AppShell title="Plugins" subtitle="Build and run your own apps & automations">
+      {!isPremium && (
+        <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-amber-400/25 bg-amber-400/[0.06] px-3 py-2.5">
+          <Crown className="h-4 w-4 shrink-0 text-amber-300" />
+          <div className="flex-1 text-[11px] leading-snug text-amber-100/90">
+            Plugins are a <span className="font-semibold">Premium</span> feature. You can browse, but installing and running plugins needs Premium — the gateway enforces it, so shared plugins won't run without it.
+          </div>
+        </div>
+      )}
       <div className="mb-3 flex gap-1">
         <button onClick={() => setTab("mine")} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${tab === "mine" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><Puzzle className="h-3.5 w-3.5" /> My Plugins</button>
         <button onClick={() => setTab("market")} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium ${tab === "market" ? "bg-white/12 text-white" : "text-white/50 hover:bg-white/5"}`}><Store className="h-3.5 w-3.5" /> Marketplace</button>

@@ -26,6 +26,12 @@ func (m *Manager) Handler() http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		// Gate serving the plugin (premium-only): blocks static plugins (which
+		// never call Start) and the UI of any plugin for non-entitled users.
+		if err := m.authorized(); err != nil {
+			http.Error(w, err.Error(), http.StatusPaymentRequired)
+			return
+		}
 
 		if man.Runtime == "static" {
 			// Serve the plugin folder; default to the manifest UI at the root.

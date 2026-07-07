@@ -38,6 +38,12 @@ type Manager struct {
 	dir       string
 	enowxPort int
 
+	// gate, if set, authorizes running/serving a plugin (returns a non-nil error
+	// to deny). Used to make plugins premium-only: it's checked before a process
+	// is spawned and before a static plugin is served, so a shared plugin that's
+	// installed manually still can't run without the entitlement.
+	gate func() error
+
 	mu    sync.Mutex
 	procs map[string]*proc
 }
@@ -45,6 +51,17 @@ type Manager struct {
 func New(pluginsDir string, enowxPort int) *Manager {
 	_ = os.MkdirAll(pluginsDir, 0o755)
 	return &Manager{dir: pluginsDir, enowxPort: enowxPort, procs: map[string]*proc{}}
+}
+
+// SetGate installs the authorization check run before a plugin executes/serves.
+func (m *Manager) SetGate(f func() error) { m.gate = f }
+
+// authorized runs the gate (if any); nil means allowed.
+func (m *Manager) authorized() error {
+	if m.gate == nil {
+		return nil
+	}
+	return m.gate()
 }
 
 // Dir returns the plugins root directory.
@@ -93,6 +110,9 @@ func (m *Manager) port(id string) int {
 
 // Start spawns a plugin's sidecar (no-op for static plugins).
 func (m *Manager) Start(id string) error {
+	if err := m.authorized(); err != nil {
+		return err
+	}
 	man, err := m.Get(id)
 	if err != nil {
 		return err
