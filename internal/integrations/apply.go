@@ -25,6 +25,9 @@ func StatusOf(s Spec, ourBase string) Status {
 		}
 	}
 	st.Connected, st.Models = toolConnected(s, ourBase)
+	if st.Models == nil {
+		st.Models = []string{} // marshal as [] not null so the UI can .length safely
+	}
 	return st
 }
 

@@ -141,12 +141,3 @@ func isOurBase(cfgURL, ourBase string) bool {
 
 // isOurKey reports whether an API key is one we issued (enx- prefix).
 func isOurKey(k string) bool { return strings.HasPrefix(strings.TrimSpace(k), "enx-") }
-
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return v
-		}
-	}
-	return ""
-}

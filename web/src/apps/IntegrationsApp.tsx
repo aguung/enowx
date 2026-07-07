@@ -84,7 +84,7 @@ function ToolCard({ tool, onConnect, onDisconnect }: { tool: Integration; onConn
         <Pill on={tool.installed} onText="Installed" offText="Not installed" />
         <Pill on={tool.connected} onText="Connected" offText="Not connected" accent />
       </div>
-      {tool.connected && tool.models.length > 0 && (
+      {tool.connected && (tool.models?.length ?? 0) > 0 && (
         <p className="mt-1.5 truncate text-[10px] text-white/40">{tool.models.join(", ")}</p>
       )}
       <div className="mt-auto pt-3">
@@ -115,7 +115,7 @@ function ConnectModal({ tool, info, models, onClose, onDone }: {
   onClose: () => void; onDone: () => void;
 }) {
   const [tab, setTab] = useState<"apply" | "snippet">("apply");
-  const [selected, setSelected] = useState<string[]>(tool.models.length ? tool.models : []);
+  const [selected, setSelected] = useState<string[]>(tool.models ?? []);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
