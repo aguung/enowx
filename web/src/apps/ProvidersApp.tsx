@@ -9,7 +9,7 @@ import { CodexAddModal } from "../components/CodexAddModal";
 import { AntigravityAddModal } from "../components/AntigravityAddModal";
 import { LeonardoAddModal } from "../components/LeonardoAddModal";
 import { useDialog } from "../os/dialog";
-import { providersApi, accountsApi, customProviderApi, type Provider, type Account, type CustomModel } from "../lib/api";
+import { providersApi, accountsApi, customProviderApi, type Provider, type Account, type CustomModel, rotationApi} from "../lib/api";
 
 export function ProvidersApp() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -210,6 +210,27 @@ function ProviderCard({
           <button onClick={onDelete} title="Delete provider" className="shrink-0 rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/40 hover:bg-red-500/20 hover:text-red-200"><Trash2 className="h-3.5 w-3.5" /></button>
         )}
       </div>
+      {provider.name === "claudecode" && count > 1 && <RotationToggle provider={provider.name} />}
+    </div>
+  );
+}
+
+// RotationToggle lets the user pick sticky vs round-robin account selection for a
+// ban-sensitive provider. Sticky keeps one account until it dies; round-robin
+// spreads requests across accounts so no single one carries all the traffic.
+function RotationToggle({ provider }: { provider: string }) {
+  const [mode, setMode] = useState<"sticky" | "round-robin" | null>(null);
+  useEffect(() => { rotationApi.get(provider).then((r) => setMode(r.mode === "round-robin" ? "round-robin" : "sticky")).catch(() => setMode("sticky")); }, [provider]);
+  const set = async (m: "sticky" | "round-robin") => { setMode(m); try { await rotationApi.set(provider, m); } catch { /* revert on next load */ } };
+  if (mode === null) return null;
+  return (
+    <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2">
+      <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-white/40">Account rotation</p>
+      <div className="flex gap-1">
+        <button onClick={() => set("sticky")} className={`flex-1 rounded-md px-2 py-1 text-[11px] ${mode === "sticky" ? "bg-sky-500/80 text-white" : "text-white/50 hover:bg-white/5"}`}>Sticky</button>
+        <button onClick={() => set("round-robin")} className={`flex-1 rounded-md px-2 py-1 text-[11px] ${mode === "round-robin" ? "bg-sky-500/80 text-white" : "text-white/50 hover:bg-white/5"}`}>Round-robin</button>
+      </div>
+      <p className="mt-1.5 text-[10px] leading-tight text-white/35">{mode === "round-robin" ? "Spreads requests across all accounts." : "Uses one account until it dies."}</p>
     </div>
   );
 }

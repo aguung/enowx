@@ -634,6 +634,12 @@ export const settingsApi = {
   get: () => api.get<Settings>("/api/settings"),
 };
 
+export const rotationApi = {
+  get: (provider: string) => api.get<{ mode: string }>(`/api/providers/${provider}/rotation`),
+  set: (provider: string, mode: string) => api.put<{ ok: boolean; mode: string }>(`/api/providers/${provider}/rotation`, { mode }),
+};
+
+
 export interface InboxMessage {
   id: number;
   title: string;

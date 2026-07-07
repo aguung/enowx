@@ -146,6 +146,8 @@ func New(addr string, d Deps) *Server {
 		// inside Require so a first-time remote user can still sign in.
 		r.Use(dash.Require)
 		r.Get("/providers", providers.List)
+		r.Get("/providers/{name}/rotation", proxies.GetRotation)
+		r.Put("/providers/{name}/rotation", proxies.SetRotation)
 		r.Get("/filters", filters.List)
 		r.Post("/filters", filters.Add)
 		r.Patch("/filters/{id}", filters.Update)

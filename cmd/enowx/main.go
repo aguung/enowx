@@ -118,7 +118,7 @@ func runServer() {
 	reg.Register(sunoprovider.New(doer))
 	reg.Register(leonardoprovider.New(doer))
 
-	px := proxy.New(reg, pool.New(db.Accounts()), doer)
+	px := proxy.New(reg, pool.New(db.Accounts()).WithSettings(db.Settings()), doer)
 	tun := tunnel.New(cfg.RuntimeDir, cfg.Port)
 	pluginMgr := plugins.New(cfg.PluginsDir(), cfg.Port)
 	syncMgr := syncpkg.New(db.Settings(), db.Music(), db.Logs())
