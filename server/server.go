@@ -239,10 +239,6 @@ func New(addr string, d Deps) *Server {
 		r.Get("/files", files.List)
 		r.Get("/files/watch", files.Watch)
 
-		// TV: HLS stream proxy (CORS fallback for IPTV channels).
-		tv := handlers.NewTV(dash)
-		r.Get("/tv/proxy", tv.Proxy)
-		r.Get("/tv/channels", tv.Channels)
 
 		// Terminal profiles (per-terminal credential isolation via HOME).
 		termProfiles := handlers.NewTermProfiles(dash)

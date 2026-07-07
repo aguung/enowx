@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { LayoutGrid, SquareTerminal, BookOpen, Grid3x3, Bot, FlaskConical, ShieldCheck, Store, Tv } from "lucide-react";
+import { LayoutGrid, SquareTerminal, BookOpen, Grid3x3, Bot, FlaskConical, ShieldCheck, Store } from "lucide-react";
 import { buildApps } from "../apps";
 import { SideDock } from "./SideDock";
 import { SidePanel } from "./SidePanel";
@@ -27,7 +27,6 @@ import { AdminApp } from "../apps/AdminApp";
 import { MarketplaceApp } from "../apps/MarketplaceApp";
 import { AiChatApp } from "../apps/AiChatApp";
 import { ApiTestApp } from "../apps/ApiTestApp";
-import { TVApp } from "../apps/TVApp";
 import { usePanels } from "./usePanels";
 import { usePersisted } from "./usePersisted";
 import { useAppLocations } from "./useSides";
@@ -38,7 +37,7 @@ import { useLayoutMode } from "./useLayoutMode";
 import { FocusShell } from "./FocusShell";
 import type { AppId, DesktopApp, Location, Side } from "./types";
 
-type CenterView = "widget" | "terminal" | "chat" | "apitest" | "apps" | "marketplace" | "tv" | "admin" | "docs";
+type CenterView = "widget" | "terminal" | "chat" | "apitest" | "apps" | "marketplace" | "admin" | "docs";
 
 // CENTER_VIEWS is the single source of truth for the top-bar views and their
 // leader-key shortcuts. Order here assigns the number (1..N) — no hardcoded keys,
@@ -53,7 +52,6 @@ const CENTER_VIEWS: CenterViewDef[] = [
   { id: "apitest", label: "API Test", icon: FlaskConical },
   { id: "apps", label: "Apps", icon: Grid3x3 },
   { id: "marketplace", label: "Market", icon: Store },
-  { id: "tv", label: "TV", icon: Tv },
   { id: "docs", label: "Docs", icon: BookOpen },
   { id: "admin", label: "Admin", icon: ShieldCheck, gate: "chat.moderate" },
 ];
@@ -313,12 +311,6 @@ export function Desktop() {
             <div className={`absolute inset-0 overflow-hidden rounded-2xl border border-white/10 bg-[var(--window-bg)]/80 ${view === "marketplace" ? "" : "hidden"}`}>
               <MarketplaceApp />
             </div>
-            {/* TV is mounted only when active (it fetches ~14MB of channel data). */}
-            {view === "tv" && (
-              <div className="absolute inset-0 overflow-hidden rounded-2xl border border-white/10 bg-[var(--window-bg)]/80">
-                <TVApp />
-              </div>
-            )}
             {isMod && (
               <div className={`absolute inset-0 overflow-hidden rounded-2xl border border-white/10 bg-[var(--window-bg)]/80 ${view === "admin" ? "" : "hidden"}`}>
                 <AdminApp />
