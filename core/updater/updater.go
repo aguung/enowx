@@ -35,6 +35,16 @@ func Apply(doer transport.Doer, assetURL, shaURL string) error {
 
 	// 1. Download to a temp file next to the target (same volume → atomic move).
 	dir := filepath.Dir(self)
+	// Bail early with a clear, actionable message if we can't write here (e.g. enx
+	// was installed to /usr/local/bin, which needs sudo). Self-update only works
+	// when the binary lives somewhere the user can write.
+	if !writable(dir) {
+		return fmt.Errorf(
+			"can't self-update: %s isn't writable (installed system-wide). "+
+				"Reinstall to your home so updates need no sudo:\n"+
+				"  curl -fsSL https://raw.githubusercontent.com/enowdev/enowx/main/install.sh | sh\n"+
+				"(installs to ~/.local/bin; your config in ~/.enowx is unaffected)", dir)
+	}
 	tmp := filepath.Join(dir, ".enx-update.tmp")
 	if err := download(doer, assetURL, tmp); err != nil {
 		return fmt.Errorf("download: %w", err)
@@ -61,6 +71,19 @@ func Apply(doer transport.Doer, assetURL, shaURL string) error {
 		return err
 	}
 	return nil
+}
+
+// writable reports whether we can create files in dir (the real test for
+// self-update: can we drop the temp binary + swap it in without sudo).
+func writable(dir string) bool {
+	f, err := os.CreateTemp(dir, ".enx-wtest-*")
+	if err != nil {
+		return false
+	}
+	name := f.Name()
+	_ = f.Close()
+	_ = os.Remove(name)
+	return true
 }
 
 func download(doer transport.Doer, url, dest string) error {

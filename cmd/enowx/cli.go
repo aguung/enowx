@@ -44,6 +44,11 @@ func httpJSON(method, url string) (map[string]any, int, error) {
 		Error string         `json:"error"`
 	}
 	_ = json.Unmarshal(b, &env)
+	// Surface the server's error message (e.g. the update's "reinstall to
+	// ~/.local/bin" guidance) as a real error so callers can print it verbatim.
+	if resp.StatusCode >= 300 && env.Error != "" {
+		return env.Data, resp.StatusCode, fmt.Errorf("%s", env.Error)
+	}
 	if env.Data == nil {
 		// Some endpoints (e.g. /health) aren't enveloped.
 		var raw map[string]any
