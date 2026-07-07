@@ -34,15 +34,21 @@ func (s *accountStore) List(ctx context.Context, provider string) ([]store.Accou
 
 func (s *accountStore) Add(ctx context.Context, a store.Account) (int64, error) {
 	creds := encodeCreds(a.Creds)
-	// De-dupe: an account is identified by provider + secret + creds (the same
-	// identity the sync layer uses). If one already exists, return it instead of
-	// inserting a duplicate — this covers manual re-adds, OAuth re-auth, and
-	// re-imports across every add path.
-	var existing int64
-	if err := s.db.QueryRowContext(ctx,
-		`SELECT id FROM accounts WHERE provider = ? AND secret = ? AND creds = ? LIMIT 1`,
-		a.Provider, a.Secret, creds).Scan(&existing); err == nil && existing != 0 {
-		return existing, nil
+	// De-dupe by a STABLE identity, not the raw creds blob. For OAuth providers
+	// the tokens (access/refresh/expiry) change on every re-auth, so matching the
+	// whole creds string lets the same account clone endlessly. The identity is
+	// the account email if present, else the secret (API-key providers). When an
+	// account with that identity already exists for the provider, UPDATE it in
+	// place (refresh creds/secret, reactivate) instead of inserting a duplicate.
+	if id := s.findByIdentity(ctx, a); id != 0 {
+		_, err := s.db.ExecContext(ctx,
+			`UPDATE accounts SET label = ?, secret = ?, creds = ?, status = 'active', disabled = 0 WHERE id = ?`,
+			a.Label, a.Secret, creds, id)
+		if err != nil {
+			return 0, err
+		}
+		syncbus.Dirty("account")
+		return id, nil
 	}
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO accounts (provider, label, secret, creds, status) VALUES (?, ?, ?, ?, ?)`,
@@ -52,6 +58,38 @@ func (s *accountStore) Add(ctx context.Context, a store.Account) (int64, error) 
 	}
 	syncbus.Dirty("account")
 	return res.LastInsertId()
+}
+
+// findByIdentity returns the id of an existing account for the same provider that
+// represents the same real account — matched by email (if the creds carry one),
+// otherwise by a non-empty secret. Returns 0 when there's no stable identity to
+// match on (so such accounts are always inserted).
+func (s *accountStore) findByIdentity(ctx context.Context, a store.Account) int64 {
+	email := a.Creds["email"]
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, secret, creds FROM accounts WHERE provider = ?`, a.Provider)
+	if err != nil {
+		return 0
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var secret, creds string
+		if err := rows.Scan(&id, &secret, &creds); err != nil {
+			continue
+		}
+		if email != "" {
+			if decodeCreds(creds)["email"] == email {
+				return id
+			}
+			continue
+		}
+		// No email identity → fall back to a non-empty secret match (API keys).
+		if a.Secret != "" && secret == a.Secret {
+			return id
+		}
+	}
+	return 0
 }
 
 func (s *accountStore) SetStatus(ctx context.Context, id int64, status string) error {

@@ -101,6 +101,10 @@ func ExchangeOAuth(doer transport.Doer, code, verifier, state string) (map[strin
 		RefreshToken string `json:"refresh_token"`
 		ExpiresIn    int    `json:"expires_in"`
 		Scope        string `json:"scope"`
+		Account      struct {
+			EmailAddress string `json:"email_address"`
+			Email        string `json:"email"`
+		} `json:"account"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, fmt.Errorf("claude oauth decode: %w", err)
@@ -112,12 +116,61 @@ func ExchangeOAuth(doer transport.Doer, code, verifier, state string) (map[strin
 	if exp <= 0 {
 		exp = 3600
 	}
-	return map[string]string{
+	creds := map[string]string{
 		"access_token":  out.AccessToken,
 		"refresh_token": out.RefreshToken,
 		"expires_at":    fmt.Sprintf("%d", time.Now().Add(time.Duration(exp)*time.Second).UnixMilli()),
 		"scopes":        out.Scope,
-	}, nil
+	}
+	// Resolve the account email so the UI can label the account (falls back to a
+	// profile lookup if the token response didn't carry it).
+	if email := firstNonEmpty(out.Account.EmailAddress, out.Account.Email); email != "" {
+		creds["email"] = email
+	} else if email := fetchClaudeEmail(doer, out.AccessToken); email != "" {
+		creds["email"] = email
+	}
+	return creds, nil
+}
+
+// fetchClaudeEmail resolves the signed-in account's email from the OAuth profile
+// endpoint. Best-effort: returns "" on any failure.
+func fetchClaudeEmail(doer transport.Doer, accessToken string) string {
+	req, err := http.NewRequest(http.MethodGet, "https://api.anthropic.com/api/oauth/profile", nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/json")
+	resp, err := doer.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	body, _ := io.ReadAll(resp.Body)
+	var p struct {
+		Account struct {
+			EmailAddress string `json:"email_address"`
+			Email        string `json:"email"`
+		} `json:"account"`
+		EmailAddress string `json:"email_address"`
+		Email        string `json:"email"`
+	}
+	if json.Unmarshal(body, &p) != nil {
+		return ""
+	}
+	return firstNonEmpty(p.Account.EmailAddress, p.Account.Email, p.EmailAddress, p.Email)
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // --- helpers ---

@@ -60,10 +60,16 @@ func toDTO(a store.Account) accountDTO {
 	for k := range a.Creds {
 		has = append(has, k)
 	}
+	// Fall back the display label to the account email when no label was set —
+	// so every provider that resolves an email (including claudecode) shows it.
+	label := a.Label
+	if label == "" {
+		label = a.Creds["email"]
+	}
 	return accountDTO{
 		ID:        a.ID,
 		Provider:  a.Provider,
-		Label:     a.Label,
+		Label:     label,
 		Status:    a.Status,
 		Disabled:  a.Disabled,
 		Has:       has,
