@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/enowdev/enowx/server/middleware"
+	"github.com/fsnotify/fsnotify"
 )
 
 // Files is a read-only file browser for the local machine. It exposes the
@@ -75,6 +77,90 @@ func (h *Files) List(w http.ResponseWriter, r *http.Request) {
 		parent = ""
 	}
 	writeData(w, listDTO{Path: path, Parent: parent, Home: home, Entries: entries})
+}
+
+// Watch streams filesystem-change events (SSE) for a single directory, so the
+// browser can live-refresh when files are created/renamed/removed externally
+// (e.g. from a terminal). Events are debounced; the client re-lists on each.
+func (h *Files) Watch(w http.ResponseWriter, r *http.Request) {
+	if !h.dash.Authorized(r) {
+		writeAPIErr(w, http.StatusForbidden, "file browser requires the dashboard login when accessed remotely")
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeAPIErr(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+	home, _ := os.UserHomeDir()
+	path := strings.TrimSpace(r.URL.Query().Get("path"))
+	if path == "" {
+		path = home
+	}
+	path = expandHome(path, home)
+	if info, err := os.Stat(path); err != nil || !info.IsDir() {
+		writeAPIErr(w, http.StatusBadRequest, "not a directory")
+		return
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer watcher.Close()
+	if err := watcher.Add(path); err != nil {
+		writeAPIErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Write([]byte("event: ready\ndata: {}\n\n"))
+	flusher.Flush()
+
+	// Debounce bursts (a single "unzip" fires many events) into one notification.
+	// All writes happen on this goroutine; the debounce timer only signals via a
+	// channel so there's no concurrent write to the ResponseWriter.
+	debounced := make(chan struct{}, 1)
+	var debounce *time.Timer
+	schedule := func() {
+		if debounce != nil {
+			debounce.Stop()
+		}
+		debounce = time.AfterFunc(200*time.Millisecond, func() {
+			select {
+			case debounced <- struct{}{}:
+			default:
+			}
+		})
+	}
+	// A periodic ping keeps the connection alive through proxies.
+	ping := time.NewTicker(25 * time.Second)
+	defer ping.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ping.C:
+			w.Write([]byte(": ping\n\n"))
+			flusher.Flush()
+		case <-debounced:
+			w.Write([]byte("event: change\ndata: {}\n\n"))
+			flusher.Flush()
+		case _, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			schedule()
+		case _, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+		}
+	}
 }
 
 const maxRead = 512 * 1024 // 512 KB preview cap

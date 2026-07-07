@@ -277,6 +277,18 @@ func (h *Sync) CommunityStats(w http.ResponseWriter, r *http.Request) {
 	proxyJSON(w, out, err)
 }
 
+// KleosDailyStatus proxies today's daily-login reward status (peek, no claim).
+func (h *Sync) KleosDailyStatus(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.KleosDailyStatus(r.Context())
+	proxyJSON(w, out, err)
+}
+
+// KleosDaily proxies claiming the daily-login Kleos.
+func (h *Sync) KleosDaily(w http.ResponseWriter, r *http.Request) {
+	out, err := h.mgr.KleosDaily(r.Context())
+	proxyJSON(w, out, err)
+}
+
 // LegacyAccounts proxies the account-restore lookup (old provider accounts).
 func (h *Sync) LegacyAccounts(w http.ResponseWriter, r *http.Request) {
 	out, err := h.mgr.LegacyAccounts(r.Context())

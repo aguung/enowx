@@ -14,7 +14,7 @@ import (
 // local IDE/CLI auth file.
 func SupportsApply(provider string) bool {
 	switch provider {
-	case "kiro", "codex":
+	case "kiro", "codex", "claudecode":
 		return true
 	}
 	return false
@@ -29,8 +29,10 @@ func Apply(provider string, creds map[string]string, target string) (string, err
 		return writeKiroAuth(creds, target)
 	case "codex":
 		return writeCodexAuth(creds)
+	case "claudecode":
+		return writeClaudeCodeAuth(creds)
 	}
-	return "", fmt.Errorf("apply is only supported for Kiro and Codex")
+	return "", fmt.Errorf("apply is only supported for Kiro, Codex, and Claude Code")
 }
 
 type kiroAuthFile struct {

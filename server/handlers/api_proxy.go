@@ -312,3 +312,37 @@ func nzStr(v, def string) string {
 	}
 	return v
 }
+
+// rotationKey mirrors core/pool: the per-provider account-selection mode.
+func rotationKey(provider string) string { return "pool_rotation:" + provider }
+
+// GetRotation returns a provider's account-selection mode ("sticky"|"round-robin").
+// GET /api/providers/{name}/rotation
+func (h *Proxy) GetRotation(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	v, _ := h.settings.Get(r.Context(), rotationKey(name))
+	mode := "sticky"
+	if v == "round-robin" {
+		mode = "round-robin"
+	}
+	writeData(w, map[string]any{"mode": mode})
+}
+
+// SetRotation sets a provider's account-selection mode.
+// PUT /api/providers/{name}/rotation {mode}
+func (h *Proxy) SetRotation(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	var in struct {
+		Mode string `json:"mode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, "bad body", http.StatusBadRequest)
+		return
+	}
+	mode := "sticky"
+	if in.Mode == "round-robin" {
+		mode = "round-robin"
+	}
+	_ = h.settings.Set(r.Context(), rotationKey(name), mode)
+	writeData(w, map[string]any{"ok": true, "mode": mode})
+}

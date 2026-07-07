@@ -19,6 +19,8 @@ export type KnownAppId =
   | "chat"
   | "shop"
   | "posts"
+  | "integrations"
+  | "mitm"
   | "admin";
 
 // eslint-disable-next-line @typescript-eslint/ban-types

@@ -13,7 +13,7 @@ const TABS: { id: Tab; label: string }[] = [
 export function AntigravityAddModal({ provider, onClose, onSaved }: { provider: Provider; onClose: () => void; onSaved: () => void }) {
   const [tab, setTab] = useState<Tab>("oauth");
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[11000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="flex max-h-[85%] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#11131a] shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 border-b border-white/5 px-4 py-3">
           <ProviderIcon icon={provider.icon} label={provider.label} size={32} />

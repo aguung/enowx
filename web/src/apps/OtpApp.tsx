@@ -3,7 +3,7 @@ import { Loader2, KeyRound, Phone, RefreshCw, Copy, Check, X, Wallet, Trash2, Ch
 import { AppShell } from "./shell";
 import { useDialog } from "../os/dialog";
 import { copyText } from "../os/clipboard";
-import { otpApi, type OtpConfig, type OtpService, type OtpCountry, type OtpOrder } from "../lib/api";
+import { otpApi, type OtpConfig, type OtpService, type OtpCountry, type OtpOrder, type OtpPrice } from "../lib/api";
 
 const idr = (n: number) => `Rp${(n ?? 0).toLocaleString("id-ID")}`;
 
@@ -116,9 +116,34 @@ function Rental({ onEditKey }: { onEditKey: () => void }) {
   const [orders, setOrders] = useState<OtpOrder[]>([]);
   const [renting, setRenting] = useState(false);
   const [error, setError] = useState("");
+  // Prices for every country of the selected service (one lookup), so each
+  // country in the dropdown can show its price and be sorted cheapest-first.
+  const [priceMap, setPriceMap] = useState<Record<string, OtpPrice>>({});
+  const [pricing, setPricing] = useState(false);
+  const price = country ? priceMap[country] ?? null : null;
+  // When each local-only (just-rented) order was first seen, so loadOrders can
+  // keep it briefly until the cloud list catches up.
+  const localSeen = useRef<Record<string, number>>({});
   const dialog = useDialog();
 
-  const loadOrders = () => otpApi.list().then((r) => setOrders(r.orders ?? [])).catch(() => {});
+  // loadOrders merges the cloud list with local state instead of replacing it, so
+  // a just-rented order the cloud hasn't indexed yet isn't wiped out (which made
+  // the number flash then disappear). Local-only orders are kept until they either
+  // show up in the list or age out (~30s).
+  const loadOrders = () =>
+    otpApi
+      .list()
+      .then((r) => {
+        const list = r.orders ?? [];
+        const ids = new Set(list.map((o) => o.id));
+        setOrders((prev) => {
+          const pending = prev.filter(
+            (o) => !ids.has(o.id) && Date.now() - (localSeen.current[o.id] ?? 0) < 30_000,
+          );
+          return [...pending, ...list];
+        });
+      })
+      .catch(() => {});
   const loadBalance = () => otpApi.balance().then(setBalance).catch(() => {});
 
   useEffect(() => {
@@ -143,7 +168,17 @@ function Rental({ onEditKey }: { onEditKey: () => void }) {
   const rent = async () => {
     if (!service || !country || renting) return;
     setRenting(true); setError("");
-    try { await otpApi.rent(service, country); loadOrders(); loadBalance(); }
+    try {
+      // rent() returns the new order — show it immediately (optimistic) instead of
+      // relying on loadOrders(), which can miss it if the cloud hasn't indexed it
+      // yet (the number would appear to "not show up"). Then reconcile via list.
+      const order = await otpApi.rent(service, country);
+      if (order?.id) {
+        localSeen.current[order.id] = Date.now();
+        setOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
+      }
+      loadOrders(); loadBalance();
+    }
     catch (e) { setError(e instanceof Error ? e.message : "failed to rent"); }
     finally { setRenting(false); }
   };
@@ -151,6 +186,39 @@ function Rental({ onEditKey }: { onEditKey: () => void }) {
   const act = async (fn: () => Promise<unknown>) => {
     try { await fn(); loadOrders(); loadBalance(); } catch { /* ignore */ }
   };
+
+  // Load prices for ALL countries as soon as a service is picked (one call), so
+  // the country dropdown can show each price and sort cheapest-first.
+  useEffect(() => {
+    if (!service) { setPriceMap({}); return; }
+    let alive = true;
+    setPricing(true); setPriceMap({});
+    otpApi
+      .prices(service, country || "0")
+      .then((res) => { if (alive) setPriceMap(res.prices ?? {}); })
+      .catch(() => alive && setPriceMap({}))
+      .finally(() => alive && setPricing(false));
+    return () => { alive = false; };
+  }, [service]);
+
+  // Country options carry their price + stock and are sorted cheapest-first
+  // (out-of-stock sink to the bottom, disabled). Sorting only kicks in once
+  // prices are loaded; before that they stay in the original (alphabetical) order.
+  const havePrices = Object.keys(priceMap).length > 0;
+  const countryOptions: SelectOption[] = countries
+    .map((c) => {
+      const p = priceMap[c.code];
+      const sort = !p ? Infinity : p.available === 0 ? Infinity : p.price;
+      return {
+        value: c.code,
+        label: c.name,
+        hint: p ? (p.available === 0 ? "out of stock" : idr(p.price)) : undefined,
+        disabled: p?.available === 0,
+        sort,
+      };
+    })
+    .sort((a, b) => (havePrices ? a.sort - b.sort : 0))
+    .map(({ sort: _sort, ...o }) => o);
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -182,14 +250,35 @@ function Rental({ onEditKey }: { onEditKey: () => void }) {
             <SearchSelect
               value={country}
               onChange={setCountry}
-              placeholder="Search country…"
-              options={countries.map((c) => ({ value: c.code, label: c.name }))}
+              placeholder={service ? "Search country…" : "Pick a service first"}
+              options={countryOptions}
             />
           </div>
-          <button onClick={rent} disabled={!service || !country || renting} className="flex h-[34px] items-center gap-1 rounded-lg bg-white px-3 text-xs font-medium text-black hover:opacity-90 disabled:opacity-40">
+          <button onClick={rent} disabled={!service || !country || renting || price?.available === 0} className="flex h-[34px] items-center gap-1 rounded-lg bg-white px-3 text-xs font-medium text-black hover:opacity-90 disabled:opacity-40">
             {renting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Phone className="h-3.5 w-3.5" />} Rent
           </button>
         </div>
+        {/* Price + stock preview for the chosen service + country. */}
+        {service && country && (
+          <p className="mt-2 text-[11px] text-white/50">
+            {pricing ? (
+              <span className="text-white/35">Checking price…</span>
+            ) : price ? (
+              price.available === 0 ? (
+                <span className="text-amber-300">Out of stock for this service/country</span>
+              ) : (
+                <>
+                  Price: <span className="font-medium text-white/80">{idr(price.price)}</span>
+                  {typeof price.available === "number" && (
+                    <span className="text-white/35"> · {price.available.toLocaleString()} available</span>
+                  )}
+                </>
+              )
+            ) : (
+              <span className="text-white/35">Price unavailable</span>
+            )}
+          </p>
+        )}
         {error && <p className="mt-2 text-[11px] text-red-300">{error}</p>}
       </div>
 
@@ -251,10 +340,17 @@ function OrderCard({ o, onFinish, onCancel, onAnother }: {
 
 // SearchSelect is a compact searchable combobox: shows the chosen label, and
 // opens a filter input + list on click. Good for long service/country lists.
+interface SelectOption {
+  value: string;
+  label: string;
+  hint?: string; // right-aligned secondary text (e.g. price)
+  disabled?: boolean;
+}
+
 function SearchSelect({ value, onChange, options, placeholder }: {
   value: string;
   onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  options: SelectOption[];
   placeholder: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -303,10 +399,12 @@ function SearchSelect({ value, onChange, options, placeholder }: {
                 <button
                   key={o.value}
                   type="button"
+                  disabled={o.disabled}
                   onClick={() => { onChange(o.value); setOpen(false); setQuery(""); }}
-                  className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-white/[0.06] ${o.value === value ? "text-cyan-300" : "text-white/75"}`}
+                  className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-white/[0.06] disabled:opacity-40 disabled:hover:bg-transparent ${o.value === value ? "text-cyan-300" : "text-white/75"}`}
                 >
                   <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                  {o.hint && <span className="shrink-0 text-[11px] text-white/40">{o.hint}</span>}
                   {o.value === value && <Check className="h-3 w-3 shrink-0" />}
                 </button>
               ))

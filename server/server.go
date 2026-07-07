@@ -16,6 +16,7 @@ import (
 	"github.com/enowdev/enowx/core/suno"
 	syncpkg "github.com/enowdev/enowx/core/sync"
 	"github.com/enowdev/enowx/core/transport"
+	"github.com/enowdev/enowx/core/mitm"
 	"github.com/enowdev/enowx/core/tunnel"
 	"github.com/enowdev/enowx/server/handlers"
 	"github.com/enowdev/enowx/server/middleware"
@@ -38,9 +39,11 @@ type Deps struct {
 	Music      store.MusicStore
 	SettingsKV store.SettingsStore
 	Aliases    store.AliasStore
+	Combos     store.ComboStore
 	ApiTest    store.ApiTestStore
 	Tunnel     *tunnel.Manager
 	Plugins    *plugins.Manager
+	MITM       *mitm.Manager
 	Sync       *syncpkg.Manager
 	CustomProv *custommgr.Manager
 	Filters    store.FilterStore
@@ -58,6 +61,11 @@ func New(addr string, d Deps) *Server {
 		v1.SetAliasResolver(resolver)
 		anthropic.SetAliasResolver(resolver)
 	}
+	if d.Combos != nil {
+		comboResolver := proxy.NewComboResolver(d.Combos.Map, 30*time.Second)
+		v1.SetCombos(comboResolver, d.Combos)
+		anthropic.SetCombos(comboResolver, d.Combos)
+	}
 	providers := handlers.NewProviders(d.Registry)
 	accounts := handlers.NewAccounts(d.Accounts)
 	requests := handlers.NewRequests(d.Logs)
@@ -67,24 +75,45 @@ func New(addr string, d Deps) *Server {
 	docs := handlers.NewDocs(d.Settings.Version)
 	kiro := handlers.NewKiro(d.Doer, d.Accounts)
 	codex := handlers.NewCodex(d.Doer, d.Accounts)
+	claude := handlers.NewClaude(d.Doer, d.Accounts)
 	antigravity := handlers.NewAntigravity(d.Doer, d.Accounts)
 	leonardoAcc := handlers.NewLeonardo(d.Accounts, d.Doer)
 	local := handlers.NewLocal(d.Accounts)
 	usage := handlers.NewUsage(d.Registry, d.Accounts)
-	models := handlers.NewModels(d.Registry, d.Accounts, d.Sync)
-	aliases := handlers.NewAliases(d.Aliases)
+	models := handlers.NewModels(d.Registry, d.Accounts, d.Sync, d.Combos)
+	aliases := handlers.NewAliases(d.Aliases, d.Combos)
+	combos := handlers.NewCombos(d.Combos, d.Aliases)
 	apitest := handlers.NewApiTest(d.ApiTest)
 	warmup := handlers.NewWarmup(d.Proxy, d.Registry, d.Accounts, d.Warmups, d.Logs)
 	apply := handlers.NewApply(d.Accounts)
 	// Auto-warm newly-added accounts (credit check + test request) before pool.
 	accounts.SetWarmer(warmup)
+	// Backfill generic labels with the account email when the provider can resolve
+	// one (e.g. Claude accounts added before email resolution existed).
+	accounts.SetEmailResolver(func(a store.Account) string {
+		prov, err := d.Registry.Get(a.Provider)
+		if err != nil {
+			return ""
+		}
+		er, ok := prov.(provider.EmailReporter)
+		if !ok {
+			return ""
+		}
+		return er.Email(provider.Account{ID: a.ID, Secret: a.Secret, Creds: a.Creds})
+	})
 	// On delete, push the tombstone to the cloud right away so a background pull
 	// can't resurrect the account.
 	if d.Sync != nil {
 		accounts.SetSyncPush(func() { _, _, _ = d.Sync.Sync(context.Background()) })
+		accounts.SetDonate(d.Sync.DonateLocalAccount)
+		// Keep the cloud's Free-AI key-hash registry in sync: on key add/remove,
+		// and once at startup (covers free users who don't auto-sync).
+		keys.SetOnChange(func() { d.Sync.RegisterKeyHashes(context.Background()) })
+		go d.Sync.RegisterKeyHashes(context.Background())
 	}
 	kiro.SetWarmer(warmup)
 	codex.SetWarmer(warmup)
+	claude.SetWarmer(warmup)
 	antigravity.SetWarmer(warmup)
 	leonardoAcc.SetWarmer(warmup)
 	local.SetWarmer(warmup)
@@ -99,6 +128,7 @@ func New(addr string, d Deps) *Server {
 	filters := handlers.NewFilters(dash, d.Filters, d.Sync)
 	otp := handlers.NewOTP(dash, d.Sync)
 	registryH := handlers.NewRegistry(dash, d.Sync)
+	freeAI := handlers.NewFreeAI(dash, d.Sync)
 	proxies := handlers.NewProxy(d.Proxies, d.SettingsKV)
 	if d.Sync != nil {
 		proxies.SetSyncPush(func() { _, _, _ = d.Sync.Sync(context.Background()) })
@@ -107,6 +137,8 @@ func New(addr string, d Deps) *Server {
 	music := handlers.NewMusic(d.Music)
 	sunoMusic := handlers.NewSuno(d.Accounts, d.Proxy, suno.New(d.Doer))
 	tun := handlers.NewTunnel(d.Tunnel, d.Keys)
+	integ := handlers.NewIntegrations(d.Keys, d.Tunnel, d.Settings.Port)
+	mitmH := handlers.NewMITM(d.MITM, dash.Authorized)
 	syncH := handlers.NewSync(d.Sync)
 	authH := handlers.NewAuth(dash)
 	auth := middleware.NewAuth(d.Keys)
@@ -131,6 +163,8 @@ func New(addr string, d Deps) *Server {
 		// inside Require so a first-time remote user can still sign in.
 		r.Use(dash.Require)
 		r.Get("/providers", providers.List)
+		r.Get("/providers/{name}/rotation", proxies.GetRotation)
+		r.Put("/providers/{name}/rotation", proxies.SetRotation)
 		r.Get("/filters", filters.List)
 		r.Post("/filters", filters.Add)
 		r.Patch("/filters/{id}", filters.Update)
@@ -158,6 +192,10 @@ func New(addr string, d Deps) *Server {
 		r.Get("/model-aliases", aliases.List)
 		r.Post("/model-aliases", aliases.Set)
 		r.Delete("/model-aliases/{alias}", aliases.Delete)
+		r.Get("/model-combos", combos.List)
+		r.Post("/model-combos", combos.Create)
+		r.Put("/model-combos/{id}", combos.Update)
+		r.Delete("/model-combos/{id}", combos.Delete)
 
 		r.Get("/apitest", apitest.All)
 		r.Post("/apitest/collections", apitest.AddCollection)
@@ -176,6 +214,8 @@ func New(addr string, d Deps) *Server {
 		r.Get("/warmup-logs", warmup.List)
 		r.Delete("/warmup-logs", warmup.Clear)
 		r.Delete("/accounts/{id}", accounts.Delete)
+		r.Post("/accounts/{id}/donate", accounts.Donate)
+		r.Post("/accounts/donate-bulk", accounts.DonateBulk)
 		r.Get("/requests", requests.List)
 		r.Delete("/requests", requests.Clear)
 		r.Get("/requests/summary", requests.Summary)
@@ -184,6 +224,21 @@ func New(addr string, d Deps) *Server {
 		r.Get("/keys", keys.List)
 		r.Post("/keys", keys.Add)
 		r.Delete("/keys/{id}", keys.Delete)
+
+		// Integrations: connect local CLI coding tools to this gateway.
+		r.Get("/integrations", integ.List)
+		r.Get("/integrations/info", integ.Info)
+		r.Post("/integrations/{tool}", integ.Apply)
+		r.Delete("/integrations/{tool}", integ.Reset)
+		r.Post("/integrations/{tool}/snippet", integ.Snippet)
+
+		// MITM: intercept a proprietary IDE's endpoint and reroute it to the gateway.
+		r.Get("/mitm", mitmH.Status)
+		r.Post("/mitm/trust", mitmH.InstallTrust)
+		r.Post("/mitm/start", mitmH.Start)
+		r.Post("/mitm/stop", mitmH.Stop)
+		r.Post("/mitm/{tool}/enable", mitmH.EnableTool)
+		r.Put("/mitm/{tool}/aliases", mitmH.SetAliases)
 		r.Get("/settings", settings.Get)
 		r.Get("/version", versionH.Get)
 		r.Post("/update", versionH.Update)
@@ -196,6 +251,8 @@ func New(addr string, d Deps) *Server {
 		r.Get("/accounts/kiro/aws/poll", kiro.AWSPoll)
 		r.Post("/accounts/kiro/oauth/start", kiro.OAuthStart)
 		r.Post("/accounts/kiro/oauth/exchange", kiro.OAuthExchange)
+		r.Post("/accounts/claude/oauth/start", claude.OAuthStart)
+		r.Post("/accounts/claude/oauth/exchange", claude.OAuthExchange)
 
 		r.Post("/accounts/codex/oauth/start", codex.OAuthStart)
 		r.Post("/accounts/codex/oauth/exchange", codex.OAuthExchange)
@@ -214,6 +271,14 @@ func New(addr string, d Deps) *Server {
 		r.Post("/local-sources/import", local.Import)
 
 		r.Get("/files", files.List)
+		r.Get("/files/watch", files.Watch)
+
+
+		// Terminal profiles (per-terminal credential isolation via HOME).
+		termProfiles := handlers.NewTermProfiles(dash)
+		r.Get("/term-profiles", termProfiles.List)
+		r.Post("/term-profiles", termProfiles.Create)
+		r.Delete("/term-profiles/{slug}", termProfiles.Delete)
 		r.Get("/files/read", files.Read)
 		r.Get("/files/raw", files.Raw)
 
@@ -224,6 +289,13 @@ func New(addr string, d Deps) *Server {
 		r.Get("/registry", registryH.List)
 		r.Get("/registry/{id}", registryH.Get)
 		r.Post("/registry/publish", registryH.Publish)
+
+		// Free AI — account donation + available models.
+		r.Get("/ai/info", freeAI.Info)
+		r.Get("/ai/models", freeAI.Models)
+		r.Post("/free-ai/donate", freeAI.Donate)
+		r.Get("/free-ai/donations", freeAI.List)
+		r.Delete("/free-ai/donations/{id}", freeAI.Withdraw)
 
 		// Outbound proxy pool.
 		r.Get("/proxies", proxies.List)
@@ -278,6 +350,16 @@ func New(addr string, d Deps) *Server {
 		r.Post("/subscription/validate-coupon", syncH.ValidateCoupon)
 		r.Post("/subscription/redeem", syncH.Redeem)
 		r.Get("/subscription/order/{ref}", syncH.SubscriptionOrder)
+		// Gmail store (proxied to cloud).
+		r.Get("/store/gmail", syncH.GmailStoreInfo)
+		r.Post("/store/gmail/order", syncH.GmailBuy)
+		r.Get("/store/gmail/order/{ref}", syncH.GmailOrderStatus)
+		r.Get("/store/gmail/order/{ref}/accounts", syncH.GmailOrderAccounts)
+		r.Get("/admin/gmail/stock", syncH.AdminGmailStock)
+		r.Post("/admin/gmail/stock", syncH.AdminGmailAddStock)
+		r.Delete("/admin/gmail/stock/{id}", syncH.AdminGmailDeleteStock)
+		r.Get("/admin/gmail/orders", syncH.AdminGmailOrders)
+		r.Put("/admin/gmail/price", syncH.AdminGmailSetPrice)
 		r.Post("/subscription/gift", syncH.GiftPremium)
 		r.Get("/search-users", syncH.SearchUsers)
 		r.Get("/inbox", syncH.Inbox)
@@ -352,6 +434,8 @@ func New(addr string, d Deps) *Server {
 		r.Get("/search", syncH.Search)
 		r.Get("/notifications", syncH.Notifications)
 		r.Get("/community/stats", syncH.CommunityStats)
+		r.Get("/kleos/daily", syncH.KleosDailyStatus)
+		r.Post("/kleos/daily", syncH.KleosDaily)
 		r.Get("/legacy/accounts", syncH.LegacyAccounts)
 		r.Post("/notifications/read", syncH.NotificationsRead)
 

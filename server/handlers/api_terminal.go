@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
@@ -105,7 +106,9 @@ type termMsg struct {
 }
 
 // getOrCreate returns the session for id, starting a fresh PTY if none exists.
-func (h *Terminal) getOrCreate(id string) (*termSession, bool, error) {
+// If profile is a valid terminal-profile slug, the shell is spawned under that
+// profile's isolated HOME so it uses separate tool credentials.
+func (h *Terminal) getOrCreate(id, profile string) (*termSession, bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if s, ok := h.sessions[id]; ok {
@@ -115,6 +118,18 @@ func (h *Terminal) getOrCreate(id string) (*termSession, bool, error) {
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
 	if home, err := os.UserHomeDir(); err == nil {
 		cmd.Dir = home
+	}
+	// Terminal profile: override HOME (+ CLAUDE_CONFIG_DIR, which Claude Code needs
+	// since it otherwise keeps its login in the macOS Keychain) so this shell's
+	// tools log in independently. Symlinks are re-ensured so the profile self-heals.
+	if profile != "" {
+		if pdir := profileHome(profile); pdir != "" {
+			ensureLinks(pdir)
+			cmd.Env = setEnv(cmd.Env, "HOME", pdir)
+			cmd.Env = setEnv(cmd.Env, "CLAUDE_CONFIG_DIR", filepath.Join(pdir, ".claude"))
+			cmd.Env = setEnv(cmd.Env, "ENOWX_TERM_PROFILE", profile)
+			cmd.Dir = pdir
+		}
 	}
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
@@ -186,7 +201,7 @@ func (h *Terminal) WS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer c.Close(websocket.StatusNormalClosure, "")
 
-	s, created, err := h.getOrCreate(id)
+	s, created, err := h.getOrCreate(id, r.URL.Query().Get("profile"))
 	if err != nil {
 		c.Close(websocket.StatusInternalError, "pty start failed")
 		return

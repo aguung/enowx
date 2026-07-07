@@ -46,6 +46,19 @@ const leonardoForm: ProviderForm = {
   fields: [{ key: "access_token", label: "Access Token (JWT)", placeholder: "eyJ… (from app.leonardo.ai)", required: true, secret: true }],
 };
 
+// Claude Code authenticates with a subscription OAuth token (access + refresh),
+// NOT an API key. Easiest is "Import from local" (reads your existing login);
+// these fields are the manual fallback.
+const claudeCodeForm: ProviderForm = {
+  single: false,
+  fields: [
+    { key: "access_token", label: "Access Token", placeholder: "sk-ant-oat01-…", required: true, secret: true },
+    { key: "refresh_token", label: "Refresh Token", placeholder: "sk-ant-ort01-…", required: true, secret: true },
+    { key: "expires_at", label: "Expires At (unix ms)", placeholder: "optional" },
+    { key: "subscription_type", label: "Subscription", placeholder: "max | pro (optional)" },
+  ],
+};
+
 export function formFor(provider: string): ProviderForm {
   switch (provider) {
     case "kiro":
@@ -54,6 +67,8 @@ export function formFor(provider: string): ProviderForm {
       return sunoForm;
     case "leonardo":
       return leonardoForm;
+    case "claudecode":
+      return claudeCodeForm;
     default:
       return apiKeyForm;
   }

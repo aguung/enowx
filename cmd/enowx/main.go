@@ -10,9 +10,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"os/signal"
 	"runtime/debug"
 	"syscall"
@@ -20,6 +22,7 @@ import (
 
 	"github.com/enowdev/enowx/config"
 	"github.com/enowdev/enowx/core/daemon"
+	"github.com/enowdev/enowx/core/mitm"
 	"github.com/enowdev/enowx/core/plugins"
 	"github.com/enowdev/enowx/core/pool"
 	"github.com/enowdev/enowx/core/provider"
@@ -27,6 +30,7 @@ import (
 	"github.com/enowdev/enowx/core/provider/codebuddy"
 	"github.com/enowdev/enowx/core/provider/commandcode"
 	"github.com/enowdev/enowx/core/provider/custommgr"
+	"github.com/enowdev/enowx/core/provider/claudecode"
 	"github.com/enowdev/enowx/core/provider/codex"
 	leonardoprovider "github.com/enowdev/enowx/core/provider/leonardo"
 	sunoprovider "github.com/enowdev/enowx/core/provider/suno"
@@ -43,6 +47,14 @@ import (
 var version = "dev"
 
 func main() {
+	// Hidden subcommand: the elevated MITM proxy child. Spawned (with an admin
+	// prompt) by the main process so only this small child runs as root — it binds
+	// :443, installs the CA + hosts entries, and serves the intercept proxy.
+	if len(os.Args) > 1 && os.Args[1] == "__mitm-serve" {
+		mitm.RunElevatedServe(os.Args[2:])
+		return
+	}
+
 	// The detached daemon child (ENOWX_DAEMON=1) always runs the server.
 	if daemon.IsDaemon() {
 		runServer()
@@ -112,14 +124,45 @@ func runServer() {
 	reg.Register(commandcode.New(doer))
 	reg.Register(kiro.New(doer, saveCreds))
 	reg.Register(codex.New(doer, saveCreds))
+	reg.Register(claudecode.New(doer, saveCreds))
 	reg.Register(antigravity.New(doer, saveCreds))
 	reg.Register(sunoprovider.New(doer))
 	reg.Register(leonardoprovider.New(doer))
 
-	px := proxy.New(reg, pool.New(db.Accounts()), doer)
+	px := proxy.New(reg, pool.New(db.Accounts()).WithSettings(db.Settings()), doer)
 	tun := tunnel.New(cfg.RuntimeDir, cfg.Port)
 	pluginMgr := plugins.New(cfg.PluginsDir(), cfg.Port)
 	syncMgr := syncpkg.New(db.Settings(), db.Music(), db.Logs())
+
+	// MITM: intercept a proprietary IDE's hardcoded endpoint and reroute it to us.
+	// The gateway URL is our own loopback; the API key is resolved lazily from the
+	// key store (first enabled key).
+	mitmMgr := mitm.New(
+		filepath.Join(cfg.RuntimeDir, "mitm"),
+		fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
+		func() string {
+			rows, err := db.Keys().List(context.Background())
+			if err == nil {
+				for _, k := range rows {
+					if k.Enabled && k.Secret != "" {
+						return k.Secret
+					}
+				}
+			}
+			return ""
+		},
+	)
+
+	// Plugins are premium-only: a plugin can only run/serve when the signed-in
+	// user has the entitlement (checked before the sidecar spawns and before the
+	// UI is served), so sharing a plugin and installing it manually doesn't bypass
+	// the paywall.
+	pluginMgr.SetGate(func() error {
+		if syncMgr.HasEntitlement(context.Background(), "plugins.use") {
+			return nil
+		}
+		return errors.New("plugins are a Premium feature — upgrade to use them")
+	})
 
 	// User-defined (custom) providers: register the stored ones live, then keep
 	// the registry/prefix/catalog in sync on change.
@@ -133,7 +176,7 @@ func runServer() {
 
 	// Full cloud sync: let the sync manager snapshot/apply accounts, gateway
 	// keys, aliases, and custom providers (custom providers register live).
-	syncMgr.SetFullSync(db.Accounts(), db.Keys(), db.Aliases(), db.CustomProviders(), db.Proxies(),
+	syncMgr.SetFullSync(db.Accounts(), db.Keys(), db.Aliases(), db.Combos(), db.CustomProviders(), db.Proxies(),
 		customMgr.RegisterOne, customMgr.UnregisterOne)
 	// Maintain the live channel (pull side) and the automatic push side. Both
 	// are no-ops until logged in; auto-push also obeys the global toggle.
@@ -151,9 +194,11 @@ func runServer() {
 		Music:      db.Music(),
 		SettingsKV: db.Settings(),
 		Aliases:    db.Aliases(),
+		Combos:     db.Combos(),
 		ApiTest:    db.ApiTest(),
 		Tunnel:     tun,
 		Plugins:    pluginMgr,
+		MITM:       mitmMgr,
 		Sync:       syncMgr,
 		CustomProv: customMgr,
 		Filters:    db.Filters(),

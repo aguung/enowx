@@ -35,8 +35,8 @@ export function FilesApp() {
   const { tabs, activeId, setActive, add, close, setPath } = useFileTabs();
 
   return (
-    <AppShell title="Files" subtitle="Local file browser">
-      <div className="flex h-full flex-col">
+    <AppShell title="Files" subtitle="Local file browser" flush>
+      <div className="flex h-full flex-col p-4">
         <div className="mb-2 flex shrink-0 items-stretch rounded-xl border border-white/10 bg-black/30">
           <div className="term-tabs flex min-w-0 flex-1 items-stretch gap-0.5 overflow-x-auto p-1">
             {tabs.map((tab) => {
@@ -74,11 +74,15 @@ export function FilesApp() {
           </button>
         </div>
 
-        {tabs.map((tab) =>
-          tab.id === activeId ? (
-            <FileBrowser key={tab.id} path={tab.path} onPath={(p) => setPath(tab.id, p)} />
-          ) : null,
-        )}
+        {/* min-h-0 flex-1 gives the active browser/viewer a real height to fill
+            (the Monaco editor uses height:100%). */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          {tabs.map((tab) =>
+            tab.id === activeId ? (
+              <FileBrowser key={tab.id} path={tab.path} onPath={(p) => setPath(tab.id, p)} />
+            ) : null,
+          )}
+        </div>
       </div>
     </AppShell>
   );
@@ -107,18 +111,30 @@ function FileBrowser({ path, onPath }: { path: string | null; onPath: (p: string
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    filesApi
-      .list(path ?? undefined)
-      .then((d) => {
-        if (!alive) return;
-        setDir(d);
-        setError("");
-      })
-      .catch((e) => alive && setError(e instanceof Error ? e.message : "failed to read"))
-      .finally(() => alive && setLoading(false));
+    // reload re-lists the directory without toggling the loading spinner (used by
+    // the live watcher so external changes don't flash the whole view).
+    const reload = (spin: boolean) => {
+      if (spin) setLoading(true);
+      filesApi
+        .list(path ?? undefined)
+        .then((d) => {
+          if (!alive) return;
+          setDir(d);
+          setError("");
+        })
+        .catch((e) => alive && setError(e instanceof Error ? e.message : "failed to read"))
+        .finally(() => alive && spin && setLoading(false));
+    };
+    reload(true);
+
+    // Live-refresh: subscribe to filesystem changes for this directory so folders
+    // created/removed externally (e.g. from a terminal) appear without a manual
+    // refresh. Debounced server-side; we just re-list on each "change".
+    const es = new EventSource(filesApi.watchUrl(path ?? undefined));
+    es.addEventListener("change", () => reload(false));
     return () => {
       alive = false;
+      es.close();
     };
   }, [path]);
 

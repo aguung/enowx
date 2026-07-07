@@ -101,7 +101,7 @@ func newFakeMgr(t *testing.T, token string) *fakeMgr {
 		mgr: m, set: set,
 		custom: &fakeCustom{}, accts: &fakeAccts{}, keys: &fakeKeys{}, alias: &fakeAlias{rows: map[string]string{}},
 	}
-	m.SetFullSync(f.accts, f.keys, f.alias, f.custom, nil, func(store.CustomProvider) {}, func(string, string) {})
+	m.SetFullSync(f.accts, f.keys, f.alias, nil, f.custom, nil, func(store.CustomProvider) {}, func(string, string) {})
 	// music is nil, so stub playlist snapshot: override by having no playlists.
 	return f
 }

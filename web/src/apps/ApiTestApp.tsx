@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Send, Plus, Trash2, Loader2, Save, FolderPlus, ChevronRight, ChevronDown, History, Globe, X, Pencil } from "lucide-react";
+import { Send, Plus, Trash2, Loader2, Save, FolderPlus, ChevronRight, ChevronDown, History, Globe, X, Pencil, Copy, Check } from "lucide-react";
+import { copyText } from "../os/clipboard";
 import {
   apitestApi,
   type ApiCollection,
@@ -81,6 +82,7 @@ export function ApiTestApp() {
   const [openCols, setOpenCols] = useState<Record<number, boolean>>({});
 
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [resStatus, setResStatus] = useState<number | null>(null);
   const [resTime, setResTime] = useState<number | null>(null);
   const [resBody, setResBody] = useState("");
@@ -415,6 +417,16 @@ export function ApiTestApp() {
             {resTime != null && <span className="font-mono text-white/40">{resTime} ms</span>}
             {resCType && <span className="truncate font-mono text-white/30">{resCType.split(";")[0]}</span>}
             {busy && <Loader2 className="h-3 w-3 animate-spin text-white/40" />}
+            {resBody && (
+              <button
+                onClick={() => { copyText(resBody); setCopied(true); setTimeout(() => setCopied(false), 1200); }}
+                className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-white/40 hover:bg-white/10 hover:text-white/80"
+                title="Copy response"
+              >
+                {copied ? <Check className="h-3 w-3 text-emerald-300" /> : <Copy className="h-3 w-3" />}
+                {copied ? "Copied" : "Copy"}
+              </button>
+            )}
           </div>
           <div className="min-h-0 flex-1 overflow-auto p-3">
             {err && <div className="mb-2 rounded border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-300">{err}</div>}

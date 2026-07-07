@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Search, Trash2, Power, PowerOff, RefreshCw, Zap, Boxes, X, Copy, Check, Plus, Play, Loader2, MoreVertical, Download } from "lucide-react";
+import { Search, Trash2, Power, PowerOff, RefreshCw, Zap, Boxes, X, Copy, Check, Plus, Play, Loader2, MoreVertical, Download, HeartHandshake } from "lucide-react";
 import { AppShell } from "./shell";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { Tooltip } from "../components/Tooltip";
@@ -164,6 +164,25 @@ export function AccountsApp() {
     if (ok) act(() => accountsApi.remove(a.id), a.id);
   };
   const setDisabled = (a: Account, disabled: boolean) => act(() => accountsApi.setDisabled(a.id, disabled), a.id);
+
+  // Donate this account to the community Free AI pool. On success it's removed
+  // locally (it now lives in the shared pool) and everyone can use it via Kleos.
+  const donate = async (a: Account) => {
+    const ok = await dialog.confirm({
+      title: "Donate to Free AI?",
+      message: `${a.label || a.provider} will be handed to the community Free AI pool and removed from your local accounts. Everyone can then use it (paid with Kleos). You can withdraw it later from the Free AI app.`,
+      confirmLabel: "Donate",
+    });
+    if (!ok) return;
+    setBusy(a.id);
+    try {
+      const r = await accountsApi.donate(a.id);
+      if (r.reason) { setError(r.reason); return; }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "donation failed");
+    } finally { setBusy(null); }
+  };
 
   async function warmup(a: Account) {
     setWarming(a.id);
@@ -438,6 +457,7 @@ export function AccountsApp() {
                       onApply={(t) => apply(a, t)}
                       onToggle={() => setDisabled(a, !a.disabled)}
                       onDelete={() => remove(a)}
+                      onDonate={() => donate(a)}
                     />
                   </div>
                 </div>
@@ -650,6 +670,7 @@ function AccountMenu({
   onApply,
   onToggle,
   onDelete,
+  onDonate,
 }: {
   account: Account;
   busy: boolean;
@@ -657,6 +678,7 @@ function AccountMenu({
   onApply: (target: "desktop" | "cli") => void;
   onToggle: () => void;
   onDelete: () => void;
+  onDonate: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; up: boolean } | null>(null);
@@ -733,6 +755,15 @@ function AccountMenu({
                   <Download className="h-3.5 w-3.5" /> Apply to CLI
                 </button>
               )}
+            </>
+          )}
+          {/* Claude Code accounts are ban-prone when shared — no donate. */}
+          {account.provider !== "claudecode" && (
+            <>
+              <div className="my-1 border-t border-white/5" />
+              <button className={`${item} text-violet-200 hover:bg-violet-500/20`} onClick={run(onDonate)}>
+                <HeartHandshake className="h-3.5 w-3.5" /> Donate to Free AI
+              </button>
             </>
           )}
           <div className="my-1 border-t border-white/5" />

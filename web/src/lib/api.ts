@@ -157,6 +157,11 @@ export const accountsApi = {
   setDisabled: (id: number, disabled: boolean) =>
     api.patch<{ ok: boolean }>(`/api/accounts/${id}/disabled`, { disabled }),
   remove: (id: number) => api.del<{ ok: boolean }>(`/api/accounts/${id}`),
+  // Donate an account to the community Free AI pool (deletes it locally on success).
+  donate: (id: number, models: string[] = []) => api.post<{ ok?: boolean; id?: number; reason?: string }>(`/api/accounts/${id}/donate`, { models }),
+  // Donate up to `quantity` LIVE accounts of a provider (health-checked, auto-picked).
+  donateBulk: (provider: string, quantity: number) =>
+    api.post<{ donated: number; checked: number; failed: number; last_error?: string }>("/api/accounts/donate-bulk", { provider, quantity }),
   usage: (id: number) => api.get<{ supported: boolean; usage?: Usage }>(`/api/accounts/${id}/usage`),
   models: (id: number) => api.get<{ provider: string; source: string; models: ProviderModel[] }>(`/api/accounts/${id}/models`),
   allModels: () => api.get<{ models: ProviderModel[] }>("/api/models"),
@@ -196,6 +201,12 @@ export const kiroApi = {
   oauthStart: () => api.post<{ session: string; authorize_url: string }>("/api/accounts/kiro/oauth/start"),
   oauthExchange: (session: string, code: string) =>
     api.post<{ id: number }>("/api/accounts/kiro/oauth/exchange", { session, code }),
+};
+
+export const claudeApi = {
+  oauthStart: () => api.post<{ session: string; authorize_url: string }>("/api/accounts/claude/oauth/start"),
+  oauthExchange: (session: string, code: string, label?: string) =>
+    api.post<{ id: number }>("/api/accounts/claude/oauth/exchange", { session, code, label }),
 };
 
 export const codexApi = {
@@ -282,7 +293,10 @@ export interface ProxySettings {
 export interface OtpConfig { has_key: boolean; preview?: string }
 export interface OtpService { code: string; name: string }
 export interface OtpCountry { code: string; name: string }
-export interface OtpPrice { price: number; currency: string; available?: boolean }
+// available is the number of numbers in stock (0 = none available now).
+export interface OtpPrice { price: number; currency: string; available?: number }
+// The prices endpoint returns per-country prices for a service, keyed by country.
+export interface OtpPrices { service: string; prices: Record<string, OtpPrice> }
 export interface OtpOrder {
   id: string;
   service: string;
@@ -305,7 +319,7 @@ export const otpApi = {
   services: () => api.get<{ services: OtpService[] }>("/api/otp/services"),
   countries: () => api.get<{ countries: OtpCountry[] }>("/api/otp/countries"),
   prices: (service: string, country: string) =>
-    api.get<Record<string, OtpPrice>>(`/api/otp/prices?service=${encodeURIComponent(service)}&country=${encodeURIComponent(country)}`),
+    api.get<OtpPrices>(`/api/otp/prices?service=${encodeURIComponent(service)}&country=${encodeURIComponent(country)}`),
   balance: () => api.get<{ balance: number; currency: string }>("/api/otp/balance"),
   rent: (service: string, country: string) => api.post<OtpOrder>("/api/otp/numbers", { service, country }),
   list: () => api.get<{ orders: OtpOrder[] }>("/api/otp/numbers"),
@@ -367,6 +381,22 @@ export const proxyApi = {
   saveSettings: (s: ProxySettings) => api.put<{ ok: boolean }>("/api/proxies/settings", s),
 };
 
+export interface ComboItem {
+  id: number;
+  name: string;
+  targets: string[];
+  strategy: number; /* 0 = failover, 1 = round_robin */
+}
+
+export const combosApi = {
+  list: () => api.get<{ combos: ComboItem[] }>("/api/model-combos"),
+  create: (name: string, targets: string[], strategy: number) =>
+    api.post<{ id: number }>("/api/model-combos", { name, targets, strategy }),
+  update: (id: number, name: string, targets: string[], strategy: number) =>
+    api.put<{ ok: boolean }>(`/api/model-combos/${id}`, { name, targets, strategy }),
+  del: (id: number) => api.del<{ deleted: number }>(`/api/model-combos/${id}`),
+};
+
 export const marketApi = {
   publish: (id: string) => api.post<{ status: string; reason?: string; id?: number; file?: string; updated?: boolean }>("/api/market/publish", { id }),
   list: (q = "") => api.get<{ plugins: MarketPlugin[] }>(`/api/market/plugins${q ? `?q=${encodeURIComponent(q)}` : ""}`),
@@ -426,10 +456,26 @@ export interface FileContent {
   content: string;
 }
 
+export interface TermProfile {
+  slug: string;
+  name: string;
+  color?: string;
+  created_at: string;
+}
+
+export const termProfilesApi = {
+  list: () => api.get<{ profiles: TermProfile[] }>("/api/term-profiles"),
+  create: (name: string, color?: string) =>
+    api.post<TermProfile>("/api/term-profiles", { name, color }),
+  remove: (slug: string) => api.del<{ ok: boolean }>(`/api/term-profiles/${slug}`),
+};
+
 export const filesApi = {
   list: (path?: string) =>
     api.get<DirListing>(`/api/files${path ? `?path=${encodeURIComponent(path)}` : ""}`),
   read: (path: string) => api.get<FileContent>(`/api/files/read?path=${encodeURIComponent(path)}`),
+  // SSE URL that emits a "change" event whenever the directory changes on disk.
+  watchUrl: (path?: string) => `/api/files/watch${path ? `?path=${encodeURIComponent(path)}` : ""}`,
 };
 
 export interface RequestSummary {
@@ -588,6 +634,55 @@ export const settingsApi = {
   get: () => api.get<Settings>("/api/settings"),
 };
 
+export const rotationApi = {
+  get: (provider: string) => api.get<{ mode: string }>(`/api/providers/${provider}/rotation`),
+  set: (provider: string, mode: string) => api.put<{ ok: boolean; mode: string }>(`/api/providers/${provider}/rotation`, { mode }),
+};
+
+export interface Integration {
+  key: string;
+  name: string;
+  binary: string;
+  config_paths: string[];
+  multi_model: boolean;
+  anthropic: boolean;
+  installed: boolean;
+  connected: boolean;
+  paths: string[];
+  models: string[];
+  message?: string;
+}
+export interface IntegrationSnippet { path: string; content: string; format: string }
+
+export const integrationsApi = {
+  list: () => api.get<Integration[]>("/api/integrations"),
+  info: () => api.get<{ base_url: string; api_key: string }>("/api/integrations/info"),
+  apply: (tool: string, body: { model?: string; models?: string[]; base_url?: string; api_key?: string }) =>
+    api.post<Integration>(`/api/integrations/${tool}`, body),
+  reset: (tool: string) => api.del<Integration>(`/api/integrations/${tool}`),
+  snippet: (tool: string, body: { model?: string; models?: string[]; base_url?: string; api_key?: string }) =>
+    api.post<{ snippets: IntegrationSnippet[] }>(`/api/integrations/${tool}/snippet`, body),
+};
+
+export interface MitmTool {
+  key: string; name: string; hosts: string[]; format: string; models: string[];
+  dns_enabled: boolean; aliases: Record<string, string> | null;
+}
+export interface MitmStatus {
+  trusted: boolean; running: boolean; ca_cert_path: string; tools: MitmTool[];
+}
+export const mitmApi = {
+  status: () => api.get<MitmStatus>("/api/mitm"),
+  trust: () => api.post<MitmStatus>("/api/mitm/trust", {}),
+  start: () => api.post<MitmStatus>("/api/mitm/start", {}),
+  stop: () => api.post<MitmStatus>("/api/mitm/stop", {}),
+  enable: (tool: string, on: boolean) => api.post<MitmStatus>(`/api/mitm/${tool}/enable`, { on }),
+  setAliases: (tool: string, aliases: Record<string, string>) => api.put<MitmStatus>(`/api/mitm/${tool}/aliases`, { aliases }),
+};
+
+
+
+
 export interface InboxMessage {
   id: number;
   title: string;
@@ -637,6 +732,27 @@ export const subscriptionApi = {
   orderStatus: (ref: string) => api.get<{ status: string }>(`/api/subscription/order/${encodeURIComponent(ref)}`),
   searchUsers: (q: string) => api.get<{ users: UserHit[] }>(`/api/search-users?q=${encodeURIComponent(q)}`),
 };
+
+export interface GmailStoreInfo { price_per_account: number; available: number; min_order: number; order_step: number; account_ttl_hours: number; last_restock?: string }
+export interface GmailAccount { email: string; password: string; recovery?: string }
+export interface GmailStockRow { id: string; email: string; recovery?: string; status: string; created_at: string; sold_at?: string }
+export interface GmailOrderRow { id: string; username?: string; quantity: number; price_idr: number; order_ref: string; status: string; delivered_at?: string; created_at: string }
+
+export const gmailStoreApi = {
+  info: () => api.get<GmailStoreInfo>("/api/store/gmail"),
+  buy: (quantity: number) => api.post<{ order_ref: string; qr_string?: string; pay_url?: string; amount: number }>("/api/store/gmail/order", { quantity }),
+  orderStatus: (ref: string) => api.get<{ status: string; quantity: number }>(`/api/store/gmail/order/${encodeURIComponent(ref)}`),
+  accounts: (ref: string) => api.get<{ accounts: GmailAccount[] }>(`/api/store/gmail/order/${encodeURIComponent(ref)}/accounts`),
+};
+
+export const gmailAdminApi = {
+  stock: () => api.get<{ stock: GmailStockRow[]; counts: { available: number; reserved: number; sold: number }; price_per_account: number }>("/api/admin/gmail/stock"),
+  add: (text: string) => api.post<{ added: number; submitted: number }>("/api/admin/gmail/stock", { text }),
+  remove: (id: string) => api.del<{ ok: boolean }>(`/api/admin/gmail/stock/${id}`),
+  orders: () => api.get<{ orders: GmailOrderRow[] }>("/api/admin/gmail/orders"),
+  setPrice: (price_per_account: number) => api.put<{ ok: boolean }>("/api/admin/gmail/price", { price_per_account }),
+};
+
 
 export interface RedeemCode {
   id: number;
@@ -863,6 +979,55 @@ export interface ShopState {
   kleos: number;
   equipped: Equipped;
 }
+
+export interface DailyClaim {
+  claimed_today: number;
+  reclaimed: number;
+  date_reclaimed: string;
+  total_awarded: number;
+  balance: number;
+  already_claimed: boolean;
+}
+export interface DailyStatus {
+  amount: number;
+  already_claimed: boolean;
+}
+export const kleosApi = {
+  daily: () => api.post<DailyClaim>("/api/kleos/daily", {}),
+  dailyStatus: () => api.get<DailyStatus>("/api/kleos/daily"),
+};
+
+// --- Free AI: donate accounts to the community pool ---
+export interface DonatedAccount {
+  id: number;
+  provider: string;
+  label: string;
+  models: string[];
+  status: string;
+  error_count: number;
+  last_used_at?: string;
+  created_at: string;
+}
+export interface DonateResult { ok: boolean; id?: number; models?: string[]; reason?: string }
+export interface FetchModelsResult { ok: boolean; models?: string[]; reason?: string }
+export interface FreeAiModel {
+  id: string;
+  owned_by: string;
+  kleos_per_1m_in: number;
+  kleos_per_1m_out: number;
+}
+export const freeAiApi = {
+  // Where to send Free-AI requests (cloud endpoint per the gateway's config).
+  info: () => api.get<{ endpoint: string; base: string }>("/api/ai/info"),
+  // Models the pool can currently serve (only models with a live donated account).
+  models: () => api.get<{ data: FreeAiModel[] }>("/api/ai/models"),
+  fetchModels: (creds: { endpoint: string; api_key: string }) =>
+    api.post<FetchModelsResult>("/api/free-ai/models", creds),
+  donate: (body: { provider: string; label: string; creds: { endpoint: string; api_key: string }; models: string[] }) =>
+    api.post<DonateResult>("/api/free-ai/donate", body),
+  donations: () => api.get<{ items: DonatedAccount[] }>("/api/free-ai/donations"),
+  withdraw: (id: number) => api.del<{ ok: boolean }>(`/api/free-ai/donations/${id}`),
+};
 
 export const shopApi = {
   get: () => api.get<ShopState>("/api/shop"),

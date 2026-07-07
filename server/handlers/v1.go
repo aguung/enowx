@@ -17,11 +17,13 @@ import (
 )
 
 type V1 struct {
-	proxy    *proxy.Proxy
-	route    func(modelID string) string // model → provider name
-	logs     store.LogStore
-	keys     store.KeyStore
-	resolver *proxy.AliasResolver // optional: alias → real model id
+	proxy      *proxy.Proxy
+	route      func(modelID string) string // model → provider name
+	logs       store.LogStore
+	keys       store.KeyStore
+	resolver   *proxy.AliasResolver // optional: alias → real model id
+	combos     *proxy.ComboResolver
+	comboStore store.ComboStore
 }
 
 func NewV1(p *proxy.Proxy, route func(string) string, logs store.LogStore, keys store.KeyStore) *V1 {
@@ -30,6 +32,12 @@ func NewV1(p *proxy.Proxy, route func(string) string, logs store.LogStore, keys 
 
 // SetAliasResolver enables alias resolution on incoming model ids.
 func (h *V1) SetAliasResolver(r *proxy.AliasResolver) { h.resolver = r }
+
+// SetCombos enables combo resolution (virtual multi-target models) on incoming
+// model ids.
+func (h *V1) SetCombos(r *proxy.ComboResolver, s store.ComboStore) {
+	h.combos, h.comboStore = r, s
+}
 
 func (h *V1) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
@@ -42,6 +50,12 @@ func (h *V1) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid request")
 		return
+	}
+	if h.combos != nil {
+		if combo, ok := h.combos.Lookup(r.Context(), req.Model); ok {
+			h.serveCombo(w, r, req, combo, start)
+			return
+		}
 	}
 	// Resolve an aliased model to its real id, then strip any provider prefix
 	// (kr/, cb/) so upstream sees the bare model id. The raw body is rewritten to
@@ -73,6 +87,31 @@ func (h *V1) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, us)
 	}
 	h.log(providerName, req.Model, "success", start, us.usage, trace)
+	chargeKey(r, h.keys, us.usage)
+}
+
+// serveCombo dispatches a request whose model id matched a combo definition:
+// picks a start index per the combo's strategy, walks the target chain via
+// ForwardChain, and logs/serves like a direct request would.
+func (h *V1) serveCombo(w http.ResponseWriter, r *http.Request, req *model.Request, combo store.ModelCombo, start time.Time) {
+	startIdx := 0
+	if combo.Strategy == store.ComboRoundRobin && h.comboStore != nil {
+		startIdx, _ = h.comboStore.NextIndex(r.Context(), combo.ID, len(combo.Targets))
+	}
+	ctx, trace := transport.WithTrace(r.Context())
+	stream, served, err := h.proxy.ForwardChain(ctx, h.route, combo.Targets, startIdx, req)
+	if err != nil {
+		h.log("combo", req.Model, "error", start, model.Usage{}, trace)
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	us := wrapUsage(stream)
+	if req.Stream {
+		sse.WriteOpenAI(w, us)
+	} else {
+		writeJSON(w, us)
+	}
+	h.log(h.route(served), served, "success", start, us.usage, trace)
 	chargeKey(r, h.keys, us.usage)
 }
 

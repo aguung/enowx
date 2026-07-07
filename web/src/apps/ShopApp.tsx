@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Loader2, Coins, Check, Lock } from "lucide-react";
+import { Loader2, Coins, Check, Lock, Gift } from "lucide-react";
 import { AppShell } from "./shell";
 import { useProfile, refreshProfile } from "../os/useProfile";
-import { shopApi, type ShopState, type CosmeticItem, type Equipped } from "../lib/api";
+import { shopApi, kleosApi, type ShopState, type CosmeticItem, type Equipped } from "../lib/api";
 import { effectClass } from "../os/tier";
 
 // equippedPayload reads the equipped payload for a cosmetic kind.
@@ -21,6 +21,9 @@ export function ShopApp() {
   const [shop, setShop] = useState<ShopState | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [dailyBusy, setDailyBusy] = useState(false);
+  const [dailyDone, setDailyDone] = useState(false);
+  const [dailyMsg, setDailyMsg] = useState("");
 
   async function load() {
     try {
@@ -39,6 +42,27 @@ export function ShopApp() {
         <div className="flex h-40 items-center justify-center text-sm text-white/55">Sign in to open the shop.</div>
       </AppShell>
     );
+  }
+
+  async function claimDaily() {
+    setDailyBusy(true); setDailyMsg(""); setError("");
+    try {
+      const r = await kleosApi.daily();
+      setShop((s) => (s ? { ...s, kleos: r.balance } : s));
+      refreshProfile();
+      if (r.total_awarded > 0) {
+        const parts = [`+${r.claimed_today} today`];
+        if (r.reclaimed > 0) parts.push(`+${r.reclaimed} reclaimed (${r.date_reclaimed})`);
+        setDailyMsg(`Daily Kleos: ${parts.join(" · ")}`);
+      } else if (r.already_claimed) {
+        setDailyMsg("Already claimed today — come back tomorrow.");
+      }
+      setDailyDone(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "claim failed");
+    } finally {
+      setDailyBusy(false);
+    }
   }
 
   async function buy(item: CosmeticItem) {
@@ -79,7 +103,17 @@ export function ShopApp() {
         </span>
         <span className="text-sm font-semibold text-amber-100">{(shop?.kleos ?? 0).toLocaleString()}</span>
         <span className="text-[11px] text-white/40">your Kleos balance</span>
+        <button
+          onClick={claimDaily}
+          disabled={dailyBusy || dailyDone}
+          className="ml-auto flex items-center gap-1.5 rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-100 hover:bg-amber-400/20 disabled:opacity-50"
+          title="Claim your daily Kleos"
+        >
+          {dailyBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Gift className="h-3 w-3" />}
+          {dailyDone ? "Claimed today" : "Claim daily"}
+        </button>
       </div>
+      {dailyMsg && <div className="mb-3 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-xs text-emerald-200">{dailyMsg}</div>}
 
       {!shop ? (
         <div className="flex h-32 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-white/30" /></div>

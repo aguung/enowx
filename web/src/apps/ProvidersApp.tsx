@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Plus, X, Trash2, Loader2 } from "lucide-react";
+import { Search, Plus, X, Trash2, Loader2, Settings, Check} from "lucide-react";
 import { AppShell } from "./shell";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { AddAccountModal } from "../components/AddAccountModal";
 import { KiroAddModal } from "../components/KiroAddModal";
+import { ClaudeAddModal } from "../components/ClaudeAddModal";
 import { CodexAddModal } from "../components/CodexAddModal";
 import { AntigravityAddModal } from "../components/AntigravityAddModal";
 import { LeonardoAddModal } from "../components/LeonardoAddModal";
 import { useDialog } from "../os/dialog";
-import { providersApi, accountsApi, customProviderApi, type Provider, type Account, type CustomModel } from "../lib/api";
+import { providersApi, accountsApi, customProviderApi, type Provider, type Account, type CustomModel, rotationApi} from "../lib/api";
 
 export function ProvidersApp() {
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -146,7 +147,17 @@ export function ProvidersApp() {
           }}
         />
       )}
-      {adding && adding.name !== "kiro" && adding.name !== "codex" && adding.name !== "antigravity" && adding.name !== "leonardo" && (
+      {adding && adding.name === "claudecode" && (
+        <ClaudeAddModal
+          provider={adding}
+          onClose={() => setAdding(null)}
+          onSaved={() => {
+            setAdding(null);
+            load();
+          }}
+        />
+      )}
+      {adding && adding.name !== "kiro" && adding.name !== "codex" && adding.name !== "claudecode" && adding.name !== "antigravity" && adding.name !== "leonardo" && (
         <AddAccountModal
           provider={adding}
           onClose={() => setAdding(null)}
@@ -172,6 +183,7 @@ function ProviderCard({
   onAdd: () => void;
   onDelete?: () => void;
 }) {
+  const [rotOpen, setRotOpen] = useState(false);
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 transition-colors hover:bg-white/[0.06]">
       <div className="flex items-start gap-3">
@@ -195,8 +207,45 @@ function ProviderCard({
         >
           <Plus className="h-3.5 w-3.5" /> Add account
         </button>
+        <button onClick={() => setRotOpen(true)} title="Account rotation" className="shrink-0 rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/40 hover:bg-white/10 hover:text-white/80"><Settings className="h-3.5 w-3.5" /></button>
         {onDelete && (
           <button onClick={onDelete} title="Delete provider" className="shrink-0 rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/40 hover:bg-red-500/20 hover:text-red-200"><Trash2 className="h-3.5 w-3.5" /></button>
+        )}
+      </div>
+      {rotOpen && <RotationModal provider={provider.name} onClose={() => setRotOpen(false)} />}
+    </div>
+  );
+}
+
+// RotationModal is a popup to pick sticky vs round-robin account selection for a
+// provider. Sticky keeps one account until it dies; round-robin spreads requests
+// across accounts so no single one carries all the traffic (useful for ban-
+// sensitive providers). Available for every provider, including custom ones.
+function RotationModal({ provider, onClose }: { provider: string; onClose: () => void }) {
+  const [mode, setMode] = useState<"sticky" | "round-robin" | null>(null);
+  useEffect(() => { rotationApi.get(provider).then((r) => setMode(r.mode === "round-robin" ? "round-robin" : "sticky")).catch(() => setMode("sticky")); }, [provider]);
+  const set = async (m: "sticky" | "round-robin") => { setMode(m); try { await rotationApi.set(provider, m); } catch { /* revert on next load */ } };
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#14161c] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-1 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-semibold text-white"><Settings className="h-4 w-4 text-white/60" /> Account rotation</div>
+          <button onClick={onClose} className="rounded-md p-1 text-white/50 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        <p className="mb-3 text-[11px] leading-snug text-white/45">How the next account is chosen for each request. Either way, a failed account is skipped automatically and in-flight streams are never interrupted.</p>
+        {mode === null ? (
+          <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-white/30" /></div>
+        ) : (
+          <div className="space-y-2">
+            <button onClick={() => set("sticky")} className={`w-full rounded-xl border p-3 text-left transition-colors ${mode === "sticky" ? "border-sky-400/40 bg-sky-500/10" : "border-white/10 hover:bg-white/5"}`}>
+              <div className="flex items-center justify-between"><span className="text-sm font-medium text-white">Sticky</span>{mode === "sticky" && <Check className="h-4 w-4 text-sky-300" />}</div>
+              <p className="mt-0.5 text-[11px] text-white/45">Keep using one account; only move to the next when it stops working. Default.</p>
+            </button>
+            <button onClick={() => set("round-robin")} className={`w-full rounded-xl border p-3 text-left transition-colors ${mode === "round-robin" ? "border-sky-400/40 bg-sky-500/10" : "border-white/10 hover:bg-white/5"}`}>
+              <div className="flex items-center justify-between"><span className="text-sm font-medium text-white">Round-robin</span>{mode === "round-robin" && <Check className="h-4 w-4 text-sky-300" />}</div>
+              <p className="mt-0.5 text-[11px] text-white/45">Rotate through all accounts each request to spread the load.</p>
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -251,7 +300,7 @@ function AddProviderModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[11000] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
       <div className="flex max-h-[90%] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#11131a] shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 border-b border-white/5 px-4 py-3">
           <div className="flex-1 text-sm font-semibold text-white">Add custom provider</div>

@@ -5,11 +5,13 @@ go 1.26.3
 require (
 	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/kkdai/youtube/v2 v2.10.6
 	github.com/shirou/gopsutil/v4 v4.26.5
 	golang.org/x/crypto v0.53.0
+	golang.org/x/net v0.56.0
 	modernc.org/sqlite v1.53.0
 )
 
@@ -30,7 +32,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	modernc.org/libc v1.73.4 // indirect

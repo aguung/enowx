@@ -51,6 +51,10 @@ func Scan() []Found {
 		}
 		out = append(out, Found{Provider: s.Provider, Target: s.Target, Path: p, Creds: creds})
 	}
+	// Claude Code needs OS-aware detection (keychain on macOS, file elsewhere).
+	if f := scanClaudeCode(); f != nil {
+		out = append(out, *f)
+	}
 	return out
 }
 

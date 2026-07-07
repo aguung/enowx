@@ -52,6 +52,7 @@ type Manager struct {
 	accounts store.AccountStore
 	keys     store.KeyStore
 	aliases  store.AliasStore
+	combos   store.ComboStore
 	custom   store.CustomProviderStore
 	proxies  store.ProxyStore
 	// onCustomProvider re-registers a pulled custom provider live (custommgr).
@@ -66,8 +67,8 @@ type Manager struct {
 // SetFullSync wires the extra local stores (and a live custom-provider register
 // hook) so the manager can snapshot/apply accounts, keys, aliases, and custom
 // providers. Called once at startup after the stores + custommgr exist.
-func (m *Manager) SetFullSync(a store.AccountStore, k store.KeyStore, al store.AliasStore, cp store.CustomProviderStore, px store.ProxyStore, onCP func(store.CustomProvider), onDel func(prefix, name string)) {
-	m.accounts, m.keys, m.aliases, m.custom, m.proxies = a, k, al, cp, px
+func (m *Manager) SetFullSync(a store.AccountStore, k store.KeyStore, al store.AliasStore, cb store.ComboStore, cp store.CustomProviderStore, px store.ProxyStore, onCP func(store.CustomProvider), onDel func(prefix, name string)) {
+	m.accounts, m.keys, m.aliases, m.combos, m.custom, m.proxies = a, k, al, cb, cp, px
 	m.onCustomProvider, m.onCustomDelete = onCP, onDel
 }
 
@@ -80,7 +81,10 @@ type LiveEvent struct {
 func New(settings store.SettingsStore, music store.MusicStore, logs store.LogStore) *Manager {
 	return &Manager{
 		settings: settings, music: music, logs: logs,
-		http: &http.Client{Timeout: 30 * time.Second},
+		// 60s (was 30): a first full sync of a large account pool can take a while
+		// over a remote DB; the server batches the upsert in one tx, but give the
+		// client headroom so a big initial push doesn't time out.
+		http: &http.Client{Timeout: 60 * time.Second},
 		subs: map[int]chan LiveEvent{},
 	}
 }
@@ -454,6 +458,93 @@ func (m *Manager) RegistryPublish(ctx context.Context, body []byte) (string, err
 	return string(raw), nil
 }
 
+// --- Free AI donation (proxy to cloud) ---
+
+// FreeAIDonate forwards a donation (JSON body) to the cloud, which health-checks
+// then stores it. Returns the raw JSON response.
+func (m *Manager) FreeAIDonate(ctx context.Context, body []byte) (string, error) {
+	return m.rawPost(ctx, "/free-ai/donate", body)
+}
+
+// DonateLocalAccount hands a local account's provider + creds (+ models) to the
+// cloud Free-AI pool. For native providers the cloud validates them; the caller
+// deletes the local account on success.
+func (m *Manager) DonateLocalAccount(ctx context.Context, provider string, creds map[string]string, models []string) (string, error) {
+	body, _ := json.Marshal(map[string]any{
+		"provider": provider,
+		"label":    provider,
+		"creds":    creds,
+		"models":   models,
+	})
+	return m.rawPost(ctx, "/free-ai/donate", body)
+}
+
+// FreeAIDonations lists the caller's donated accounts.
+func (m *Manager) FreeAIDonations(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/free-ai/donations", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// RegisterKeyHashes sends non-secret sha256 hashes of the user's gateway API
+// keys to the cloud so they can be used to authenticate Free-AI requests. Works
+// for all users (ungated) — it's just hashes, not the key payload. Best-effort.
+func (m *Manager) RegisterKeyHashes(ctx context.Context) {
+	if m.keys == nil || !m.Enabled(ctx) {
+		return
+	}
+	list, err := m.keys.List(ctx)
+	if err != nil || len(list) == 0 {
+		return
+	}
+	hashes := make([]string, 0, len(list))
+	for _, k := range list {
+		hashes = append(hashes, fullHash(k.Secret))
+	}
+	var out json.RawMessage
+	_ = m.call(ctx, http.MethodPost, "/free-ai/register-keys", map[string]any{"hashes": hashes}, &out)
+}
+
+// FreeAIModels lists the models the pool can currently serve (with Kleos prices).
+func (m *Manager) FreeAIModels(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/ai/models", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// FreeAIWithdraw removes one of the caller's donated accounts.
+func (m *Manager) FreeAIWithdraw(ctx context.Context, id string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodDelete, "/free-ai/donations/"+id, nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// rawPost sends a raw JSON body with the auth token and returns the raw response.
+func (m *Manager) rawPost(ctx context.Context, path string, body []byte) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.ServerURL(ctx)+path, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+m.get(ctx, keyToken))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := m.http.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if resp.StatusCode >= 400 {
+		return "", errors.New(strings.TrimSpace(string(raw)))
+	}
+	return string(raw), nil
+}
+
 // RegistryList browses published MCP/Skill items.
 func (m *Manager) RegistryList(ctx context.Context, kind, query string) (string, error) {
 	var raw json.RawMessage
@@ -819,6 +910,81 @@ func (m *Manager) Subscription(ctx context.Context) (string, error) {
 	return string(raw), nil
 }
 
+// --- Gmail store proxies ---
+
+func (m *Manager) GmailStoreInfo(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/store/gmail", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) GmailBuy(ctx context.Context, body any) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPost, "/store/gmail/order", body, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) GmailOrderStatus(ctx context.Context, ref string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/store/gmail/order/"+url.PathEscape(ref), nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) GmailOrderAccounts(ctx context.Context, ref string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/store/gmail/order/"+url.PathEscape(ref)+"/accounts", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// Admin (GOD-only, enforced server-side).
+func (m *Manager) AdminGmailStock(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/gmail/stock", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) AdminGmailAddStock(ctx context.Context, body any) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPost, "/admin/gmail/stock", body, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) AdminGmailDeleteStock(ctx context.Context, id string) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodDelete, "/admin/gmail/stock/"+url.PathEscape(id), nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) AdminGmailOrders(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/admin/gmail/orders", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+func (m *Manager) AdminGmailSetPrice(ctx context.Context, body any) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPut, "/admin/gmail/price", body, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 // SubscriptionOrderStatus proxies a poll of a subscription order's status.
 func (m *Manager) SubscriptionOrderStatus(ctx context.Context, ref string) (string, error) {
 	var raw json.RawMessage
@@ -1074,6 +1240,24 @@ func (m *Manager) Notifications(ctx context.Context) (string, error) {
 func (m *Manager) CommunityStats(ctx context.Context) (string, error) {
 	var raw json.RawMessage
 	if err := m.call(ctx, http.MethodGet, "/community/stats", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// KleosDailyStatus peeks at today's daily-login reward (amount + already claimed).
+func (m *Manager) KleosDailyStatus(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodGet, "/kleos/daily", nil, &raw); err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
+// KleosDaily claims the daily-login Kleos.
+func (m *Manager) KleosDaily(ctx context.Context) (string, error) {
+	var raw json.RawMessage
+	if err := m.call(ctx, http.MethodPost, "/kleos/daily", map[string]any{}, &raw); err != nil {
 		return "", err
 	}
 	return string(raw), nil

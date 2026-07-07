@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign, ShoppingCart, ExternalLink, Copy, Wallet, AlertTriangle, Star, Boxes, Pencil } from "lucide-react";
-import { marketplaceApi, rekberApi, orderApi, officialApi, payoutApi, reviewApi, type Listing, type ListingInput, type ListingCategory, type RekberThread, type RekberMessage, type Order, type OfficialProduct, type RekberOrder, type PayoutAccount } from "../lib/api";
+import { Store, ShieldCheck, Plus, X, Search, RefreshCw, Loader2, Trash2, ImagePlus, ArrowLeft, Tag, Handshake, Send, Check, CircleDollarSign, ShoppingCart, ExternalLink, Copy, Wallet, AlertTriangle, Star, Boxes, Pencil, Mail, Clock} from "lucide-react";
+import QRCode from "qrcode";
+import { copyText } from "../os/clipboard";
+import { marketplaceApi, gmailStoreApi, rekberApi, orderApi, officialApi, payoutApi, reviewApi, type Listing, type ListingInput, type ListingCategory, type RekberThread, type RekberMessage, type Order, type OfficialProduct, type RekberOrder, type PayoutAccount, type GmailAccount } from "../lib/api";
 import { useProfile } from "../os/useProfile";
 import { SignInGate } from "../components/SignInGate";
 import { useImageAttach } from "../os/useImageAttach";
@@ -9,7 +11,6 @@ import { openLightbox } from "../os/lightbox";
 import { openProfile } from "../os/profileViewer";
 import { useMarketplaceNav, consumeMarketplaceThread } from "../os/marketplaceNav";
 import { subscribeLive } from "../os/liveBus";
-import { copyText } from "../os/clipboard";
 
 type Kind = "community" | "official";
 type View = "browse" | "mine" | "deals" | "orders" | "payout";
@@ -941,10 +942,14 @@ function OfficialStore({ onBought }: { onBought: () => void }) {
         <button onClick={load} className="rounded-lg border border-white/10 p-1.5 text-white/50 hover:bg-white/5 hover:text-white"><RefreshCw className="h-3.5 w-3.5" /></button>
       </div>
       {err && <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">{err}</div>}
+
+      {/* Gmail accounts — always shown (disabled when out of stock). */}
+      <GmailStoreCard />
+
       {!products ? (
         <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-white/40" /></div>
       ) : products.length === 0 ? (
-        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center text-xs text-white/40">No products yet. (Admins curate these from the VIP catalog.)</div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center text-[11px] text-white/35">No other products yet.</div>
       ) : (
         <div className="space-y-4">
           {Object.entries(groups).map(([brand, items]) => (
@@ -1074,6 +1079,146 @@ function RekberAccountEditor() {
           <button onClick={() => setEditing(true)} className="shrink-0 rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-white/60 hover:bg-white/5">Edit</button>
         </div>
       )}
+    </div>
+  );
+}
+
+// GmailStoreCard sells Gmail accounts from stock, paid with Duitku (IDR).
+interface GmailInfo { price_per_account: number; available: number; min_order: number; order_step: number; account_ttl_hours: number; last_restock?: string }
+
+function GmailStoreCard() {
+  const [qr, setQr] = useState("");
+  const qrCanvas = useRef<HTMLCanvasElement>(null);
+  const [info, setInfo] = useState<GmailInfo | null>(null);
+  const [qty, setQty] = useState(100);
+  const [busy, setBusy] = useState(false);
+  const [ref, setRef] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<GmailAccount[] | null>(null);
+  const [err, setErr] = useState("");
+
+  const load = () => gmailStoreApi.info().then((i) => { setInfo(i); setQty((q) => Math.max(i.min_order, q)); }).catch(() => setInfo(null));
+  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    if (!ref || accounts) return;
+    const id = setInterval(async () => {
+      try {
+        const s = await gmailStoreApi.orderStatus(ref);
+        if (s.status === "delivered") { const a = await gmailStoreApi.accounts(ref); setAccounts(a.accounts ?? []); load(); }
+        else if (s.status === "failed" || s.status === "expired") { setErr("Payment wasn't completed — stock released."); setRef(null); }
+      } catch { /* keep polling */ }
+    }, 4000);
+    return () => clearInterval(id);
+  }, [ref, accounts]);
+
+  useEffect(() => { if (qr && qrCanvas.current) QRCode.toCanvas(qrCanvas.current, qr, { width: 190, margin: 1 }).catch(() => {}); }, [qr]);
+
+  const min = info?.min_order ?? 100;
+  const step = info?.order_step ?? 100;
+  const available = info?.available ?? 0;
+  const price = info?.price_per_account ?? 0;
+  const maxQty = Math.floor(available / step) * step;
+  const soldOut = !!info && available < min;
+  const total = price * qty;
+  const ttlHours = info?.account_ttl_hours ?? 24;
+
+  const setQtyClamped = (v: number) => setQty(Math.max(min, Math.min(maxQty || min, Math.round(v / step) * step)));
+
+  const buy = async () => {
+    setErr(""); setBusy(true);
+    try { const r = await gmailStoreApi.buy(qty); setRef(r.order_ref); setQr(r.qr_string ?? ""); }
+    catch (e) { setErr(e instanceof Error ? e.message : "failed to start order"); }
+    finally { setBusy(false); }
+  };
+  const reset = () => { setRef(null); setAccounts(null); setQr(""); setErr(""); };
+
+  const copyAll = () => copyText((accounts ?? []).map((a) => `${a.email}:${a.password}`).join("\n"));
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#1a2530] to-[#12161c]">
+      {/* Header */}
+      <div className="flex items-center gap-3 border-b border-white/5 bg-gradient-to-r from-sky-500/10 to-transparent px-4 py-3">
+        <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 shadow-lg shadow-sky-500/20">
+          <Mail className="h-5.5 w-5.5 text-white" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-bold text-white">Temporary Gmail Accounts</p>
+            <span className="rounded bg-amber-400/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-300">Temporary</span>
+          </div>
+          <p className="text-[11px] text-white/45">Disposable accounts, delivered instantly · min {min}, ×{step}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-base font-bold text-sky-200">Rp{price.toLocaleString()}</p>
+          <p className="text-[10px] text-white/35">per account</p>
+        </div>
+      </div>
+
+      {/* Stock bar */}
+      <div className="flex items-center gap-2 px-4 pt-2.5 text-[11px]">
+        <span className={soldOut ? "text-red-300" : "text-emerald-300"}>{soldOut ? "Out of stock" : `${available.toLocaleString()} available`}</span>
+        <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+          <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-emerald-400" style={{ width: `${Math.min(100, (available / 3000) * 100)}%` }} />
+        </div>
+      </div>
+
+      {/* Validity + last restock */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-2 text-[10.5px]">
+        <span className="flex items-center gap-1 text-amber-300/90">
+          <Clock className="h-3 w-3" /> Accounts stop working {ttlHours}h after restock
+        </span>
+        {info?.last_restock && (
+          <span className="text-white/40">Last restock: {relTime(info.last_restock)}</span>
+        )}
+      </div>
+
+      <div className="p-4 pt-3">
+        {accounts ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-medium text-amber-300">{accounts.length} delivered — expire {ttlHours}h after restock, use now</p>
+              <button onClick={copyAll} className="flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[10px] text-white/70 hover:bg-white/15"><Copy className="h-3 w-3" /> Copy all</button>
+            </div>
+            <div className="max-h-52 space-y-1 overflow-auto rounded-lg bg-black/25 p-2">
+              {accounts.map((a) => (
+                <div key={a.email} className="flex items-center gap-2 text-[11px]">
+                  <code className="flex-1 truncate font-mono text-white/75">{a.email}:{a.password}</code>
+                  <button onClick={() => copyText(`${a.email}:${a.password}`)} className="shrink-0 rounded p-0.5 text-white/35 hover:bg-white/10 hover:text-white/80"><Copy className="h-3 w-3" /></button>
+                </div>
+              ))}
+            </div>
+            <button onClick={reset} className="w-full rounded-lg border border-white/10 py-2 text-xs text-white/60 hover:bg-white/5">Done</button>
+          </div>
+        ) : ref ? (
+          <div className="flex flex-col items-center gap-2.5">
+            <p className="text-xs text-white/60">Scan QRIS to pay <span className="font-semibold text-white">Rp{total.toLocaleString()}</span></p>
+            {qr ? <canvas ref={qrCanvas} className="rounded-xl bg-white p-2.5 shadow-lg" /> : <div className="flex h-[190px] w-[190px] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-white/30" /></div>}
+            <p className="flex items-center gap-1.5 text-[11px] text-amber-300/80"><Loader2 className="h-3 w-3 animate-spin" /> Waiting for payment…</p>
+            <button onClick={reset} className="text-[11px] text-white/40 hover:text-white/70">Cancel</button>
+          </div>
+        ) : (
+          <>
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-[11px] text-white/45">Quantity</span>
+              <div className="flex items-center gap-1.5">
+                <button onClick={() => setQtyClamped(qty - step)} disabled={soldOut || qty <= min} className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-white/70 hover:bg-white/10 disabled:opacity-30">−</button>
+                <input
+                  type="number" value={qty} step={step} min={min} disabled={soldOut}
+                  onChange={(e) => setQtyClamped(Number(e.target.value) || min)}
+                  className="w-20 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-center text-sm font-semibold text-white outline-none disabled:opacity-40"
+                />
+                <button onClick={() => setQtyClamped(qty + step)} disabled={soldOut || qty >= maxQty} className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 text-white/70 hover:bg-white/10 disabled:opacity-30">+</button>
+              </div>
+            </div>
+            <button onClick={buy} disabled={busy || soldOut || !info}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-400 to-blue-500 py-2.5 text-sm font-bold text-white shadow-lg shadow-sky-500/20 hover:opacity-90 disabled:opacity-40">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {soldOut ? "Out of stock" : `Buy ${qty} for Rp${total.toLocaleString()}`}
+            </button>
+          </>
+        )}
+        {err && <p className="mt-2 text-center text-[11px] text-red-300">{err}</p>}
+      </div>
     </div>
   );
 }

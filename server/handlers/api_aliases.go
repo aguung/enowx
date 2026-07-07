@@ -11,9 +11,14 @@ import (
 )
 
 // Aliases manages the user's local model aliases (per-instance, not synced).
-type Aliases struct{ store store.AliasStore }
+type Aliases struct {
+	store  store.AliasStore
+	combos store.ComboStore // for cross-namespace name-collision checks
+}
 
-func NewAliases(s store.AliasStore) *Aliases { return &Aliases{store: s} }
+func NewAliases(s store.AliasStore, combos store.ComboStore) *Aliases {
+	return &Aliases{store: s, combos: combos}
+}
 
 func (h *Aliases) List(w http.ResponseWriter, r *http.Request) {
 	list, err := h.store.List(r.Context())
@@ -38,6 +43,16 @@ func (h *Aliases) Set(w http.ResponseWriter, r *http.Request) {
 	if alias == "" || target == "" {
 		writeAPIErr(w, http.StatusBadRequest, "alias and target required")
 		return
+	}
+	if h.combos != nil {
+		if combos, err := h.combos.List(r.Context()); err == nil {
+			for _, c := range combos {
+				if c.Name == alias {
+					writeAPIErr(w, http.StatusConflict, "name already used by a combo")
+					return
+				}
+			}
+		}
 	}
 	if err := h.store.Set(r.Context(), alias, target); err != nil {
 		writeAPIErr(w, http.StatusInternalServerError, err.Error())

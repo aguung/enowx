@@ -5,7 +5,10 @@ set -eu
 
 REPO="enowdev/enowx"
 BIN="enx"
-INSTALL_DIR="${ENX_INSTALL_DIR:-/usr/local/bin}"
+# Install per-user by default (~/.local/bin): no sudo to install, and — crucially —
+# no sudo to self-update later, since enx can write its own binary there. Override
+# with ENX_INSTALL_DIR=... for a system-wide install.
+INSTALL_DIR="${ENX_INSTALL_DIR:-$HOME/.local/bin}"
 
 os="$(uname -s | tr '[:upper:]' '[:lower:]')"
 arch="$(uname -m)"
@@ -53,12 +56,42 @@ if [ -f "${tmp}/${BIN}.sha256" ]; then
 fi
 
 chmod +x "${tmp}/${BIN}"
-if [ -w "$INSTALL_DIR" ]; then
+mkdir -p "$INSTALL_DIR" 2>/dev/null || true
+if [ -w "$INSTALL_DIR" ] || mkdir -p "$INSTALL_DIR" 2>/dev/null; then
   mv "${tmp}/${BIN}" "${INSTALL_DIR}/${BIN}"
 else
   echo "Installing to ${INSTALL_DIR} (requires sudo)..."
   sudo mv "${tmp}/${BIN}" "${INSTALL_DIR}/${BIN}"
 fi
 
+# On macOS, an unsigned binary that was copied (not code-signed) can be killed by
+# Gatekeeper; ad-hoc sign it so it runs.
+if [ "$os" = "darwin" ] && command -v codesign >/dev/null 2>&1; then
+  codesign --force --sign - "${INSTALL_DIR}/${BIN}" 2>/dev/null || true
+fi
+
 echo "Installed ${BIN} to ${INSTALL_DIR}/${BIN}"
+
+# Make sure the install dir is on PATH (it often isn't for ~/.local/bin). Add it
+# to the user's shell rc so `enx` works in new shells.
+case ":$PATH:" in
+  *":${INSTALL_DIR}:"*) ;;  # already on PATH
+  *)
+    added=""
+    for rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+      [ -f "$rc" ] || continue
+      if ! grep -q "${INSTALL_DIR}" "$rc" 2>/dev/null; then
+        printf '\n# Added by enx installer\nexport PATH="%s:$PATH"\n' "$INSTALL_DIR" >> "$rc"
+        added="$rc"
+        break
+      fi
+    done
+    if [ -n "$added" ]; then
+      echo "Added ${INSTALL_DIR} to your PATH in ${added} — open a new terminal (or 'source ${added}')."
+    else
+      echo "NOTE: add ${INSTALL_DIR} to your PATH: export PATH=\"${INSTALL_DIR}:\$PATH\""
+    fi
+    ;;
+esac
+
 "${INSTALL_DIR}/${BIN}" version

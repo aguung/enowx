@@ -87,11 +87,12 @@ func (h *Version) Update(w http.ResponseWriter, r *http.Request) {
 		writeAPIErr(w, http.StatusBadRequest, "already up to date")
 		return
 	}
-	if err := updater.Apply(h.doer, rel.AssetURL, rel.AssetSHA); err != nil {
+	res, err := updater.Apply(h.doer, rel.AssetURL, rel.AssetSHA)
+	if err != nil {
 		writeAPIErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeData(w, map[string]any{"started": true})
+	writeData(w, map[string]any{"started": true, "migrated_to": res.MigratedTo, "note": res.Note})
 	// Exit shortly so the detached updater can replace the binary + restart.
 	updater.ExitSoon()
 }

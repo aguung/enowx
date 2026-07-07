@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"context"
+	"fmt"
 	"encoding/json"
 	"io"
+	"strings"
 	"net/http"
 	"strconv"
 
@@ -17,9 +20,47 @@ type Accounts struct {
 	store   store.AccountStore
 	warmer  Warmer
 	onWrite func() // fire-and-forget: push local changes to the cloud now
+	// donate hands an account's creds to the cloud Free-AI pool; returns the
+	// cloud's raw JSON reply (nil disables the feature — not syncing).
+	donate func(ctx context.Context, provider string, creds map[string]string, models []string) (string, error)
+	// resolveEmail resolves an account's email via its provider (EmailReporter),
+	// returning "" if unavailable. Used to backfill generic labels.
+	resolveEmail func(a store.Account) string
 }
 
 func NewAccounts(s store.AccountStore) *Accounts { return &Accounts{store: s} }
+
+// SetEmailResolver wires provider-based email resolution for label backfill.
+func (h *Accounts) SetEmailResolver(f func(a store.Account) string) { h.resolveEmail = f }
+
+// backfillLabels resolves + persists emails for generic-labelled accounts in the
+// background, so a re-list shows the real email. Fire-and-forget; each account is
+// only resolved when its label is still generic.
+func (h *Accounts) backfillLabels(rows []store.Account) {
+	if h.resolveEmail == nil {
+		return
+	}
+	go func() {
+		ctx := context.Background()
+		for _, a := range rows {
+			if a.Creds["email"] != "" || !genericLabel(a.Label) {
+				continue
+			}
+			if email := h.resolveEmail(a); email != "" {
+				a.Creds["email"] = email
+				_ = h.store.UpdateCreds(ctx, a.ID, a.Creds)
+				if genericLabel(a.Label) {
+					_ = h.store.SetLabel(ctx, a.ID, email)
+				}
+			}
+		}
+	}()
+}
+
+// SetDonate wires the Free-AI donation call (via the sync manager).
+func (h *Accounts) SetDonate(f func(ctx context.Context, provider string, creds map[string]string, models []string) (string, error)) {
+	h.donate = f
+}
 
 // SetWarmer enables automatic warmup of newly-added accounts.
 func (h *Accounts) SetWarmer(w Warmer) { h.warmer = w }
@@ -49,10 +90,16 @@ func toDTO(a store.Account) accountDTO {
 	for k := range a.Creds {
 		has = append(has, k)
 	}
+	// Fall back the display label to the account email when no label was set —
+	// so every provider that resolves an email (including claudecode) shows it.
+	label := a.Label
+	if label == "" {
+		label = a.Creds["email"]
+	}
 	return accountDTO{
 		ID:        a.ID,
 		Provider:  a.Provider,
-		Label:     a.Label,
+		Label:     label,
 		Status:    a.Status,
 		Disabled:  a.Disabled,
 		Has:       has,
@@ -73,6 +120,7 @@ func (h *Accounts) List(w http.ResponseWriter, r *http.Request) {
 		out = append(out, toDTO(a))
 	}
 	writeData(w, out)
+	h.backfillLabels(rows) // resolve missing emails in the background
 }
 
 type addAccountReq struct {
@@ -156,6 +204,154 @@ func (h *Accounts) SetDisabled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeData(w, map[string]any{"ok": true})
+}
+
+// Donate hands a local account's credentials to the cloud Free-AI pool, then —
+// on success — deletes it locally (it now lives in the shared pool). The client
+// supplies the models this account should serve.
+func (h *Accounts) Donate(w http.ResponseWriter, r *http.Request) {
+	if h.donate == nil {
+		writeAPIErr(w, http.StatusServiceUnavailable, "sign in to the cloud to donate accounts")
+		return
+	}
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeAPIErr(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in struct {
+		Models []string `json:"models"`
+	}
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<14))
+	_ = json.Unmarshal(body, &in)
+
+	// Find the account (with creds) by id.
+	rows, err := h.store.List(r.Context(), "")
+	if err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	var acc *store.Account
+	for i := range rows {
+		if rows[i].ID == id {
+			acc = &rows[i]
+			break
+		}
+	}
+	if acc == nil {
+		writeAPIErr(w, http.StatusNotFound, "account not found")
+		return
+	}
+	// Assemble the credential map (secret folds into api_key for single-token).
+	creds := map[string]string{}
+	for k, v := range acc.Creds {
+		creds[k] = v
+	}
+	if acc.Secret != "" {
+		if _, ok := creds["api_key"]; !ok {
+			creds["api_key"] = acc.Secret
+		}
+	}
+	raw, err := h.donateOne(r.Context(), acc, in.Models)
+	if err != nil {
+		writeAPIErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if h.onWrite != nil {
+		go h.onWrite()
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"data":` + raw + `}`))
+}
+
+// nonDonatable are providers that must never be donated to the community pool
+// (e.g. Claude Code — its accounts are ban-prone when shared).
+var nonDonatable = map[string]bool{"claudecode": true}
+
+// donateOne hands one account's creds to the pool and, on success, deletes it
+// locally. Returns the cloud's raw JSON reply.
+func (h *Accounts) donateOne(ctx context.Context, acc *store.Account, models []string) (string, error) {
+	if nonDonatable[acc.Provider] {
+		return "", fmt.Errorf("%s accounts cannot be donated", acc.Provider)
+	}
+	creds := map[string]string{}
+	for k, v := range acc.Creds {
+		creds[k] = v
+	}
+	if acc.Secret != "" {
+		if _, ok := creds["api_key"]; !ok {
+			creds["api_key"] = acc.Secret
+		}
+	}
+	raw, err := h.donate(ctx, acc.Provider, creds, models)
+	if err != nil {
+		return "", err
+	}
+	if err := h.store.Delete(ctx, acc.ID); err != nil {
+		return "", err
+	}
+	return raw, nil
+}
+
+// DonateBulk donates up to `quantity` LIVE accounts of a provider from the local
+// pool: it warms (health-checks) each candidate and donates the ones that come
+// back active, until the quantity is met. The user just picks a provider + count.
+func (h *Accounts) DonateBulk(w http.ResponseWriter, r *http.Request) {
+	if h.donate == nil {
+		writeAPIErr(w, http.StatusServiceUnavailable, "sign in to the cloud to donate accounts")
+		return
+	}
+	var in struct {
+		Provider string `json:"provider"`
+		Quantity int    `json:"quantity"`
+	}
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<14))
+	_ = json.Unmarshal(body, &in)
+	provider := strings.TrimSpace(in.Provider)
+	if provider == "" || in.Quantity < 1 {
+		writeAPIErr(w, http.StatusBadRequest, "provider and a positive quantity are required")
+		return
+	}
+	if in.Quantity > 100 {
+		in.Quantity = 100
+	}
+
+	rows, err := h.store.List(r.Context(), provider)
+	if err != nil {
+		writeAPIErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	donated, checked, failed := 0, 0, 0
+	var lastErr string
+	for i := range rows {
+		if donated >= in.Quantity {
+			break
+		}
+		acc := rows[i]
+		if acc.Disabled {
+			continue
+		}
+		checked++
+		// Health check: warm the account; only donate if it comes back active.
+		if h.warmer != nil {
+			status, _ := h.warmer.WarmAccount(r.Context(), &acc)
+			if status != "" && status != "active" {
+				failed++
+				continue
+			}
+		}
+		if _, err := h.donateOne(r.Context(), &acc, nil); err != nil {
+			failed++
+			lastErr = err.Error()
+			continue
+		}
+		donated++
+	}
+	if h.onWrite != nil {
+		go h.onWrite()
+	}
+	writeData(w, map[string]any{"donated": donated, "checked": checked, "failed": failed, "last_error": lastErr})
 }
 
 func (h *Accounts) Delete(w http.ResponseWriter, r *http.Request) {

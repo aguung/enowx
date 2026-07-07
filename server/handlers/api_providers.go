@@ -21,6 +21,7 @@ var providerCatalog = map[string]providerMeta{
 	"commandcode":  {Label: "Command Code", Icon: "commandcode"},
 	"kiro":         {Label: "Kiro", Icon: "kiro"},
 	"codex":        {Label: "Codex", Icon: "codex"},
+	"claudecode":   {Label: "Claude", Icon: "claude"},
 	"antigravity":  {Label: "Antigravity", Icon: "antigravity"},
 	"suno":         {Label: "Suno", Icon: "suno"},
 	"leonardo":     {Label: "Leonardo", Icon: "leonardo"},

@@ -21,6 +21,7 @@ import { findPost } from "./postsBus";
 import { useChatUnread } from "./chatBus";
 import { postsApi } from "../lib/api";
 import { useProfile } from "./useProfile";
+import { DailyCheckinModal } from "./DailyCheckinModal";
 import { DocsApp } from "../apps/DocsApp";
 import { AdminApp } from "../apps/AdminApp";
 import { MarketplaceApp } from "../apps/MarketplaceApp";
@@ -330,6 +331,8 @@ export function Desktop() {
       <Lightbox />
       {/* macOS-style notification banners (top-right). */}
       <NotifBanner />
+      {/* Daily Kleos check-in — auto-pops once per day. */}
+      <DailyCheckinModal />
 
       {leaderActive && (
         <div className="pointer-events-none fixed left-1/2 top-9 z-[10000] -translate-x-1/2 rounded-lg border border-emerald-500/30 bg-black/80 px-3 py-1.5 font-mono text-[11px] text-emerald-300 shadow-lg">
