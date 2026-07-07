@@ -97,10 +97,9 @@ function ToolBlock({ tool, models, busy, onEnable, onAliases }: {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3.5">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold text-white">{tool.name}</span>
-        <span className="text-[10px] text-white/35">{tool.hosts.join(", ")}</span>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white" title={tool.hosts.join(", ")}>{tool.name}</span>
         <button onClick={() => onEnable(!tool.dns_enabled)} disabled={busy === "enable:" + tool.key}
-          className={`ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium disabled:opacity-40 ${tool.dns_enabled ? "bg-emerald-500/80 text-white hover:bg-emerald-500" : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"}`}>
+          className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1 text-[11px] font-medium disabled:opacity-40 ${tool.dns_enabled ? "bg-emerald-500/80 text-white hover:bg-emerald-500" : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"}`}>
           {busy === "enable:" + tool.key ? <Loader2 className="h-3 w-3 animate-spin" /> : tool.dns_enabled ? <Check className="h-3 w-3" /> : null}
           {tool.dns_enabled ? "Intercepting" : "Enable intercept"}
         </button>
