@@ -27,6 +27,7 @@ import (
 	"github.com/enowdev/enowx/core/provider/codebuddy"
 	"github.com/enowdev/enowx/core/provider/commandcode"
 	"github.com/enowdev/enowx/core/provider/custommgr"
+	"github.com/enowdev/enowx/core/provider/claudecode"
 	"github.com/enowdev/enowx/core/provider/codex"
 	leonardoprovider "github.com/enowdev/enowx/core/provider/leonardo"
 	sunoprovider "github.com/enowdev/enowx/core/provider/suno"
@@ -112,6 +113,7 @@ func runServer() {
 	reg.Register(commandcode.New(doer))
 	reg.Register(kiro.New(doer, saveCreds))
 	reg.Register(codex.New(doer, saveCreds))
+	reg.Register(claudecode.New(doer, saveCreds))
 	reg.Register(antigravity.New(doer, saveCreds))
 	reg.Register(sunoprovider.New(doer))
 	reg.Register(leonardoprovider.New(doer))
