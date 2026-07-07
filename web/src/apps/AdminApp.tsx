@@ -1373,7 +1373,7 @@ function GmailStockPanel() {
   return (
     <div className="rounded-xl border border-sky-400/20 bg-sky-400/[0.03] p-3.5">
       <div className="mb-2 flex items-center gap-2">
-        <span className="text-xs font-semibold text-sky-200">Gmail stock</span>
+        <span className="text-xs font-semibold text-sky-200">Temporary Gmail stock</span>
         {data && (
           <span className="text-[11px] text-white/45">
             {data.counts.available} available · {data.counts.reserved} reserved · {data.counts.sold} sold

@@ -1143,10 +1143,10 @@ function GmailStoreCard() {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <p className="text-sm font-bold text-white">Gmail Accounts</p>
-            <span className="rounded bg-sky-400/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-300">Bulk</span>
+            <p className="text-sm font-bold text-white">Temporary Gmail Accounts</p>
+            <span className="rounded bg-amber-400/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-300">Temporary</span>
           </div>
-          <p className="text-[11px] text-white/45">Fresh accounts, delivered instantly · min {min}, ×{step}</p>
+          <p className="text-[11px] text-white/45">Disposable accounts, delivered instantly · min {min}, ×{step}</p>
         </div>
         <div className="text-right">
           <p className="text-base font-bold text-sky-200">Rp{price.toLocaleString()}</p>
@@ -1164,8 +1164,8 @@ function GmailStoreCard() {
 
       {/* Validity + last restock */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pt-2 text-[10.5px]">
-        <span className="flex items-center gap-1 text-amber-300/80">
-          <Clock className="h-3 w-3" /> Active {ttlHours}h after restock
+        <span className="flex items-center gap-1 text-amber-300/90">
+          <Clock className="h-3 w-3" /> Each account works for {ttlHours}h only, then stops working
         </span>
         {info?.last_restock && (
           <span className="text-white/40">Last restock: {relTime(info.last_restock)}</span>
@@ -1176,7 +1176,7 @@ function GmailStoreCard() {
         {accounts ? (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-[11px] font-medium text-emerald-300">{accounts.length} delivered — use within {ttlHours}h</p>
+              <p className="text-[11px] font-medium text-amber-300">{accounts.length} delivered — expire in {ttlHours}h, use now</p>
               <button onClick={copyAll} className="flex items-center gap-1 rounded-md bg-white/10 px-2 py-1 text-[10px] text-white/70 hover:bg-white/15"><Copy className="h-3 w-3" /> Copy all</button>
             </div>
             <div className="max-h-52 space-y-1 overflow-auto rounded-lg bg-black/25 p-2">
