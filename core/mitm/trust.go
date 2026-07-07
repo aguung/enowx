@@ -59,14 +59,14 @@ func (c *CA) Trusted() bool {
 }
 
 func (c *CA) installDarwin() error {
-	// Delete any stale copy first, then add + trust as a root.
-	_ = run("security", "delete-certificate", "-c", caCommonName, "/Library/Keychains/System.keychain")
-	return run("security", "add-trusted-cert", "-d", "-r", "trustRoot",
+	// Adding to the System keychain needs root — prompt via the native admin
+	// dialog. (Deleting a stale copy first is best-effort and non-fatal.)
+	return runElevated("security", "add-trusted-cert", "-d", "-r", "trustRoot",
 		"-k", "/Library/Keychains/System.keychain", c.CertPath())
 }
 
 func (c *CA) installWindows() error {
-	return run("certutil", "-addstore", "-f", "Root", c.CertPath())
+	return runElevated("certutil", "-addstore", "-f", "Root", c.CertPath())
 }
 
 func (c *CA) installLinux() error {
@@ -74,13 +74,15 @@ func (c *CA) installLinux() error {
 	if dst == "" {
 		return fmt.Errorf("unsupported Linux trust layout")
 	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
+	// Copy the cert into the trust anchors dir and refresh the store — both need
+	// root, so do it in one elevated shell invocation.
+	updater := "update-ca-certificates"
+	if _, err := exec.LookPath("update-ca-certificates"); err != nil {
+		updater = "update-ca-trust extract"
 	}
-	if err := copyFile(c.CertPath(), dst); err != nil {
-		return err
-	}
-	return linuxUpdateTrust()
+	script := fmt.Sprintf("mkdir -p %q && cp %q %q && %s",
+		filepath.Dir(dst), c.CertPath(), dst, updater)
+	return runElevated("sh", "-c", script)
 }
 
 // linuxTrustPath returns the CA anchor path for the current distro family, or "".

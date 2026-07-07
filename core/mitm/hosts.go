@@ -58,8 +58,9 @@ func HostsEnabled() bool {
 }
 
 // writeHostsBlock replaces (or removes, when block=="") the enx block in the
-// hosts file, preserving everything else. Requires write access to the hosts file
-// (elevated privileges).
+// hosts file, preserving everything else. The hosts file needs root to write, so
+// it tries a direct write first (works if enx is already elevated) and falls back
+// to an elevated copy-into-place.
 func writeHostsBlock(block string) error {
 	path := hostsPath()
 	existing, err := os.ReadFile(path)
@@ -74,7 +75,26 @@ func writeHostsBlock(block string) error {
 		}
 		out += block
 	}
-	return os.WriteFile(path, []byte(out), 0o644)
+	// Fast path: we already have write access (enx running elevated).
+	if err := os.WriteFile(path, []byte(out), 0o644); err == nil {
+		return nil
+	}
+	// Elevated path: stage to a temp file and copy it over with a privilege prompt.
+	tmp, err := os.CreateTemp("", "enx-hosts-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.WriteString(out); err != nil {
+		tmp.Close()
+		return err
+	}
+	tmp.Close()
+	if runtime.GOOS == "windows" {
+		return runElevated("cmd", "/c", "copy", "/y", tmpName, path)
+	}
+	return runElevated("sh", "-c", "cp "+shellQuote(tmpName)+" "+shellQuote(path))
 }
 
 // stripBlock removes our BEGIN..END block (and its trailing newline) from text.

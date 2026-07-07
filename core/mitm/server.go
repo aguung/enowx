@@ -5,10 +5,12 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -55,7 +57,10 @@ func (s *Server) Start() error {
 	}
 	ln, err := tls.Listen("tcp", ":443", &tls.Config{GetCertificate: s.ca.GetCertificate})
 	if err != nil {
-		return fmt.Errorf("listen :443 (needs elevated privileges): %w", err)
+		if isPermErr(err) {
+			return fmt.Errorf("can't bind port 443 — restart enx with admin/root privileges to run the MITM proxy")
+		}
+		return fmt.Errorf("listen :443: %w", err)
 	}
 	s.srv = &http.Server{Handler: http.HandlerFunc(s.handle), ReadHeaderTimeout: 15 * time.Second}
 	s.live = true
@@ -224,4 +229,10 @@ func flushCopy(w http.ResponseWriter, src io.Reader) {
 			return
 		}
 	}
+}
+
+// isPermErr reports whether an error is a privilege/permission failure (binding a
+// low port without root).
+func isPermErr(err error) bool {
+	return errors.Is(err, os.ErrPermission) || strings.Contains(strings.ToLower(err.Error()), "permission denied")
 }
