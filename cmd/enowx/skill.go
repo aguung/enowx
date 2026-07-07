@@ -60,6 +60,10 @@ func skillInstall(args []string) {
 		fmt.Fprintln(os.Stderr, "usage: enx skill install <slug> [-g]")
 		os.Exit(1)
 	}
+	if !validSkillSlug(slug) {
+		fmt.Fprintf(os.Stderr, "invalid skill name %q\n", slug)
+		os.Exit(1)
+	}
 
 	// git is required for the sparse checkout.
 	if _, err := exec.LookPath("git"); err != nil {
@@ -184,6 +188,10 @@ func skillRemove(args []string) {
 		fmt.Fprintln(os.Stderr, "usage: enx skill remove <slug> [-g]")
 		os.Exit(1)
 	}
+	if !validSkillSlug(slug) {
+		fmt.Fprintf(os.Stderr, "invalid skill name %q\n", slug)
+		os.Exit(1)
+	}
 	base := skillBase(global)
 	dest := filepath.Join(base, "skill", slug)
 	if _, err := os.Stat(dest); err != nil {
@@ -232,6 +240,10 @@ func skillUpdate(args []string) {
 		fmt.Fprintln(os.Stderr, "usage: enx skill update <slug> [-g]")
 		os.Exit(1)
 	}
+	if !validSkillSlug(slug) {
+		fmt.Fprintf(os.Stderr, "invalid skill name %q\n", slug)
+		os.Exit(1)
+	}
 	// Check that git is available.
 	if _, err := exec.LookPath("git"); err != nil {
 		fmt.Fprintln(os.Stderr, "git is required to update skills")
@@ -245,6 +257,24 @@ func skillUpdate(args []string) {
 	}
 	// Reinstall.
 	skillInstall(args)
+}
+
+// validSkillSlug reports whether a slug is a safe single path segment (letters,
+// digits, dot, underscore, hyphen) — so it can't escape the skill directory. It
+// mirrors the community skill naming and guards remove/update's RemoveAll.
+func validSkillSlug(slug string) bool {
+	if slug == "" || slug == "." || slug == ".." {
+		return false
+	}
+	for _, r := range slug {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
+			r == '-', r == '_', r == '.':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // skillBase returns the base agents directory for global or project scope.
