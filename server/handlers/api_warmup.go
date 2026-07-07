@@ -77,6 +77,7 @@ var warmupModel = map[string]string{
 	"kiro":         "claude-sonnet-4",
 	"codex":        "gpt-5.4-mini",
 	"antigravity":  "gemini-3.5-flash-low",
+	"claudecode":   "claude-haiku-4-5",
 }
 
 // warmupSystem is set for providers that reject requests without a system turn
