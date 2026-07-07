@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, Plus, X, Trash2, Loader2 } from "lucide-react";
+import { Search, Plus, X, Trash2, Loader2, Settings, Check} from "lucide-react";
 import { AppShell } from "./shell";
 import { ProviderIcon } from "../components/ProviderIcon";
 import { AddAccountModal } from "../components/AddAccountModal";
@@ -183,6 +183,7 @@ function ProviderCard({
   onAdd: () => void;
   onDelete?: () => void;
 }) {
+  const [rotOpen, setRotOpen] = useState(false);
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 transition-colors hover:bg-white/[0.06]">
       <div className="flex items-start gap-3">
@@ -206,31 +207,48 @@ function ProviderCard({
         >
           <Plus className="h-3.5 w-3.5" /> Add account
         </button>
+        {provider.name === "claudecode" && (
+          <button onClick={() => setRotOpen(true)} title="Account rotation" className="shrink-0 rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/40 hover:bg-white/10 hover:text-white/80"><Settings className="h-3.5 w-3.5" /></button>
+        )}
         {onDelete && (
           <button onClick={onDelete} title="Delete provider" className="shrink-0 rounded-lg border border-white/10 bg-white/5 p-1.5 text-white/40 hover:bg-red-500/20 hover:text-red-200"><Trash2 className="h-3.5 w-3.5" /></button>
         )}
       </div>
-      {provider.name === "claudecode" && count > 1 && <RotationToggle provider={provider.name} />}
+      {rotOpen && <RotationModal provider={provider.name} onClose={() => setRotOpen(false)} />}
     </div>
   );
 }
 
-// RotationToggle lets the user pick sticky vs round-robin account selection for a
+// RotationModal is a popup to pick sticky vs round-robin account selection for a
 // ban-sensitive provider. Sticky keeps one account until it dies; round-robin
 // spreads requests across accounts so no single one carries all the traffic.
-function RotationToggle({ provider }: { provider: string }) {
+function RotationModal({ provider, onClose }: { provider: string; onClose: () => void }) {
   const [mode, setMode] = useState<"sticky" | "round-robin" | null>(null);
   useEffect(() => { rotationApi.get(provider).then((r) => setMode(r.mode === "round-robin" ? "round-robin" : "sticky")).catch(() => setMode("sticky")); }, [provider]);
   const set = async (m: "sticky" | "round-robin") => { setMode(m); try { await rotationApi.set(provider, m); } catch { /* revert on next load */ } };
-  if (mode === null) return null;
   return (
-    <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2">
-      <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-white/40">Account rotation</p>
-      <div className="flex gap-1">
-        <button onClick={() => set("sticky")} className={`flex-1 rounded-md px-2 py-1 text-[11px] ${mode === "sticky" ? "bg-sky-500/80 text-white" : "text-white/50 hover:bg-white/5"}`}>Sticky</button>
-        <button onClick={() => set("round-robin")} className={`flex-1 rounded-md px-2 py-1 text-[11px] ${mode === "round-robin" ? "bg-sky-500/80 text-white" : "text-white/50 hover:bg-white/5"}`}>Round-robin</button>
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#14161c] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-1 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-sm font-semibold text-white"><Settings className="h-4 w-4 text-white/60" /> Account rotation</div>
+          <button onClick={onClose} className="rounded-md p-1 text-white/50 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
+        </div>
+        <p className="mb-3 text-[11px] leading-snug text-white/45">How the next account is chosen for each request. Either way, a failed account is skipped automatically and in-flight streams are never interrupted.</p>
+        {mode === null ? (
+          <div className="flex justify-center py-6"><Loader2 className="h-5 w-5 animate-spin text-white/30" /></div>
+        ) : (
+          <div className="space-y-2">
+            <button onClick={() => set("sticky")} className={`w-full rounded-xl border p-3 text-left transition-colors ${mode === "sticky" ? "border-sky-400/40 bg-sky-500/10" : "border-white/10 hover:bg-white/5"}`}>
+              <div className="flex items-center justify-between"><span className="text-sm font-medium text-white">Sticky</span>{mode === "sticky" && <Check className="h-4 w-4 text-sky-300" />}</div>
+              <p className="mt-0.5 text-[11px] text-white/45">Keep using one account; only move to the next when it stops working. Default.</p>
+            </button>
+            <button onClick={() => set("round-robin")} className={`w-full rounded-xl border p-3 text-left transition-colors ${mode === "round-robin" ? "border-sky-400/40 bg-sky-500/10" : "border-white/10 hover:bg-white/5"}`}>
+              <div className="flex items-center justify-between"><span className="text-sm font-medium text-white">Round-robin</span>{mode === "round-robin" && <Check className="h-4 w-4 text-sky-300" />}</div>
+              <p className="mt-0.5 text-[11px] text-white/45">Rotate through all accounts each request to spread the load.</p>
+            </button>
+          </div>
+        )}
       </div>
-      <p className="mt-1.5 text-[10px] leading-tight text-white/35">{mode === "round-robin" ? "Spreads requests across all accounts." : "Uses one account until it dies."}</p>
     </div>
   );
 }
