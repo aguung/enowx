@@ -16,6 +16,7 @@ import (
 	"github.com/enowdev/enowx/core/suno"
 	syncpkg "github.com/enowdev/enowx/core/sync"
 	"github.com/enowdev/enowx/core/transport"
+	"github.com/enowdev/enowx/core/mitm"
 	"github.com/enowdev/enowx/core/tunnel"
 	"github.com/enowdev/enowx/server/handlers"
 	"github.com/enowdev/enowx/server/middleware"
@@ -42,6 +43,7 @@ type Deps struct {
 	ApiTest    store.ApiTestStore
 	Tunnel     *tunnel.Manager
 	Plugins    *plugins.Manager
+	MITM       *mitm.Manager
 	Sync       *syncpkg.Manager
 	CustomProv *custommgr.Manager
 	Filters    store.FilterStore
@@ -136,6 +138,7 @@ func New(addr string, d Deps) *Server {
 	sunoMusic := handlers.NewSuno(d.Accounts, d.Proxy, suno.New(d.Doer))
 	tun := handlers.NewTunnel(d.Tunnel, d.Keys)
 	integ := handlers.NewIntegrations(d.Keys, d.Tunnel, d.Settings.Port)
+	mitmH := handlers.NewMITM(d.MITM, dash.Authorized)
 	syncH := handlers.NewSync(d.Sync)
 	authH := handlers.NewAuth(dash)
 	auth := middleware.NewAuth(d.Keys)
@@ -228,6 +231,14 @@ func New(addr string, d Deps) *Server {
 		r.Post("/integrations/{tool}", integ.Apply)
 		r.Delete("/integrations/{tool}", integ.Reset)
 		r.Post("/integrations/{tool}/snippet", integ.Snippet)
+
+		// MITM: intercept a proprietary IDE's endpoint and reroute it to the gateway.
+		r.Get("/mitm", mitmH.Status)
+		r.Post("/mitm/trust", mitmH.InstallTrust)
+		r.Post("/mitm/start", mitmH.Start)
+		r.Post("/mitm/stop", mitmH.Stop)
+		r.Post("/mitm/{tool}/enable", mitmH.EnableTool)
+		r.Put("/mitm/{tool}/aliases", mitmH.SetAliases)
 		r.Get("/settings", settings.Get)
 		r.Get("/version", versionH.Get)
 		r.Post("/update", versionH.Update)

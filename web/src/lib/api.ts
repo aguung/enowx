@@ -664,6 +664,23 @@ export const integrationsApi = {
     api.post<{ snippets: IntegrationSnippet[] }>(`/api/integrations/${tool}/snippet`, body),
 };
 
+export interface MitmTool {
+  key: string; name: string; hosts: string[]; format: string; models: string[];
+  dns_enabled: boolean; aliases: Record<string, string> | null;
+}
+export interface MitmStatus {
+  trusted: boolean; running: boolean; ca_cert_path: string; tools: MitmTool[];
+}
+export const mitmApi = {
+  status: () => api.get<MitmStatus>("/api/mitm"),
+  trust: () => api.post<MitmStatus>("/api/mitm/trust", {}),
+  start: () => api.post<MitmStatus>("/api/mitm/start", {}),
+  stop: () => api.post<MitmStatus>("/api/mitm/stop", {}),
+  enable: (tool: string, on: boolean) => api.post<MitmStatus>(`/api/mitm/${tool}/enable`, { on }),
+  setAliases: (tool: string, aliases: Record<string, string>) => api.put<MitmStatus>(`/api/mitm/${tool}/aliases`, { aliases }),
+};
+
+
 
 
 export interface InboxMessage {

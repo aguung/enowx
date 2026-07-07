@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"os/signal"
 	"runtime/debug"
 	"syscall"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/enowdev/enowx/config"
 	"github.com/enowdev/enowx/core/daemon"
+	"github.com/enowdev/enowx/core/mitm"
 	"github.com/enowdev/enowx/core/plugins"
 	"github.com/enowdev/enowx/core/pool"
 	"github.com/enowdev/enowx/core/provider"
@@ -124,6 +126,25 @@ func runServer() {
 	pluginMgr := plugins.New(cfg.PluginsDir(), cfg.Port)
 	syncMgr := syncpkg.New(db.Settings(), db.Music(), db.Logs())
 
+	// MITM: intercept a proprietary IDE's hardcoded endpoint and reroute it to us.
+	// The gateway URL is our own loopback; the API key is resolved lazily from the
+	// key store (first enabled key).
+	mitmMgr := mitm.New(
+		filepath.Join(cfg.RuntimeDir, "mitm"),
+		fmt.Sprintf("http://127.0.0.1:%d", cfg.Port),
+		func() string {
+			rows, err := db.Keys().List(context.Background())
+			if err == nil {
+				for _, k := range rows {
+					if k.Enabled && k.Secret != "" {
+						return k.Secret
+					}
+				}
+			}
+			return ""
+		},
+	)
+
 	// Plugins are premium-only: a plugin can only run/serve when the signed-in
 	// user has the entitlement (checked before the sidecar spawns and before the
 	// UI is served), so sharing a plugin and installing it manually doesn't bypass
@@ -169,6 +190,7 @@ func runServer() {
 		ApiTest:    db.ApiTest(),
 		Tunnel:     tun,
 		Plugins:    pluginMgr,
+		MITM:       mitmMgr,
 		Sync:       syncMgr,
 		CustomProv: customMgr,
 		Filters:    db.Filters(),
