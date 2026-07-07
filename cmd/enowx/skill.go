@@ -10,10 +10,13 @@ import (
 
 const skillRepo = "https://github.com/enowdev/enowX-Skill.git"
 
-// skillCmd handles `enx skill install <slug> [-g]`.
+// skillCmd handles `enx skill install|list|remove|update <slug> [-g]`.
 //
 //	enx skill install <slug>       install into ./.agents/skill/<slug> (project)
 //	enx skill install <slug> -g    install into ~/.agents/skill/<slug> (global)
+//	enx skill list                 list installed skills
+//	enx skill remove <slug>        uninstall a skill
+//	enx skill update <slug>        reinstall to the latest version
 func skillCmd(args []string) {
 	sub := ""
 	if len(args) > 0 {
@@ -23,8 +26,17 @@ func skillCmd(args []string) {
 	switch sub {
 	case "install", "add":
 		skillInstall(args)
+	case "list":
+		skillList()
+	case "remove", "rm", "uninstall":
+		skillRemove(args)
+	case "update", "upgrade":
+		skillUpdate(args)
 	default:
 		fmt.Fprintln(os.Stderr, "usage: enx skill install <slug> [-g]")
+		fmt.Fprintln(os.Stderr, "       enx skill list")
+		fmt.Fprintln(os.Stderr, "       enx skill remove <slug>")
+		fmt.Fprintln(os.Stderr, "       enx skill update <slug>")
 		os.Exit(1)
 	}
 }
@@ -56,15 +68,9 @@ func skillInstall(args []string) {
 	}
 
 	// Destination: ~/.agents/skill/<slug> (global) or ./.agents/skill/<slug>.
-	base := ".agents"
+	base := skillBase(global)
 	scope := "this project"
 	if global {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "cannot resolve home directory: %v\n", err)
-			os.Exit(1)
-		}
-		base = filepath.Join(home, ".agents")
 		scope = "globally"
 	}
 	dest := filepath.Join(base, "skill", slug)
@@ -115,6 +121,143 @@ func skillInstall(args []string) {
 		}
 	}
 	fmt.Printf("✓ installed %q → %s\n", slug, dest)
+}
+
+// skillList prints all installed skills (global + project).
+func skillList() {
+	type entry struct {
+		slug  string
+		scope string
+		path  string
+	}
+	var entries []entry
+	dirs := []struct {
+		label string
+		dir   string
+	}{
+		{"global", filepath.Join(skillBase(true), "skill")},
+		{"project", filepath.Join(skillBase(false), "skill")},
+	}
+	for _, d := range dirs {
+		items, err := os.ReadDir(d.dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range items {
+			if e.IsDir() {
+				entries = append(entries, entry{
+					slug:  e.Name(),
+					scope: d.label,
+					path:  filepath.Join(d.dir, e.Name()),
+				})
+			}
+		}
+	}
+	if len(entries) == 0 {
+		fmt.Println("no skills installed")
+		return
+	}
+	fmt.Printf("%-24s %-8s %s\n", "slug", "scope", "path")
+	fmt.Println(strings.Repeat("-", 72))
+	for _, e := range entries {
+		fmt.Printf("%-24s %-8s %s\n", e.slug, e.scope, e.path)
+	}
+}
+
+// skillRemove uninstalls a skill by slug.
+func skillRemove(args []string) {
+	var slug string
+	global := false
+	for _, a := range args {
+		switch a {
+		case "-g", "--global":
+			global = true
+		default:
+			if strings.HasPrefix(a, "-") {
+				fmt.Fprintf(os.Stderr, "unknown flag %q\n", a)
+				os.Exit(1)
+			}
+			slug = a
+		}
+	}
+	if slug == "" {
+		fmt.Fprintln(os.Stderr, "usage: enx skill remove <slug> [-g]")
+		os.Exit(1)
+	}
+	base := skillBase(global)
+	dest := filepath.Join(base, "skill", slug)
+	if _, err := os.Stat(dest); err != nil {
+		if global {
+			fmt.Fprintf(os.Stderr, "skill %q is not installed globally\n", slug)
+			os.Exit(1)
+		}
+		// Try global as fallback.
+		globalDest := filepath.Join(skillBase(true), "skill", slug)
+		if _, err2 := os.Stat(globalDest); err2 == nil {
+			dest = globalDest
+			global = true
+		} else {
+			fmt.Fprintf(os.Stderr, "skill %q is not installed\n", slug)
+			os.Exit(1)
+		}
+	}
+	scope := "project"
+	if global {
+		scope = "global"
+	}
+	if err := os.RemoveAll(dest); err != nil {
+		fmt.Fprintf(os.Stderr, "remove failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("✓ removed %q (%s)\n", slug, scope)
+}
+
+// skillUpdate reinstalls a skill (remove + install).
+func skillUpdate(args []string) {
+	var slug string
+	global := false
+	for _, a := range args {
+		switch a {
+		case "-g", "--global":
+			global = true
+		default:
+			if strings.HasPrefix(a, "-") {
+				fmt.Fprintf(os.Stderr, "unknown flag %q\n", a)
+				os.Exit(1)
+			}
+			slug = a
+		}
+	}
+	if slug == "" {
+		fmt.Fprintln(os.Stderr, "usage: enx skill update <slug> [-g]")
+		os.Exit(1)
+	}
+	// Check that git is available.
+	if _, err := exec.LookPath("git"); err != nil {
+		fmt.Fprintln(os.Stderr, "git is required to update skills")
+		os.Exit(1)
+	}
+	// Remove existing.
+	base := skillBase(global)
+	dest := filepath.Join(base, "skill", slug)
+	if _, err := os.Stat(dest); err == nil {
+		_ = os.RemoveAll(dest)
+	}
+	// Reinstall.
+	skillInstall(args)
+}
+
+// skillBase returns the base agents directory for global or project scope.
+func skillBase(global bool) string {
+	if global {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "cannot resolve home directory: %v\n", err)
+			os.Exit(1)
+		}
+		return filepath.Join(home, ".agents")
+	}
+	return ".agents"
 }
 
 // copyDir recursively copies src to dst (fallback when os.Rename can't cross fs).

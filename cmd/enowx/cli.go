@@ -285,6 +285,9 @@ Usage:
   enx tunnel stop       tear the tunnel down
   enx tunnel status     show the current tunnel URL
   enx skill install <slug> [-g]  install a skill (-g = global, else project)
+  enx skill list                list installed skills
+  enx skill remove <slug>       uninstall a skill
+  enx skill update <slug>       reinstall a skill to the latest version
   enx version           print the version
 `)
 }
