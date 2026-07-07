@@ -49,6 +49,22 @@ func (p *Provider) manager(acc provider.Account) *authManager {
 	return am
 }
 
+// Email reports the account's email — the cached creds value if present, else a
+// live profile lookup with a fresh token. Implements provider.EmailReporter so
+// the account gets labelled by email (backfills accounts added before email was
+// resolved at OAuth time).
+func (p *Provider) Email(acc provider.Account) string {
+	if e := acc.Cred("email"); e != "" {
+		return e
+	}
+	am := p.manager(acc)
+	token, err := am.token()
+	if err != nil {
+		return ""
+	}
+	return fetchClaudeEmail(p.doer, token)
+}
+
 func (p *Provider) BuildRequest(req *model.Request, acc provider.Account) (*http.Request, error) {
 	am := p.manager(acc)
 	token, err := am.token()

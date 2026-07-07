@@ -29,7 +29,7 @@ type Warmer interface {
 func genericLabel(label string) bool {
 	l := strings.TrimSpace(strings.ToLower(label))
 	switch l {
-	case "", "kiro", "kiro desktop", "kiro cli":
+	case "", "kiro", "kiro desktop", "kiro cli", "claude":
 		return true
 	}
 	return false

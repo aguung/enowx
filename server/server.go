@@ -86,6 +86,19 @@ func New(addr string, d Deps) *Server {
 	apply := handlers.NewApply(d.Accounts)
 	// Auto-warm newly-added accounts (credit check + test request) before pool.
 	accounts.SetWarmer(warmup)
+	// Backfill generic labels with the account email when the provider can resolve
+	// one (e.g. Claude accounts added before email resolution existed).
+	accounts.SetEmailResolver(func(a store.Account) string {
+		prov, err := d.Registry.Get(a.Provider)
+		if err != nil {
+			return ""
+		}
+		er, ok := prov.(provider.EmailReporter)
+		if !ok {
+			return ""
+		}
+		return er.Email(provider.Account{ID: a.ID, Secret: a.Secret, Creds: a.Creds})
+	})
 	// On delete, push the tombstone to the cloud right away so a background pull
 	// can't resurrect the account.
 	if d.Sync != nil {

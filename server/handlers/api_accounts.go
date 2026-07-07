@@ -23,9 +23,39 @@ type Accounts struct {
 	// donate hands an account's creds to the cloud Free-AI pool; returns the
 	// cloud's raw JSON reply (nil disables the feature — not syncing).
 	donate func(ctx context.Context, provider string, creds map[string]string, models []string) (string, error)
+	// resolveEmail resolves an account's email via its provider (EmailReporter),
+	// returning "" if unavailable. Used to backfill generic labels.
+	resolveEmail func(a store.Account) string
 }
 
 func NewAccounts(s store.AccountStore) *Accounts { return &Accounts{store: s} }
+
+// SetEmailResolver wires provider-based email resolution for label backfill.
+func (h *Accounts) SetEmailResolver(f func(a store.Account) string) { h.resolveEmail = f }
+
+// backfillLabels resolves + persists emails for generic-labelled accounts in the
+// background, so a re-list shows the real email. Fire-and-forget; each account is
+// only resolved when its label is still generic.
+func (h *Accounts) backfillLabels(rows []store.Account) {
+	if h.resolveEmail == nil {
+		return
+	}
+	go func() {
+		ctx := context.Background()
+		for _, a := range rows {
+			if a.Creds["email"] != "" || !genericLabel(a.Label) {
+				continue
+			}
+			if email := h.resolveEmail(a); email != "" {
+				a.Creds["email"] = email
+				_ = h.store.UpdateCreds(ctx, a.ID, a.Creds)
+				if genericLabel(a.Label) {
+					_ = h.store.SetLabel(ctx, a.ID, email)
+				}
+			}
+		}
+	}()
+}
 
 // SetDonate wires the Free-AI donation call (via the sync manager).
 func (h *Accounts) SetDonate(f func(ctx context.Context, provider string, creds map[string]string, models []string) (string, error)) {
@@ -90,6 +120,7 @@ func (h *Accounts) List(w http.ResponseWriter, r *http.Request) {
 		out = append(out, toDTO(a))
 	}
 	writeData(w, out)
+	h.backfillLabels(rows) // resolve missing emails in the background
 }
 
 type addAccountReq struct {
