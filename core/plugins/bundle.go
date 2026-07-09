@@ -109,10 +109,8 @@ func (m *Manager) Extract(id string, zipBytes []byte) error {
 	return nil
 }
 
-// Update overwrites an existing plugin's files with a newer bundle. Unlike
-// Extract, it requires the plugin to already exist, and never deletes the
-// destination folder first, so any local-only file the plugin wrote at
-// runtime survives the update.
+// Update overwrites an existing plugin with a newer bundle. Unlike Extract,
+// it never deletes the folder first, so local-only files survive.
 func (m *Manager) Update(id string, zipBytes []byte) error {
 	if !idRe.MatchString(id) {
 		return fmt.Errorf("invalid plugin id")
